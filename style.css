@@ -311,3 +311,7 @@ select {
   .row2 { grid-template-columns: 1fr; }
   .product-row { grid-template-columns: 1fr 64px 36px; }
 }
+
+/* SCAN BUTTON */
+.scan-btn { border-style: solid; color: var(--text); }
+.scan-btn:hover { background: var(--text); color: #fff; border-color: var(--text); }

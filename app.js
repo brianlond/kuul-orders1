@@ -319,6 +319,7 @@ function renderOrders(orders) {
     return;
   }
 
+  window._orders = orders;
   const nuevas = orders.filter(o => o.status === 'Nueva').length;
   badge.style.display = nuevas > 0 ? '' : 'none';
   badge.textContent = nuevas;
@@ -335,9 +336,12 @@ function renderOrders(orders) {
           <div class="order-name">${o.client}</div>
           <div class="order-business">${o.business}</div>
         </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+        <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Imprimir orden">🖨️</button>
         <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)">
           ${statusOptions}
         </select>
+        </div>
       </div>
       <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}</div>
       <div class="order-meta">
@@ -424,3 +428,148 @@ async function init() {
 }
 
 init();
+
+// ── Scanner ──────────────────────────────────────────────────
+let scannerStream = null;
+let scannerInterval = null;
+let scannedBarcode = null;
+
+async function openScanner() {
+  document.getElementById('scanner-modal').style.display = 'flex';
+  document.getElementById('scanner-status').textContent = 'Iniciando cámara...';
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('scanner-video');
+    video.srcObject = scannerStream;
+    await video.play();
+    document.getElementById('scanner-status').textContent = 'Apunta al código de barras...';
+    startDecoding(video);
+  } catch(e) {
+    document.getElementById('scanner-status').textContent = '❌ No se pudo acceder a la cámara. Verifica los permisos.';
+  }
+}
+
+function startDecoding(video) {
+  if (!window.BarcodeDetector) {
+    document.getElementById('scanner-status').textContent = 'Este navegador no soporta escaneo. Usa Chrome en Android o Safari en iPhone.';
+    return;
+  }
+  const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] });
+  scannerInterval = setInterval(async () => {
+    try {
+      const barcodes = await detector.detect(video);
+      if (barcodes.length > 0) {
+        const code = barcodes[0].rawValue;
+        clearInterval(scannerInterval);
+        closeScanner();
+        handleScannedCode(code);
+      }
+    } catch(e) {}
+  }, 300);
+}
+
+function closeScanner() {
+  if (scannerStream) {
+    scannerStream.getTracks().forEach(t => t.stop());
+    scannerStream = null;
+  }
+  if (scannerInterval) {
+    clearInterval(scannerInterval);
+    scannerInterval = null;
+  }
+  document.getElementById('scanner-modal').style.display = 'none';
+}
+
+function handleScannedCode(barcode) {
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  if (!product) {
+    showToast('⚠️ Producto no encontrado: ' + barcode);
+    return;
+  }
+  scannedBarcode = barcode;
+  const code = product.color_code ? `[${product.color_code}] ` : '';
+  document.getElementById('qty-modal-title').textContent = 'Producto encontrado';
+  document.getElementById('qty-modal-product').textContent = `${product.brand} ${code}${product.name} — $${parseFloat(product.price).toFixed(2)}`;
+  document.getElementById('qty-modal-input').value = 1;
+  document.getElementById('qty-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('qty-modal-input').focus(), 100);
+}
+
+function confirmScanQty() {
+  const qty = parseInt(document.getElementById('qty-modal-input').value) || 1;
+  closeQtyModal();
+  if (scannedBarcode) {
+    addProductLine(scannedBarcode, qty);
+    scannedBarcode = null;
+    showToast('✓ Producto agregado');
+  }
+}
+
+function closeQtyModal() {
+  document.getElementById('qty-modal').style.display = 'none';
+  scannedBarcode = null;
+}
+
+document.addEventListener('keydown', e => {
+  if (document.getElementById('qty-modal').style.display === 'flex' && e.key === 'Enter') confirmScanQty();
+});
+
+// ── Print order ──────────────────────────────────────────────
+function printOrder(id) {
+  const order = window._orders ? window._orders.find(o => o.id === id) : null;
+  if (!order) return;
+  const date = new Date(order.created_at).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Orden #${order.id}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 13px; max-width: 400px; margin: 20px auto; color: #111; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    .meta { color: #666; font-size: 12px; margin-bottom: 16px; }
+    .section { margin-bottom: 12px; }
+    .section-title { font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    td { padding: 4px 0; vertical-align: top; }
+    td:last-child { text-align: right; white-space: nowrap; }
+    .divider { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
+    .total { font-weight: bold; font-size: 15px; }
+    .footer { margin-top: 24px; font-size: 11px; color: #999; text-align: center; }
+    @media print { button { display: none; } }
+  </style></head><body>
+  <h1>Kuul Orders</h1>
+  <div class="meta">Orden #${order.id} · ${date}</div>
+  <hr class="divider">
+  <div class="section">
+    <div class="section-title">Cliente</div>
+    <div>${order.client}</div>
+    <div>${order.business}</div>
+    <div>${order.phone}</div>
+    <div>${order.address}</div>
+    ${order.permit ? `<div>Permit: ${order.permit}</div>` : ''}
+    ${order.email ? `<div>${order.email}</div>` : ''}
+  </div>
+  <div class="section">
+    <div class="section-title">Vendedor</div>
+    <div>${order.seller}</div>
+  </div>
+  <hr class="divider">
+  <div class="section">
+    <div class="section-title">Productos</div>
+    <table>
+      ${order.lines.map(l => `<tr><td>${l.brand} [${l.code}] ${l.name} × ${l.qty}</td><td>$${l.subtotal.toFixed(2)}</td></tr>`).join('')}
+    </table>
+  </div>
+  <hr class="divider">
+  <table>
+    <tr><td>Subtotal</td><td>$${parseFloat(order.subtotal).toFixed(2)}</td></tr>
+    ${order.shipping ? `<tr><td>Envío</td><td>$${parseFloat(order.shipping).toFixed(2)}</td></tr>` : ''}
+    ${order.tax_rate ? `<tr><td>Tax (${parseFloat(order.tax_rate).toFixed(2)}%)</td><td>$${parseFloat(order.tax_amount).toFixed(2)}</td></tr>` : ''}
+    <tr class="total"><td>Total</td><td>$${parseFloat(order.total).toFixed(2)}</td></tr>
+  </table>
+  ${order.notes ? `<hr class="divider"><div class="section"><div class="section-title">Notas</div><div>${order.notes}</div></div>` : ''}
+  <div class="footer">Gracias por su compra</div>
+  <br><button onclick="window.print()">🖨️ Imprimir</button>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
+}
