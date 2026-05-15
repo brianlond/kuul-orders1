@@ -29,6 +29,9 @@
       <button class="tab" id="tab-catalog-btn" onclick="showTab('catalog')">
         📦 Catálogo
       </button>
+      <button class="tab" id="tab-delivery-btn" onclick="showTab('delivery')">
+        🚚 Reparto
+      </button>
     </div>
 
     <!-- VENDEDOR -->
@@ -200,6 +203,17 @@
       <div class="filter-bar" id="catalog-brand-filter"></div>
       <div id="catalog-list">
         <div class="empty-state"><div class="empty-icon">📦</div>Cargando productos...</div>
+      </div>
+    </div>
+
+    <!-- DELIVERY -->
+    <div id="tab-delivery" class="section">
+      <div class="admin-bar">
+        <span id="delivery-count-label" class="order-count">0 órdenes listas</span>
+        <button class="clear-btn" onclick="loadDeliveryOrders()">🔄 Actualizar</button>
+      </div>
+      <div id="delivery-list">
+        <div class="empty-state"><div class="empty-icon">🚚</div>No hay órdenes para entregar</div>
       </div>
     </div>
   </main>
