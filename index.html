@@ -23,6 +23,9 @@
       <button class="tab" id="tab-admin-btn" onclick="showTab('admin')">
         🔒 Admin <span id="badge-count" class="badge-count" style="display:none;"></span>
       </button>
+      <button class="tab" id="tab-customers-btn" onclick="showTab('customers')">
+        👥 Clientes
+      </button>
     </div>
 
     <!-- VENDEDOR -->
@@ -35,6 +38,11 @@
       </div>
 
       <div class="section-label">Datos del cliente</div>
+      <div class="field-group" style="position:relative;">
+        <label>Buscar cliente existente <span class="optional">(opcional)</span></label>
+        <input type="text" id="customer-search" placeholder="Escribe nombre o negocio..." oninput="searchCustomers(this.value)" autocomplete="off">
+        <div id="customer-suggestions" class="suggestions-dropdown" style="display:none;"></div>
+      </div>
       <div class="row2">
         <div class="field-group">
           <label>Nombre del cliente</label>
@@ -115,6 +123,19 @@
         <div class="empty-state">
           <div class="empty-icon">📭</div>
           No hay órdenes todavía
+        </div>
+      </div>
+    </div>
+
+    <!-- CUSTOMERS -->
+    <div id="tab-customers" class="section">
+      <div class="admin-bar">
+        <span id="customer-count-label" class="order-count">0 clientes</span>
+      </div>
+      <div id="customers-list">
+        <div class="empty-state">
+          <div class="empty-icon">👥</div>
+          No hay clientes todavía
         </div>
       </div>
     </div>

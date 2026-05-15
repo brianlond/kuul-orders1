@@ -59,6 +59,44 @@ async function dbUpdateStatus(id, status) {
   });
 }
 
+
+async function dbUpsertCustomer(order) {
+  const existing = await supabase(`customers?phone=eq.${encodeURIComponent(order.phone)}&select=id,order_count`);
+  if (existing && existing.length > 0) {
+    const c = existing[0];
+    await supabase(`customers?id=eq.${c.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: order.client,
+        business: order.business,
+        address: order.address,
+        permit: order.permit,
+        email: order.email,
+        last_order_at: new Date().toISOString(),
+        order_count: (c.order_count || 1) + 1
+      })
+    });
+  } else {
+    await supabase('customers', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify({
+        name: order.client,
+        business: order.business,
+        phone: order.phone,
+        address: order.address,
+        permit: order.permit,
+        email: order.email,
+        last_order_at: new Date().toISOString()
+      })
+    });
+  }
+}
+
+async function dbFetchCustomers() {
+  return supabase('customers?select=*&order=last_order_at.desc');
+}
+
 async function dbDeleteAll() {
   return supabase('orders?id=gte.0', { method: 'DELETE' });
 }
@@ -252,6 +290,7 @@ async function submitOrder() {
   btn.textContent = 'Enviando...';
 
   try {
+    await dbUpsertCustomer({ client, business, phone, address, permit, email });
     await dbInsertOrder({
       seller, client, business, phone, permit, address, email, notes,
       lines, subtotal,
@@ -277,6 +316,8 @@ function resetForm() {
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('product-lines').innerHTML = '';
   document.getElementById('permit-note').textContent = '';
+  document.getElementById('customer-search').value = '';
+  document.getElementById('customer-suggestions').style.display = 'none';
   document.getElementById('tax-toggle').checked = false;
   document.getElementById('shipping-toggle').checked = true;
   document.getElementById('tax-toggle-row').style.opacity = '1';
@@ -395,16 +436,129 @@ async function clearOrders() {
   }
 }
 
+
+
+// ── Customer search / autofill ───────────────────────────────
+let allCustomers = [];
+
+async function loadCustomersList() {
+  try {
+    allCustomers = await dbFetchCustomers();
+  } catch(e) {
+    allCustomers = [];
+  }
+}
+
+function searchCustomers(query) {
+  const box = document.getElementById('customer-suggestions');
+  if (!query || query.length < 2) { box.style.display = 'none'; return; }
+
+  const q = query.toLowerCase();
+  const matches = allCustomers.filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    c.business.toLowerCase().includes(q) ||
+    c.phone.includes(q)
+  ).slice(0, 6);
+
+  if (matches.length === 0) { box.style.display = 'none'; return; }
+
+  box.innerHTML = matches.map(c => `
+    <div class="suggestion-item" onclick="fillCustomer(${c.id})">
+      <div class="suggestion-name">${c.name}</div>
+      <div class="suggestion-detail">${c.business} · ${c.phone}</div>
+    </div>
+  `).join('');
+  box.style.display = 'block';
+}
+
+function fillCustomer(id) {
+  const c = allCustomers.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('client-name').value = c.name;
+  document.getElementById('business-name').value = c.business;
+  document.getElementById('phone').value = c.phone;
+  document.getElementById('permit').value = c.permit || '';
+  document.getElementById('address').value = c.address || '';
+  document.getElementById('email').value = c.email || '';
+  document.getElementById('customer-search').value = `${c.name} — ${c.business}`;
+  document.getElementById('customer-suggestions').style.display = 'none';
+  onPermitChange();
+}
+
+// Close suggestions when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('#customer-search') && !e.target.closest('#customer-suggestions')) {
+    const box = document.getElementById('customer-suggestions');
+    if (box) box.style.display = 'none';
+  }
+});
+
+// ── Customers ─────────────────────────────────────────────────
+async function loadCustomers() {
+  const list = document.getElementById('customers-list');
+  list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando clientes...</div>`;
+  try {
+    const customers = await dbFetchCustomers();
+    renderCustomers(customers);
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando clientes</div>`;
+    console.error(e);
+  }
+}
+
+function renderCustomers(customers) {
+  const list = document.getElementById('customers-list');
+  const countLabel = document.getElementById('customer-count-label');
+  countLabel.textContent = customers.length + ' cliente' + (customers.length !== 1 ? 's' : '');
+
+  if (customers.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div>No hay clientes todavía</div>`;
+    return;
+  }
+
+  list.innerHTML = customers.map(c => {
+    const lastOrder = c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('es-MX') : '—';
+    const phone = c.phone.replace(/\D/g, '');
+    const waLink = `https://wa.me/1${phone}`;
+    const emailLink = c.email ? `mailto:${c.email}` : null;
+    return `
+    <div class="order-card">
+      <div class="order-header">
+        <div>
+          <div class="order-name">${c.name}</div>
+          <div class="order-business">${c.business}</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <a href="${waLink}" target="_blank" class="contact-btn wa-btn" title="WhatsApp">💬 WhatsApp</a>
+          ${emailLink ? `<a href="${emailLink}" class="contact-btn email-btn" title="Email">✉️ Email</a>` : ''}
+        </div>
+      </div>
+      <div class="order-meta">
+        📞 ${c.phone}
+        ${c.email ? ` · ✉️ ${c.email}` : ''}
+      </div>
+      <div class="order-meta">
+        📍 ${c.address || '—'}
+        ${c.permit ? ` · Permit: ${c.permit}` : ''}
+      </div>
+      <div class="order-meta">
+        🛒 ${c.order_count} orden${c.order_count !== 1 ? 'es' : ''} · Última: ${lastOrder}
+      </div>
+    </div>
+  `}).join('');
+}
+
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
-  if (name === 'admin' && !isAdmin) { showLoginModal(); return; }
+  if ((name === 'admin' || name === 'customers') && !isAdmin) { showLoginModal(); return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (name === 'admin') {
+  if (name === 'admin' || name === 'customers') {
     document.getElementById('logout-btn').style.display = 'inline-block';
-    loadOrders();
+    if (name === 'admin') loadOrders();
+    if (name === 'customers') loadCustomers();
   } else {
     document.getElementById('logout-btn').style.display = 'none';
   }
@@ -426,6 +580,7 @@ async function init() {
   productLines.innerHTML = '';
   addProductLine();
   onPermitChange();
+  await loadCustomersList();
 }
 
 init();
