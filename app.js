@@ -656,6 +656,210 @@ document.addEventListener('click', e => {
 });
 
 
+
+// ── Catalog ───────────────────────────────────────────────────
+let editingProductId = null;
+let catalogFilter = 'all';
+
+async function loadCatalog() {
+  const list = document.getElementById('catalog-list');
+  list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
+  try {
+    const products = await supabase('products?select=*&order=brand.asc,color_code.asc,name.asc');
+    renderCatalog(products);
+    renderCatalogBrandFilter(products);
+    populateDataLists(products);
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando catálogo</div>`;
+    console.error(e);
+  }
+}
+
+function renderCatalogBrandFilter(products) {
+  const brands = ['all', ...new Set(products.map(p => p.brand))];
+  const container = document.getElementById('catalog-brand-filter');
+  container.innerHTML = brands.map(b => `
+    <button class="filter-chip ${b === catalogFilter ? 'active' : ''}" onclick="setCatalogFilter('${b}', this)">
+      ${b === 'all' ? 'Todas las marcas' : b}
+    </button>
+  `).join('');
+}
+
+function setCatalogFilter(brand, btn) {
+  catalogFilter = brand;
+  document.querySelectorAll('#catalog-brand-filter .filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadCatalog();
+}
+
+function populateDataLists(products) {
+  const brands = [...new Set(products.map(p => p.brand))];
+  const categories = [...new Set(products.map(p => p.category))];
+  document.getElementById('brand-list').innerHTML = brands.map(b => `<option value="${b}">`).join('');
+  document.getElementById('category-list').innerHTML = categories.map(c => `<option value="${c}">`).join('');
+}
+
+function renderCatalog(allProducts) {
+  const filtered = catalogFilter === 'all' ? allProducts : allProducts.filter(p => p.brand === catalogFilter);
+  const list = document.getElementById('catalog-list');
+  const countLabel = document.getElementById('catalog-count-label');
+  countLabel.textContent = filtered.length + ' producto' + (filtered.length !== 1 ? 's' : '');
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div>No hay productos</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(p => {
+    const code = p.color_code || '—';
+    const retail = p.price_retail ? `$${parseFloat(p.price_retail).toFixed(2)}` : '—';
+    const salon = p.price ? `$${parseFloat(p.price).toFixed(2)}` : '—';
+    const wholesale = (p.price && p.discount_wholesale) ? `$${(parseFloat(p.price) * (1 - parseFloat(p.discount_wholesale)/100)).toFixed(2)}` : '—';
+    return `
+    <div class="order-card" style="${!p.active ? 'opacity:0.5;' : ''}">
+      <div class="order-header">
+        <div>
+          <div class="order-name" style="font-size:14px;">${p.brand} [${code}] ${p.name}</div>
+          <div class="order-business">${p.category}</div>
+        </div>
+        <span class="status-badge ${p.active ? 'badge-lista' : 'badge-entregada'}">${p.active ? 'Activo' : 'Inactivo'}</span>
+      </div>
+      <div class="order-meta" style="font-size:11px; font-family:monospace; margin-bottom:6px;">📊 ${p.barcode}</div>
+      <div style="display:flex; gap:12px; font-size:12px; color:var(--text-muted); margin-bottom:8px; flex-wrap:wrap;">
+        <span>Retail: <strong style="color:var(--text);">${retail}</strong></span>
+        <span>Salon: <strong style="color:var(--text);">${salon}</strong></span>
+        <span>Wholesale: <strong style="color:var(--text);">${wholesale}</strong></span>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button onclick="openEditProduct(${p.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">✏️ Editar</button>
+        <button onclick="toggleProduct(${p.id}, ${!p.active})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">${p.active ? '⏸ Desactivar' : '▶️ Activar'}</button>
+        <button onclick="deleteProduct(${p.id}, '${p.name.replace(/'/g, "\'")}')" class="contact-btn" style="border:1px solid var(--danger-bg); color:var(--danger); background:var(--danger-bg); cursor:pointer; font-family:inherit;">🗑 Eliminar</button>
+      </div>
+    </div>
+  `}).join('');
+}
+
+function openAddProduct() {
+  editingProductId = null;
+  document.getElementById('product-modal-title').textContent = 'Nuevo producto';
+  document.getElementById('pm-brand').value = '';
+  document.getElementById('pm-category').value = '';
+  document.getElementById('pm-code').value = '';
+  document.getElementById('pm-barcode').value = '';
+  document.getElementById('pm-name').value = '';
+  document.getElementById('pm-price-retail').value = '';
+  document.getElementById('pm-price').value = '';
+  document.getElementById('pm-discount-salon').value = '';
+  document.getElementById('pm-discount-wholesale').value = '';
+  document.getElementById('pm-active').value = 'true';
+  document.getElementById('pm-error').textContent = '';
+  document.getElementById('product-modal').style.display = 'flex';
+}
+
+function openEditProduct(id) {
+  const p = PRODUCTS.find(x => x.id === id) || window._catalogProducts?.find(x => x.id === id);
+  if (!p) return;
+  editingProductId = id;
+  document.getElementById('product-modal-title').textContent = 'Editar producto';
+  document.getElementById('pm-brand').value = p.brand;
+  document.getElementById('pm-category').value = p.category || '';
+  document.getElementById('pm-code').value = p.color_code || '';
+  document.getElementById('pm-barcode').value = p.barcode;
+  document.getElementById('pm-name').value = p.name;
+  document.getElementById('pm-price-retail').value = p.price_retail || '';
+  document.getElementById('pm-price').value = p.price || '';
+  document.getElementById('pm-discount-salon').value = p.discount_salon || '';
+  document.getElementById('pm-discount-wholesale').value = p.discount_wholesale || '';
+  document.getElementById('pm-active').value = p.active ? 'true' : 'false';
+  document.getElementById('pm-error').textContent = '';
+  document.getElementById('product-modal').style.display = 'flex';
+}
+
+function closeProductModal() {
+  document.getElementById('product-modal').style.display = 'none';
+  editingProductId = null;
+}
+
+function calcSalonPrice() {
+  const retail = parseFloat(document.getElementById('pm-price-retail').value) || 0;
+  const discount = parseFloat(document.getElementById('pm-discount-salon').value) || 0;
+  if (retail > 0 && discount > 0) {
+    document.getElementById('pm-price').value = (retail * (1 - discount/100)).toFixed(2);
+  }
+}
+
+async function saveProduct() {
+  const brand    = document.getElementById('pm-brand').value.trim();
+  const category = document.getElementById('pm-category').value.trim();
+  const barcode  = document.getElementById('pm-barcode').value.trim();
+  const name     = document.getElementById('pm-name').value.trim();
+  const price    = parseFloat(document.getElementById('pm-price').value) || 0;
+  const errEl    = document.getElementById('pm-error');
+
+  if (!brand)   { errEl.textContent = 'La marca es requerida'; return; }
+  if (!barcode) { errEl.textContent = 'El código de barras es requerido'; return; }
+  if (!name)    { errEl.textContent = 'El nombre es requerido'; return; }
+  if (!price)   { errEl.textContent = 'El precio salon es requerido'; return; }
+  errEl.textContent = '';
+
+  const data = {
+    brand, category, barcode,
+    color_code: document.getElementById('pm-code').value.trim() || null,
+    name, price,
+    price_retail: parseFloat(document.getElementById('pm-price-retail').value) || null,
+    discount_salon: parseFloat(document.getElementById('pm-discount-salon').value) || null,
+    discount_wholesale: parseFloat(document.getElementById('pm-discount-wholesale').value) || null,
+    active: document.getElementById('pm-active').value === 'true'
+  };
+
+  const btn = document.getElementById('pm-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    if (editingProductId) {
+      await supabase(`products?id=eq.${editingProductId}`, { method: 'PATCH', body: JSON.stringify(data) });
+    } else {
+      await supabase('products', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(data) });
+    }
+    closeProductModal();
+    showToast('✓ Producto guardado');
+    PRODUCTS = await dbFetchProducts();
+    await loadCatalog();
+  } catch(e) {
+    errEl.textContent = 'Error al guardar — verifica que el código de barras no esté duplicado';
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar producto →';
+  }
+}
+
+async function toggleProduct(id, active) {
+  try {
+    await supabase(`products?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ active }) });
+    showToast(active ? '✓ Producto activado' : '✓ Producto desactivado');
+    PRODUCTS = await dbFetchProducts();
+    await loadCatalog();
+  } catch(e) {
+    showToast('❌ Error al actualizar');
+    console.error(e);
+  }
+}
+
+async function deleteProduct(id, name) {
+  if (!confirm(`¿Eliminar "${name}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    await supabase(`products?id=eq.${id}`, { method: 'DELETE' });
+    showToast('✓ Producto eliminado');
+    PRODUCTS = await dbFetchProducts();
+    await loadCatalog();
+  } catch(e) {
+    showToast('❌ Error al eliminar');
+    console.error(e);
+  }
+}
+
 // ── Edit customer ─────────────────────────────────────────────
 let editingCustomerId = null;
 
@@ -858,7 +1062,7 @@ async function updateCustomerLevel(id, level) {
 
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
-  if ((name === 'admin' || name === 'customers') && !isAdmin) { showLoginModal(); return; }
+  if ((name === 'admin' || name === 'customers' || name === 'catalog') && !isAdmin) { showLoginModal(); return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
@@ -867,6 +1071,7 @@ function showTab(name) {
     document.getElementById('logout-btn').style.display = 'inline-block';
     if (name === 'admin') loadOrders();
     if (name === 'customers') loadCustomers();
+    if (name === 'catalog') loadCatalog();
   } else {
     document.getElementById('logout-btn').style.display = 'none';
   }

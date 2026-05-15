@@ -26,6 +26,9 @@
       <button class="tab" id="tab-customers-btn" onclick="showTab('customers')">
         👥 Clientes
       </button>
+      <button class="tab" id="tab-catalog-btn" onclick="showTab('catalog')">
+        📦 Catálogo
+      </button>
     </div>
 
     <!-- VENDEDOR -->
@@ -187,6 +190,18 @@
         </div>
       </div>
     </div>
+
+    <!-- CATALOG -->
+    <div id="tab-catalog" class="section">
+      <div class="admin-bar">
+        <span id="catalog-count-label" class="order-count">0 productos</span>
+        <button class="submit-btn" style="width:auto; margin:0; padding:8px 16px; font-size:13px;" onclick="openAddProduct()">+ Nuevo producto</button>
+      </div>
+      <div class="filter-bar" id="catalog-brand-filter"></div>
+      <div id="catalog-list">
+        <div class="empty-state"><div class="empty-icon">📦</div>Cargando productos...</div>
+      </div>
+    </div>
   </main>
 
 
@@ -221,6 +236,70 @@
   </div>
 
 
+
+
+  <!-- PRODUCT MODAL -->
+  <div class="modal-overlay" id="product-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+    <div class="modal" style="max-width:480px; width:100%; margin:auto;">
+      <div class="modal-title" id="product-modal-title">Nuevo producto</div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Marca</label>
+          <input type="text" id="pm-brand" placeholder="Ej: Kuul" list="brand-list">
+          <datalist id="brand-list"></datalist>
+        </div>
+        <div class="field-group">
+          <label>Categoría</label>
+          <input type="text" id="pm-category" placeholder="Ej: Hair color" list="category-list">
+          <datalist id="category-list"></datalist>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Código de color <span class="optional">(opcional)</span></label>
+          <input type="text" id="pm-code" placeholder="Ej: 7.1">
+        </div>
+        <div class="field-group">
+          <label>Código de barras</label>
+          <input type="text" id="pm-barcode" placeholder="Ej: 7501438365004">
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Nombre del producto</label>
+        <input type="text" id="pm-name" placeholder="Ej: Ash Blonde">
+      </div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Precio Retail</label>
+          <input type="number" id="pm-price-retail" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="field-group">
+          <label>Precio Salon (base)</label>
+          <input type="number" id="pm-price" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Desc. Salon % <span class="optional">(sobre retail)</span></label>
+          <input type="number" id="pm-discount-salon" placeholder="0.00" step="0.01" min="0" max="100" oninput="calcSalonPrice()">
+        </div>
+        <div class="field-group">
+          <label>Desc. Wholesale % <span class="optional">(sobre salon)</span></label>
+          <input type="number" id="pm-discount-wholesale" placeholder="0.00" step="0.01" min="0" max="100">
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Estado</label>
+        <select id="pm-active">
+          <option value="true">Activo</option>
+          <option value="false">Inactivo</option>
+        </select>
+      </div>
+      <div id="pm-error" style="font-size:13px; color:var(--danger); margin-bottom:8px;"></div>
+      <button class="submit-btn" id="pm-save-btn" onclick="saveProduct()">Guardar producto →</button>
+      <button class="cancel-btn" onclick="closeProductModal()">Cancelar</button>
+    </div>
+  </div>
 
   <!-- EDIT CUSTOMER MODAL -->
   <div class="modal-overlay" id="edit-customer-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
