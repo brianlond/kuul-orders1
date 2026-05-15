@@ -118,8 +118,11 @@ function addProductLine(barcode = '', qty = 1) {
   const div = document.createElement('div');
   div.className = 'product-row';
   div.id = 'line-' + id;
+  div.dataset.barcode = barcode;
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  const label = product ? `${product.brand} [${product.color_code || '—'}] ${product.name}` : '';
   div.innerHTML = `
-    <select id="sel-${id}" onchange="recalcTotal()">${buildOptions(barcode)}</select>
+    <div class="product-line-label">${label}</div>
     <input type="number" id="qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcTotal()">
     <button class="remove-btn" onclick="removeLine(${id})" aria-label="Eliminar">×</button>
   `;
@@ -157,12 +160,12 @@ function onPermitChange() {
 // ── Recalculate totals ───────────────────────────────────────
 function recalcTotal() {
   let subtotal = 0;
-  document.querySelectorAll('.product-row').forEach(row => {
-    const sel = row.querySelector('select');
+  document.querySelectorAll('#product-lines .product-row').forEach(row => {
     const qty = row.querySelector('input[type=number]');
-    if (sel && qty) {
-      const price = parseFloat(sel.selectedOptions[0]?.dataset?.price || 0);
-      subtotal += price * (parseInt(qty.value) || 0);
+    const barcode = row.dataset.barcode;
+    if (barcode && qty) {
+      const product = PRODUCTS.find(p => p.barcode === barcode);
+      if (product) subtotal += parseFloat(product.price) * (parseInt(qty.value) || 0);
     }
   });
   const hasShipping = document.getElementById('shipping-toggle').checked;
@@ -254,11 +257,11 @@ async function submitOrder() {
 
   const lines = [];
   let subtotal = 0;
-  document.querySelectorAll('.product-row').forEach(row => {
-    const sel = row.querySelector('select');
+  document.querySelectorAll('#product-lines .product-row').forEach(row => {
     const qty = row.querySelector('input[type=number]');
-    if (sel && qty) {
-      const product = PRODUCTS.find(p => p.barcode === sel.value);
+    const barcode = row.dataset.barcode;
+    if (barcode && qty) {
+      const product = PRODUCTS.find(p => p.barcode === barcode);
       const q = parseInt(qty.value) || 0;
       if (product && q > 0) {
         const lineSubtotal = parseFloat(product.price) * q;
@@ -318,6 +321,7 @@ function resetForm() {
   document.getElementById('permit-note').textContent = '';
   document.getElementById('customer-search').value = '';
   document.getElementById('customer-suggestions').style.display = 'none';
+  resetSteppedSelector();
   document.getElementById('tax-toggle').checked = false;
   document.getElementById('shipping-toggle').checked = true;
   document.getElementById('tax-toggle-row').style.opacity = '1';
@@ -437,6 +441,118 @@ async function clearOrders() {
 }
 
 
+
+
+// ── Stepped product selector ─────────────────────────────────
+let stepState = { brand: null, category: null, variation: null, qty: 1 };
+let allVariations = [];
+
+function initSteppedSelector() {
+  const brands = [...new Set(PRODUCTS.map(p => p.brand))].sort();
+  const container = document.getElementById('brand-options');
+  container.innerHTML = brands.map(b => `
+    <button class="step-chip" onclick="selectBrand('${b}')">${b}</button>
+  `).join('');
+}
+
+function selectBrand(brand) {
+  stepState = { brand, category: null, variation: null, qty: 1 };
+  document.querySelectorAll('#brand-options .step-chip').forEach(b => b.classList.remove('active'));
+  document.querySelector(`#brand-options .step-chip[onclick="selectBrand('${brand}')"]`).classList.add('active');
+
+  const categories = [...new Set(PRODUCTS.filter(p => p.brand === brand).map(p => p.category))].sort();
+  const container = document.getElementById('category-options');
+  container.innerHTML = categories.map(c => `
+    <button class="step-chip" onclick="selectCategory('${c}')">${c}</button>
+  `).join('');
+
+  document.getElementById('step-category').style.display = 'block';
+  document.getElementById('step-variation').style.display = 'none';
+  document.getElementById('step-qty').style.display = 'none';
+  document.getElementById('variation-search').value = '';
+}
+
+function selectCategory(category) {
+  stepState.category = category;
+  document.querySelectorAll('#category-options .step-chip').forEach(b => b.classList.remove('active'));
+  document.querySelector(`#category-options .step-chip[onclick="selectCategory('${category}')"]`).classList.add('active');
+
+  allVariations = PRODUCTS.filter(p => p.brand === stepState.brand && p.category === category);
+  renderVariations(allVariations);
+  document.getElementById('step-variation').style.display = 'block';
+  document.getElementById('step-qty').style.display = 'none';
+  document.getElementById('variation-search').value = '';
+}
+
+function renderVariations(variations) {
+  const container = document.getElementById('variation-options');
+  container.innerHTML = variations.map(p => {
+    const code = p.color_code && p.color_code !== 'null' ? p.color_code : '—';
+    return `
+    <button class="variation-chip" onclick="selectVariation('${p.barcode}')">
+      <span class="variation-code">${code}</span>
+      <span class="variation-name">${p.name}</span>
+      <span class="variation-price">$${parseFloat(p.price).toFixed(2)}</span>
+    </button>
+  `}).join('');
+}
+
+function filterVariations(query) {
+  const q = query.toLowerCase();
+  const filtered = q.length < 1 ? allVariations : allVariations.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    (p.color_code && p.color_code.toLowerCase().includes(q))
+  );
+  renderVariations(filtered);
+}
+
+function selectVariation(barcode) {
+  stepState.variation = barcode;
+  stepState.qty = 1;
+  document.querySelectorAll('.variation-chip').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.variation-chip[onclick="selectVariation('${barcode}')"]`).classList.add('active');
+  document.getElementById('qty-display').textContent = 1;
+  document.getElementById('step-qty').style.display = 'block';
+  document.getElementById('step-qty').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function changeQty(delta) {
+  stepState.qty = Math.max(1, (stepState.qty || 1) + delta);
+  document.getElementById('qty-display').textContent = stepState.qty;
+}
+
+function confirmAddProduct() {
+  const product = PRODUCTS.find(p => p.barcode === stepState.variation);
+  if (!product) return;
+
+  // Check if product already in list — if so, update qty
+  const existing = document.querySelector(`.product-row[data-barcode="${product.barcode}"]`);
+  if (existing) {
+    const qtyInput = existing.querySelector('input[type=number]');
+    qtyInput.value = parseInt(qtyInput.value) + stepState.qty;
+    recalcTotal();
+    showToast(`✓ +${stepState.qty} ${product.name}`);
+  } else {
+    addProductLine(product.barcode, stepState.qty);
+    showToast(`✓ ${product.name} agregado`);
+  }
+
+  // Reset variation and qty step, keep brand+category
+  stepState.variation = null;
+  stepState.qty = 1;
+  document.getElementById('step-qty').style.display = 'none';
+  document.getElementById('qty-display').textContent = 1;
+  document.querySelectorAll('.variation-chip').forEach(b => b.classList.remove('active'));
+}
+
+function resetSteppedSelector() {
+  stepState = { brand: null, category: null, variation: null, qty: 1 };
+  document.getElementById('step-category').style.display = 'none';
+  document.getElementById('step-variation').style.display = 'none';
+  document.getElementById('step-qty').style.display = 'none';
+  document.querySelectorAll('.step-chip, .variation-chip').forEach(b => b.classList.remove('active'));
+  document.getElementById('variation-search').value = '';
+}
 
 // ── Customer search / autofill ───────────────────────────────
 let allCustomers = [];
@@ -578,7 +694,7 @@ async function init() {
   }
 
   productLines.innerHTML = '';
-  addProductLine();
+  initSteppedSelector();
   onPermitChange();
   await loadCustomersList();
 }

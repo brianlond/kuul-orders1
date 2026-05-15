@@ -74,11 +74,35 @@
       </div>
 
       <div class="section-label">Productos</div>
-      <div id="product-lines"></div>
-      <div style="display:flex; gap:8px; margin-top:4px;">
-        <button class="add-product-btn" onclick="addProductLine()">+ Agregar producto</button>
-        <button class="add-product-btn scan-btn" onclick="openScanner()">📷 Escanear código</button>
+
+      <!-- Stepped product selector -->
+      <div class="stepped-selector" id="stepped-selector">
+        <div class="step-row" id="step-brand">
+          <div class="step-label">① Marca</div>
+          <div class="step-options" id="brand-options"></div>
+        </div>
+        <div class="step-row" id="step-category" style="display:none;">
+          <div class="step-label">② Categoría</div>
+          <div class="step-options" id="category-options"></div>
+        </div>
+        <div class="step-row" id="step-variation" style="display:none;">
+          <div class="step-label">③ Variación</div>
+          <input type="text" id="variation-search" placeholder="Buscar variación..." oninput="filterVariations(this.value)" style="margin-bottom:8px;">
+          <div class="step-options variations-grid" id="variation-options"></div>
+        </div>
+        <div class="step-row qty-step" id="step-qty" style="display:none;">
+          <div class="step-label">④ Cantidad</div>
+          <div class="qty-selector">
+            <button class="qty-btn" onclick="changeQty(-1)">−</button>
+            <span id="qty-display">1</span>
+            <button class="qty-btn" onclick="changeQty(1)">+</button>
+            <button class="qty-confirm-btn" onclick="confirmAddProduct()">Agregar a la orden ✓</button>
+          </div>
+        </div>
       </div>
+
+      <!-- Added products list -->
+      <div id="product-lines" style="margin-top:16px;"></div>
 
       <div class="section-label">Envío y taxes</div>
 
