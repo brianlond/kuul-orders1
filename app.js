@@ -934,7 +934,7 @@ async function openHistoryModal(customerId) {
       </div>
       ${orders.map(o => {
         const date = new Date(o.created_at).toLocaleDateString('es-MX');
-        return `<div style="border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:8px;">
+        return `<div style="border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:8px; cursor:pointer;" onclick="openOrderDetail(${o.id})" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="font-size:13px; font-weight:500;">${date} · ${o.seller}</div>
             <div style="display:flex; gap:8px; align-items:center;">
@@ -943,6 +943,7 @@ async function openHistoryModal(customerId) {
             </div>
           </div>
           <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${o.lines.map(l => `${l.name} ×${l.qty}`).join(', ')}</div>
+          <div style="font-size:11px; color:var(--text-faint); margin-top:4px;">Toca para ver detalle →</div>
         </div>`;
       }).join('')}
     `;
@@ -954,6 +955,63 @@ async function openHistoryModal(customerId) {
 
 function closeHistoryModal() {
   document.getElementById('customer-history-modal').style.display = 'none';
+}
+
+// ── Order detail from history ─────────────────────────────────
+let currentDetailOrder = null;
+
+async function openOrderDetail(id) {
+  // Try allOrders first, otherwise fetch from DB
+  let order = allOrders.find(o => o.id === id);
+  if (!order) {
+    try {
+      const res = await supabase(`orders?id=eq.${id}&select=*`);
+      order = res && res[0];
+    } catch(e) {}
+  }
+  if (!order) { showToast('No se pudo cargar la orden'); return; }
+  currentDetailOrder = order;
+
+  const date = new Date(order.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const statusOptions = STATUSES.map(s => `<option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>`).join('');
+
+  document.getElementById('order-detail-title').textContent = `Orden #${String(order.id).padStart(5,'0')}`;
+  document.getElementById('order-detail-content').innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div>
+        <div style="font-size:15px; font-weight:600;">${order.client}</div>
+        <div style="font-size:13px; color:var(--text-muted);">${order.business}</div>
+      </div>
+      <select class="status-select ${statusClass(order.status)}" onchange="updateStatus(${order.id}, this.value); currentDetailOrder.status=this.value;">${statusOptions}</select>
+    </div>
+    <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">🕐 ${date} · 👤 ${order.seller} · 📞 ${order.phone}</div>
+    <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">📍 ${order.address}${order.permit ? ` · Permit: ${order.permit}` : ''}</div>
+    ${order.notes ? `<div style="font-size:12px; font-style:italic; color:var(--text-muted); margin-bottom:12px;">"${order.notes}"</div>` : ''}
+    <div style="border-top:1px solid var(--border); padding-top:12px;">
+      ${order.lines.map(l => `
+        <div style="display:flex; justify-content:space-between; font-size:13px; padding:3px 0;">
+          <span>${l.brand} [${l.code}] ${l.name} × ${l.qty}</span>
+          <span>$${parseFloat(l.subtotal).toFixed(2)}</span>
+        </div>
+      `).join('')}
+      <div style="border-top:1px solid var(--border); margin-top:8px; padding-top:8px;">
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); padding:2px 0;"><span>Subtotal</span><span>$${parseFloat(order.subtotal).toFixed(2)}</span></div>
+        ${order.shipping ? `<div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); padding:2px 0;"><span>Envío</span><span>$${parseFloat(order.shipping).toFixed(2)}</span></div>` : ''}
+        ${order.tax_rate ? `<div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); padding:2px 0;"><span>Tax (${parseFloat(order.tax_rate).toFixed(2)}%)</span><span>$${parseFloat(order.tax_amount).toFixed(2)}</span></div>` : ''}
+        <div style="display:flex; justify-content:space-between; font-weight:600; font-size:16px; margin-top:6px; padding-top:6px; border-top:1px solid var(--border);"><span>Total</span><span>$${parseFloat(order.total).toFixed(2)}</span></div>
+      </div>
+    </div>
+  `;
+  document.getElementById('order-detail-modal').style.display = 'flex';
+}
+
+function closeOrderDetail() {
+  document.getElementById('order-detail-modal').style.display = 'none';
+  currentDetailOrder = null;
+}
+
+function printFromDetail() {
+  if (currentDetailOrder) printOrder(currentDetailOrder.id);
 }
 
 // ── Order filters ─────────────────────────────────────────────

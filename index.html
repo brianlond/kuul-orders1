@@ -238,6 +238,22 @@
 
 
 
+
+  <!-- ORDER DETAIL MODAL -->
+  <div class="modal-overlay" id="order-detail-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+    <div class="modal" style="max-width:560px; width:100%; margin:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <div class="modal-title" style="margin:0;" id="order-detail-title">Detalle de orden</div>
+        <button onclick="closeOrderDetail()" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);">×</button>
+      </div>
+      <div id="order-detail-content"></div>
+      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+        <button class="submit-btn" style="flex:1; margin:0;" onclick="printFromDetail()">🖨️ Imprimir</button>
+        <button class="cancel-btn" style="flex:1; margin:0;" onclick="closeOrderDetail()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- PRODUCT MODAL -->
   <div class="modal-overlay" id="product-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
     <div class="modal" style="max-width:480px; width:100%; margin:auto;">
