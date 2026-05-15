@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kuul Orders</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <span class="logo">Kuul <span>Orders</span></span>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('vendedor')">
+        ➕ Nueva orden
+      </button>
+      <button class="tab" onclick="showTab('admin')">
+        📋 Ver órdenes <span id="badge-count" class="badge-count" style="display:none;"></span>
+      </button>
+    </div>
+
+    <!-- VENDEDOR -->
+    <div id="tab-vendedor" class="section active">
+
+      <div class="section-label">Datos del vendedor</div>
+      <div class="field-group">
+        <label>Nombre del vendedor</label>
+        <input type="text" id="seller-name" placeholder="Tu nombre">
+      </div>
+
+      <div class="section-label">Datos del cliente</div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Nombre del cliente</label>
+          <input type="text" id="client-name" placeholder="Nombre completo">
+        </div>
+        <div class="field-group">
+          <label>Nombre del negocio</label>
+          <input type="text" id="business-name" placeholder="Nombre del negocio">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Teléfono</label>
+          <input type="tel" id="phone" placeholder="(000) 000-0000">
+        </div>
+        <div class="field-group">
+          <label>Seller Permit # <span class="optional">(opcional)</span></label>
+          <input type="text" id="permit" placeholder="Número de permiso" oninput="onPermitChange()">
+          <div class="permit-note" id="permit-note"></div>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Dirección</label>
+        <input type="text" id="address" placeholder="Calle, ciudad, estado, ZIP">
+      </div>
+      <div class="field-group">
+        <label>Correo electrónico <span class="optional">(opcional)</span></label>
+        <input type="email" id="email" placeholder="correo@ejemplo.com">
+      </div>
+
+      <div class="section-label">Productos</div>
+      <div id="product-lines"></div>
+      <button class="add-product-btn" onclick="addProductLine()">+ Agregar producto</button>
+
+      <div class="section-label">Envío y taxes</div>
+
+      <div class="toggle-row">
+        <input type="checkbox" id="shipping-toggle" checked onchange="recalcTotal()">
+        <label for="shipping-toggle">Cobrar envío <strong>$9.99</strong></label>
+      </div>
+
+      <div class="toggle-row" id="tax-toggle-row">
+        <input type="checkbox" id="tax-toggle" onchange="recalcTotal()">
+        <label for="tax-toggle">Cobrar tax</label>
+      </div>
+      <div id="tax-rate-row" style="display:none; margin-left:28px; margin-bottom:12px;">
+        <div class="tax-input-row">
+          <input type="number" id="tax-rate" value="10.25" min="0" max="30" step="0.01" oninput="recalcTotal()" style="width:80px;">
+          <span class="tax-pct-label">% sobre subtotal de productos</span>
+        </div>
+      </div>
+
+      <div class="summary-table">
+        <div class="summary-row"><span>Subtotal productos</span><span id="sum-products">$0.00</span></div>
+        <div class="summary-row" id="sum-shipping-row"><span>Envío</span><span>$9.99</span></div>
+        <div class="summary-row" id="sum-tax-row" style="display:none;"><span id="sum-tax-label">Tax (10.25%)</span><span id="sum-tax-amount">$0.00</span></div>
+        <div class="summary-row total"><span>Total</span><span id="order-total">$0.00</span></div>
+      </div>
+
+      <div class="field-group" style="margin-top:1rem;">
+        <label>Notas adicionales</label>
+        <textarea id="notes" rows="2" placeholder="Instrucciones especiales, forma de entrega, etc."></textarea>
+      </div>
+
+      <button class="submit-btn" onclick="submitOrder()">Enviar orden →</button>
+    </div>
+
+    <!-- ADMIN -->
+    <div id="tab-admin" class="section">
+      <div class="admin-bar">
+        <span id="order-count-label" class="order-count">0 órdenes</span>
+        <button class="clear-btn" onclick="clearOrders()">🗑 Limpiar todo</button>
+      </div>
+      <div id="orders-list">
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          No hay órdenes todavía
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="products.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
