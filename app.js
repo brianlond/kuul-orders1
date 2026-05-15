@@ -429,9 +429,10 @@ async function init() {
 
 init();
 
-// ── Scanner (ZXing — works on iPhone, Android, desktop) ─────
+// ── Scanner (ZXing UMD — iPhone, Android, desktop) ──────────
 let scannerActive = false;
 let codeReader = null;
+let scannedBarcode = null;
 
 async function openScanner() {
   document.getElementById('scanner-modal').style.display = 'flex';
@@ -439,12 +440,12 @@ async function openScanner() {
   scannerActive = true;
 
   try {
-    const ZXing = await import('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/esm/index.js');
     codeReader = new ZXing.BrowserMultiFormatReader();
     const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-    const deviceId = devices.length > 1 ? devices[devices.length - 1].deviceId : (devices[0]?.deviceId);
+    const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
+    const deviceId = backCamera ? backCamera.deviceId : (devices[devices.length - 1]?.deviceId);
     document.getElementById('scanner-status').textContent = 'Apunta al código de barras...';
-    await codeReader.decodeFromVideoDevice(deviceId, 'scanner-video', (result, err) => {
+    codeReader.decodeFromVideoDevice(deviceId, 'scanner-video', (result, err) => {
       if (result && scannerActive) {
         scannerActive = false;
         const code = result.getText();
@@ -461,7 +462,7 @@ async function openScanner() {
 function closeScanner() {
   scannerActive = false;
   if (codeReader) {
-    codeReader.reset();
+    try { codeReader.reset(); } catch(e) {}
     codeReader = null;
   }
   document.getElementById('scanner-modal').style.display = 'none';
@@ -496,8 +497,6 @@ function closeQtyModal() {
   document.getElementById('qty-modal').style.display = 'none';
   scannedBarcode = null;
 }
-
-let scannedBarcode = null;
 
 document.addEventListener('keydown', e => {
   if (document.getElementById('qty-modal').style.display === 'flex' && e.key === 'Enter') confirmScanQty();
