@@ -5,6 +5,8 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ── Admin credentials ────────────────────────────────────────
 const ADMIN_USER = 'mariapelos';
 const ADMIN_PASS = 'snaPPletapaTio1?';
+const DELIVERY_USER = 'Brianrepartidor';
+const DELIVERY_PASS = 'repartidor1';
 
 // ── Constants ────────────────────────────────────────────────
 const SHIPPING = 9.99;
@@ -27,6 +29,7 @@ function getPrice(product) {
 
 // ── State ────────────────────────────────────────────────────
 let isAdmin = false;
+let isDelivery = false;
 let PRODUCTS = [];
 
 // ── Supabase helpers ─────────────────────────────────────────
@@ -228,8 +231,14 @@ function doLogin() {
   const pass = document.getElementById('login-pass').value;
   if (user === ADMIN_USER && pass === ADMIN_PASS) {
     isAdmin = true;
+    isDelivery = false;
     hideLoginModal();
     showAdminView();
+  } else if (user === DELIVERY_USER && pass === DELIVERY_PASS) {
+    isDelivery = true;
+    isAdmin = false;
+    hideLoginModal();
+    showDeliveryView();
   } else {
     document.getElementById('login-error').textContent = 'Usuario o contraseña incorrectos';
   }
@@ -237,6 +246,8 @@ function doLogin() {
 
 function doLogout() {
   isAdmin = false;
+  isDelivery = false;
+  document.getElementById('logout-btn').style.display = 'none';
   showTab('vendedor');
 }
 
@@ -252,6 +263,88 @@ function showAdminView() {
   document.getElementById('tab-admin-btn').classList.add('active');
   document.getElementById('logout-btn').style.display = 'inline-block';
   loadOrders();
+}
+
+// ── Delivery view ────────────────────────────────────────────
+function showDeliveryView() {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-delivery').classList.add('active');
+  document.getElementById('tab-delivery-btn').classList.add('active');
+  document.getElementById('logout-btn').style.display = 'inline-block';
+  loadDeliveryOrders();
+}
+
+async function loadDeliveryOrders() {
+  const list = document.getElementById('delivery-list');
+  list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
+  try {
+    const orders = await supabase('orders?select=*&status=eq.Lista&order=created_at.asc');
+    renderDeliveryOrders(orders);
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando órdenes</div>`;
+    console.error(e);
+  }
+}
+
+function renderDeliveryOrders(orders) {
+  if (!window._orders) window._orders = [];
+  orders.forEach(o => { if (!window._orders.find(x => x.id === o.id)) window._orders.push(o); });
+  const list = document.getElementById('delivery-list');
+  const countLabel = document.getElementById('delivery-count-label');
+  countLabel.textContent = orders.length + ' orden' + (orders.length !== 1 ? 'es listas' : ' lista') + ' para entregar';
+
+  if (orders.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div>No hay órdenes pendientes de entrega</div>`;
+    return;
+  }
+
+  list.innerHTML = orders.map(o => {
+    const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    return `
+    <div class="order-card">
+      <div class="order-header">
+        <div>
+          <div class="order-name">${o.client}</div>
+          <div class="order-business">${o.business}</div>
+        </div>
+        <span class="status-badge badge-lista">Lista</span>
+      </div>
+      <div class="order-meta">📍 ${o.address}</div>
+      <div class="order-meta">📞 ${o.phone} · 👤 Vendedor: ${o.seller}</div>
+      <div class="order-meta">🕐 ${date}</div>
+      <div class="order-products" style="margin-top:8px;">
+        ${o.lines.map(l => `
+          <div class="order-product-line">
+            <span>${l.brand} [${l.code}] ${l.name} × ${l.qty}</span>
+            <span>$${parseFloat(l.subtotal).toFixed(2)}</span>
+          </div>
+        `).join('')}
+        <div class="order-subtotals">
+          <div class="order-summary-line"><span>Subtotal</span><span>$${parseFloat(o.subtotal).toFixed(2)}</span></div>
+          ${o.shipping ? `<div class="order-summary-line"><span>Envío</span><span>$${parseFloat(o.shipping).toFixed(2)}</span></div>` : ''}
+          ${o.tax_rate ? `<div class="order-summary-line"><span>Tax (${parseFloat(o.tax_rate).toFixed(2)}%)</span><span>$${parseFloat(o.tax_amount).toFixed(2)}</span></div>` : ''}
+          <div class="order-total-line"><span>Total</span><span>$${parseFloat(o.total).toFixed(2)}</span></div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+        <button onclick="printOrder(${o.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">🖨️ Imprimir invoice</button>
+        <button onclick="markDelivered(${o.id})" class="submit-btn" style="flex:1; margin:0; padding:8px 16px; font-size:13px;">✅ Marcar como entregada</button>
+      </div>
+    </div>
+  `}).join('');
+}
+
+async function markDelivered(id) {
+  if (!confirm('¿Confirmar entrega de esta orden?')) return;
+  try {
+    await dbUpdateStatus(id, 'Entregada');
+    showToast('✓ Orden marcada como entregada');
+    await loadDeliveryOrders();
+  } catch(e) {
+    showToast('❌ Error al actualizar');
+    console.error(e);
+  }
 }
 
 // ── Submit order ─────────────────────────────────────────────
@@ -1122,6 +1215,7 @@ async function updateCustomerLevel(id, level) {
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
   if ((name === 'admin' || name === 'customers' || name === 'catalog') && !isAdmin) { showLoginModal(); return; }
+  if (name === 'delivery' && !isDelivery) { showLoginModal(); return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
@@ -1131,6 +1225,7 @@ function showTab(name) {
     if (name === 'admin') loadOrders();
     if (name === 'customers') loadCustomers();
     if (name === 'catalog') loadCatalog();
+    if (name === 'delivery') loadDeliveryOrders();
   } else {
     document.getElementById('logout-btn').style.display = 'none';
   }
