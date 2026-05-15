@@ -758,7 +758,13 @@ async function loadCatalog() {
   const list = document.getElementById('catalog-list');
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
   try {
-    const allProds = await supabase('products?select=*&order=brand.asc,name.asc');
+    const allProds = await supabase('products?select=*');
+    if (!allProds || allProds.length === 0) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div>No hay productos</div>`;
+      return;
+    }
+    allProds.sort((a,b) => a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name));
+    window._catalogProducts = allProds;
     const products = catalogFilter === 'all' ? allProds : allProds.filter(p => p.brand === catalogFilter);
     renderCatalogBrandFilter(allProds);
     populateDataLists(allProds);
