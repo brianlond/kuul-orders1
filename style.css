@@ -398,3 +398,15 @@ select {
   border-radius: 99px;
   font-weight: 600;
 }
+
+/* DAY SUMMARY */
+.day-summary { display: flex; gap: 12px; background: var(--text); border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 16px; flex-wrap: wrap; }
+.summary-stat { flex: 1; min-width: 70px; text-align: center; }
+.stat-value { font-size: 22px; font-weight: 700; color: #fff; }
+.stat-label { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* FILTER BAR */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-chip { padding: 6px 14px; border: 1px solid var(--border); border-radius: 99px; background: none; color: var(--text-muted); font-size: 13px; font-family: inherit; cursor: pointer; transition: all 0.15s; }
+.filter-chip:hover { border-color: var(--text); color: var(--text); }
+.filter-chip.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 500; }

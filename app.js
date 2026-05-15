@@ -440,8 +440,10 @@ async function loadOrders() {
   const list = document.getElementById('orders-list');
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando órdenes...</div>`;
   try {
-    const orders = await dbFetchOrders();
-    renderOrders(orders);
+    allOrders = await dbFetchOrders();
+    renderDaySummary(allOrders);
+    const filtered = currentFilter === 'all' ? allOrders : allOrders.filter(o => o.status === currentFilter);
+    renderOrders(filtered);
   } catch (e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando órdenes</div>`;
     console.error(e);
@@ -653,6 +655,127 @@ document.addEventListener('click', e => {
   }
 });
 
+
+// ── Edit customer ─────────────────────────────────────────────
+let editingCustomerId = null;
+
+function openEditCustomer(id) {
+  const c = allCustomers.find(x => x.id === id);
+  if (!c) return;
+  editingCustomerId = id;
+  document.getElementById('ec-name').value = c.name;
+  document.getElementById('ec-business').value = c.business;
+  document.getElementById('ec-phone').value = c.phone;
+  document.getElementById('ec-permit').value = c.permit || '';
+  document.getElementById('ec-address').value = c.address || '';
+  document.getElementById('ec-email').value = c.email || '';
+  document.getElementById('ec-level').value = c.level || 'Salon';
+  document.getElementById('edit-customer-modal').style.display = 'flex';
+}
+
+function closeEditCustomer() {
+  document.getElementById('edit-customer-modal').style.display = 'none';
+  editingCustomerId = null;
+}
+
+async function saveEditCustomer() {
+  if (!editingCustomerId) return;
+  const btn = document.getElementById('ec-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+  try {
+    await supabase(`customers?id=eq.${editingCustomerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: document.getElementById('ec-name').value.trim(),
+        business: document.getElementById('ec-business').value.trim(),
+        phone: document.getElementById('ec-phone').value.trim(),
+        permit: document.getElementById('ec-permit').value.trim(),
+        address: document.getElementById('ec-address').value.trim(),
+        email: document.getElementById('ec-email').value.trim(),
+        level: document.getElementById('ec-level').value
+      })
+    });
+    closeEditCustomer();
+    showToast('✓ Cliente actualizado');
+    allCustomers = await dbFetchCustomers();
+    await loadCustomers();
+  } catch(e) {
+    showToast('❌ Error al guardar');
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar cambios →';
+  }
+}
+
+// ── Customer history ──────────────────────────────────────────
+async function openHistoryModal(customerId) {
+  const c = allCustomers.find(x => x.id === customerId);
+  if (!c) return;
+  document.getElementById('history-modal-title').textContent = `Historial — ${c.name}`;
+  document.getElementById('history-modal-content').innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>';
+  document.getElementById('customer-history-modal').style.display = 'flex';
+  try {
+    const orders = await supabase(`orders?select=*&client=eq.${encodeURIComponent(c.name)}&order=created_at.desc`);
+    if (!orders || orders.length === 0) {
+      document.getElementById('history-modal-content').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin órdenes registradas</div>';
+      return;
+    }
+    const totalSpent = orders.reduce((sum, o) => sum + parseFloat(o.total), 0);
+    document.getElementById('history-modal-content').innerHTML = `
+      <div style="display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap;">
+        <div class="summary-stat"><div class="stat-value">${orders.length}</div><div class="stat-label">Órdenes</div></div>
+        <div class="summary-stat"><div class="stat-value">$${totalSpent.toFixed(2)}</div><div class="stat-label">Total comprado</div></div>
+      </div>
+      ${orders.map(o => {
+        const date = new Date(o.created_at).toLocaleDateString('es-MX');
+        return `<div style="border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:13px; font-weight:500;">${date} · ${o.seller}</div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span class="status-badge ${statusClass(o.status)}" style="font-size:11px;">${o.status}</span>
+              <strong style="font-size:14px;">$${parseFloat(o.total).toFixed(2)}</strong>
+            </div>
+          </div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${o.lines.map(l => `${l.name} ×${l.qty}`).join(', ')}</div>
+        </div>`;
+      }).join('')}
+    `;
+  } catch(e) {
+    document.getElementById('history-modal-content').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Error cargando historial</div>';
+    console.error(e);
+  }
+}
+
+function closeHistoryModal() {
+  document.getElementById('customer-history-modal').style.display = 'none';
+}
+
+// ── Order filters ─────────────────────────────────────────────
+let currentFilter = 'all';
+let allOrders = [];
+
+function filterOrders(status, btn) {
+  currentFilter = status;
+  document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = status === 'all' ? allOrders : allOrders.filter(o => o.status === status);
+  renderOrders(filtered);
+}
+
+// ── Day summary ───────────────────────────────────────────────
+function renderDaySummary(orders) {
+  const today = new Date().toDateString();
+  const todayOrders = orders.filter(o => new Date(o.created_at).toDateString() === today);
+  const todayTotal = todayOrders.reduce((sum, o) => sum + parseFloat(o.total), 0);
+  const newOrders = orders.filter(o => o.status === 'Nueva').length;
+  document.getElementById('stat-orders').textContent = todayOrders.length;
+  document.getElementById('stat-total').textContent = '$' + todayTotal.toFixed(0);
+  document.getElementById('stat-new').textContent = newOrders;
+  document.getElementById('day-summary').style.display = 'flex';
+}
+
 // ── Customers ─────────────────────────────────────────────────
 async function loadCustomers() {
   const list = document.getElementById('customers-list');
@@ -706,9 +829,11 @@ function renderCustomers(customers) {
       <div class="order-meta">
         🛒 ${c.order_count} orden${c.order_count !== 1 ? 'es' : ''} · Última: ${lastOrder}
       </div>
-      <div class="order-meta" style="margin-top:6px; display:flex; gap:8px;">
+      <div class="order-meta" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
         <a href="${waLink}" target="_blank" class="contact-btn wa-btn">💬 WhatsApp</a>
         ${emailLink ? `<a href="${emailLink}" class="contact-btn email-btn">✉️ Email</a>` : ''}
+        <button onclick="openEditCustomer(${c.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">✏️ Editar</button>
+        <button onclick="openHistoryModal(${c.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">📋 Historial</button>
       </div>
     </div>
   `}).join('');

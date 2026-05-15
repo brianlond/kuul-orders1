@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kuul Orders</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -151,6 +151,18 @@
 
     <!-- ADMIN -->
     <div id="tab-admin" class="section">
+      <div class="day-summary" id="day-summary" style="display:none;">
+        <div class="summary-stat"><div class="stat-value" id="stat-orders">0</div><div class="stat-label">Órdenes hoy</div></div>
+        <div class="summary-stat"><div class="stat-value" id="stat-total">$0</div><div class="stat-label">Total hoy</div></div>
+        <div class="summary-stat"><div class="stat-value" id="stat-new">0</div><div class="stat-label">Nuevas</div></div>
+      </div>
+      <div class="filter-bar">
+        <button class="filter-chip active" onclick="filterOrders('all', this)">Todas</button>
+        <button class="filter-chip" onclick="filterOrders('Nueva', this)">Nueva</button>
+        <button class="filter-chip" onclick="filterOrders('En proceso', this)">En proceso</button>
+        <button class="filter-chip" onclick="filterOrders('Lista', this)">Lista</button>
+        <button class="filter-chip" onclick="filterOrders('Entregada', this)">Entregada</button>
+      </div>
       <div class="admin-bar">
         <span id="order-count-label" class="order-count">0 órdenes</span>
         <button class="clear-btn" onclick="clearOrders()">🗑 Limpiar todo</button>
@@ -208,6 +220,63 @@
     </div>
   </div>
 
+
+
+  <!-- EDIT CUSTOMER MODAL -->
+  <div class="modal-overlay" id="edit-customer-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+    <div class="modal" style="max-width:480px; width:100%; margin:auto;">
+      <div class="modal-title">Editar cliente</div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Nombre</label>
+          <input type="text" id="ec-name">
+        </div>
+        <div class="field-group">
+          <label>Negocio</label>
+          <input type="text" id="ec-business">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Teléfono</label>
+          <input type="tel" id="ec-phone">
+        </div>
+        <div class="field-group">
+          <label>Seller Permit <span class="optional">(opcional)</span></label>
+          <input type="text" id="ec-permit">
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Dirección</label>
+        <input type="text" id="ec-address">
+      </div>
+      <div class="field-group">
+        <label>Correo <span class="optional">(opcional)</span></label>
+        <input type="email" id="ec-email">
+      </div>
+      <div class="field-group">
+        <label>Nivel</label>
+        <select id="ec-level">
+          <option value="Retail">Retail</option>
+          <option value="Salon">Salon</option>
+          <option value="Wholesale">Wholesale</option>
+        </select>
+      </div>
+      <button class="submit-btn" id="ec-save-btn" onclick="saveEditCustomer()">Guardar cambios →</button>
+      <button class="cancel-btn" onclick="closeEditCustomer()">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- CUSTOMER HISTORY MODAL -->
+  <div class="modal-overlay" id="customer-history-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+    <div class="modal" style="max-width:560px; width:100%; margin:auto;">
+      <div class="modal-title" id="history-modal-title">Historial de compras</div>
+      <div id="history-modal-content">
+        <div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>
+      </div>
+      <button class="cancel-btn" style="margin-top:16px;" onclick="closeHistoryModal()">Cerrar</button>
+    </div>
+  </div>
 
   <!-- EDIT MODAL -->
   <div class="modal-overlay" id="edit-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
