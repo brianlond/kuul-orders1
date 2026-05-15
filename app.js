@@ -1,8 +1,48 @@
-const SHIPPING = 9.99;
-let orders = JSON.parse(localStorage.getItem('kuul_orders') || '[]');
-let lineCount = 0;
+// ── Supabase config ─────────────────────────────────────────
+const SUPABASE_URL = 'https://qyejhtyryweesbsiwpxn.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5ZWpodHlyeXdlZXNic2l3cHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MTg3MDIsImV4cCI6MjA5NDM5NDcwMn0.fKedoQ-VhAq2NFRp0WA_Ldbomqy9M5jrVY9fWb0SaIc';
 
-// ── Render product options ──────────────────────────────────
+async function dbInsert(order) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify(order)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function dbFetch() {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?select=*&order=created_at.desc`, {
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`
+    }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function dbDelete() {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=gte.0`, {
+    method: 'DELETE',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`
+    }
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// ── Constants ────────────────────────────────────────────────
+const SHIPPING = 9.99;
+
+// ── Build product options ────────────────────────────────────
 function buildOptions(selected) {
   return PRODUCTS.map(p =>
     `<option value="${p.barcode}" ${p.barcode === selected ? 'selected' : ''} data-price="${p.price}">
@@ -11,7 +51,8 @@ function buildOptions(selected) {
   ).join('');
 }
 
-// ── Add a product line ──────────────────────────────────────
+// ── Add a product line ───────────────────────────────────────
+let lineCount = 0;
 function addProductLine(barcode = '', qty = 1) {
   lineCount++;
   const id = lineCount;
@@ -34,13 +75,12 @@ function removeLine(id) {
   recalcTotal();
 }
 
-// ── Permit change ───────────────────────────────────────────
+// ── Permit change ────────────────────────────────────────────
 function onPermitChange() {
   const permit = document.getElementById('permit').value.trim();
   const note = document.getElementById('permit-note');
   const taxToggle = document.getElementById('tax-toggle');
   const taxRow = document.getElementById('tax-toggle-row');
-
   if (permit.length > 0) {
     note.textContent = '✓ Cliente exento de tax';
     note.style.color = 'var(--success)';
@@ -56,7 +96,7 @@ function onPermitChange() {
   recalcTotal();
 }
 
-// ── Recalculate totals ──────────────────────────────────────
+// ── Recalculate totals ───────────────────────────────────────
 function recalcTotal() {
   let subtotal = 0;
   document.querySelectorAll('.product-row').forEach(row => {
@@ -67,11 +107,9 @@ function recalcTotal() {
       subtotal += price * (parseInt(qty.value) || 0);
     }
   });
-
   const hasShipping = document.getElementById('shipping-toggle').checked;
   const hasTax = document.getElementById('tax-toggle').checked;
   const taxRate = parseFloat(document.getElementById('tax-rate').value) || 0;
-
   const shippingAmt = hasShipping ? SHIPPING : 0;
   const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
   const total = subtotal + shippingAmt + taxAmt;
@@ -85,7 +123,7 @@ function recalcTotal() {
   document.getElementById('tax-rate-row').style.display = hasTax ? 'block' : 'none';
 }
 
-// ── Helpers ─────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────
 function getVal(id) { return document.getElementById(id)?.value?.trim() || ''; }
 
 function showToast(msg, dur = 2800) {
@@ -95,12 +133,13 @@ function showToast(msg, dur = 2800) {
   setTimeout(() => t.classList.remove('show'), dur);
 }
 
-function saveOrders() {
-  localStorage.setItem('kuul_orders', JSON.stringify(orders));
+function setLoading(btn, loading) {
+  btn.disabled = loading;
+  btn.textContent = loading ? 'Enviando...' : 'Enviar orden →';
 }
 
-// ── Submit order ────────────────────────────────────────────
-function submitOrder() {
+// ── Submit order ─────────────────────────────────────────────
+async function submitOrder() {
   const seller   = getVal('seller-name');
   const client   = getVal('client-name');
   const business = getVal('business-name');
@@ -125,7 +164,7 @@ function submitOrder() {
       const product = PRODUCTS.find(p => p.barcode === sel.value);
       const q = parseInt(qty.value) || 0;
       if (product && q > 0) {
-        lines.push({ product, qty: q, subtotal: product.price * q });
+        lines.push({ barcode: product.barcode, code: product.code, name: product.name, price: product.price, qty: q, subtotal: product.price * q });
         subtotal += product.price * q;
       }
     }
@@ -140,28 +179,35 @@ function submitOrder() {
   const taxAmt      = hasTax ? subtotal * (taxRate / 100) : 0;
   const total       = subtotal + shippingAmt + taxAmt;
 
-  const order = {
-    id: Date.now(),
-    seller, client, business, phone, permit, address, email, notes,
-    lines, subtotal,
-    shipping: hasShipping ? shippingAmt : null,
-    tax: hasTax ? { rate: taxRate, amount: taxAmt } : null,
-    total,
-    date: new Date().toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-    status: 'Nueva'
-  };
+  const btn = document.querySelector('.submit-btn');
+  setLoading(btn, true);
 
-  orders.unshift(order);
-  saveOrders();
-  renderOrders();
-  resetForm();
-  showToast('✓ Orden enviada correctamente');
-  showTab('admin');
+  try {
+    await dbInsert({
+      seller, client, business, phone, permit, address, email, notes,
+      lines,
+      subtotal,
+      shipping: hasShipping ? shippingAmt : null,
+      tax_rate: hasTax ? taxRate : null,
+      tax_amount: hasTax ? taxAmt : null,
+      total,
+      status: 'Nueva'
+    });
+    resetForm();
+    showToast('✓ Orden enviada correctamente');
+    showTab('admin');
+    await loadOrders();
+  } catch (e) {
+    showToast('❌ Error al enviar, intenta de nuevo');
+    console.error(e);
+  } finally {
+    setLoading(btn, false);
+  }
 }
 
-// ── Reset form ──────────────────────────────────────────────
+// ── Reset form ───────────────────────────────────────────────
 function resetForm() {
-  ['seller-name', 'client-name', 'business-name', 'phone', 'permit', 'address', 'email', 'notes']
+  ['seller-name','client-name','business-name','phone','permit','address','email','notes']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('product-lines').innerHTML = '';
   document.getElementById('permit-note').textContent = '';
@@ -174,11 +220,11 @@ function resetForm() {
   addProductLine();
 }
 
-// ── Render orders list ──────────────────────────────────────
-function renderOrders() {
-  const list        = document.getElementById('orders-list');
-  const badge       = document.getElementById('badge-count');
-  const countLabel  = document.getElementById('order-count-label');
+// ── Render orders ────────────────────────────────────────────
+function renderOrders(orders) {
+  const list       = document.getElementById('orders-list');
+  const badge      = document.getElementById('badge-count');
+  const countLabel = document.getElementById('order-count-label');
   countLabel.textContent = orders.length + ' orden' + (orders.length !== 1 ? 'es' : '');
 
   if (orders.length === 0) {
@@ -186,11 +232,12 @@ function renderOrders() {
     badge.style.display = 'none';
     return;
   }
-
   badge.style.display = '';
   badge.textContent = orders.length;
 
-  list.innerHTML = orders.map(o => `
+  list.innerHTML = orders.map(o => {
+    const date = new Date(o.created_at).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `
     <div class="order-card">
       <div class="order-header">
         <div>
@@ -199,52 +246,66 @@ function renderOrders() {
         </div>
         <span class="status-badge">${o.status}</span>
       </div>
-      <div class="order-meta">🕐 ${o.date} · 👤 ${o.seller} · 📞 ${o.phone}</div>
+      <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}</div>
       <div class="order-meta">
         📍 ${o.address}
-        ${o.permit
-          ? ` · Permit: ${o.permit}`
-          : ` · <span class="warn">Sin seller permit</span>`}
+        ${o.permit ? ` · Permit: ${o.permit}` : ' · <span class="warn">Sin seller permit</span>'}
         ${o.email ? ` · ✉️ ${o.email}` : ''}
       </div>
       ${o.notes ? `<div class="order-meta" style="font-style:italic;">"${o.notes}"</div>` : ''}
       <div class="order-products">
         ${o.lines.map(l => `
           <div class="order-product-line">
-            <span>[${l.product.code}] ${l.product.name} × ${l.qty}</span>
+            <span>[${l.code}] ${l.name} × ${l.qty}</span>
             <span>$${l.subtotal.toFixed(2)}</span>
           </div>
         `).join('')}
         <div class="order-subtotals">
-          <div class="order-summary-line"><span>Subtotal</span><span>$${o.subtotal.toFixed(2)}</span></div>
-          ${o.shipping !== null ? `<div class="order-summary-line"><span>Envío</span><span>$${o.shipping.toFixed(2)}</span></div>` : ''}
-          ${o.tax ? `<div class="order-summary-line"><span>Tax (${o.tax.rate.toFixed(2)}%)</span><span>$${o.tax.amount.toFixed(2)}</span></div>` : ''}
-          <div class="order-total-line"><span>Total</span><span>$${o.total.toFixed(2)}</span></div>
+          <div class="order-summary-line"><span>Subtotal</span><span>$${parseFloat(o.subtotal).toFixed(2)}</span></div>
+          ${o.shipping !== null && o.shipping !== undefined ? `<div class="order-summary-line"><span>Envío</span><span>$${parseFloat(o.shipping).toFixed(2)}</span></div>` : ''}
+          ${o.tax_rate ? `<div class="order-summary-line"><span>Tax (${parseFloat(o.tax_rate).toFixed(2)}%)</span><span>$${parseFloat(o.tax_amount).toFixed(2)}</span></div>` : ''}
+          <div class="order-total-line"><span>Total</span><span>$${parseFloat(o.total).toFixed(2)}</span></div>
         </div>
       </div>
     </div>
-  `).join('');
+  `}).join('');
 }
 
-// ── Tab switching ───────────────────────────────────────────
+// ── Load orders from Supabase ────────────────────────────────
+async function loadOrders() {
+  const list = document.getElementById('orders-list');
+  list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando órdenes...</div>`;
+  try {
+    const orders = await dbFetch();
+    renderOrders(orders);
+  } catch (e) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando órdenes</div>`;
+    console.error(e);
+  }
+}
+
+// ── Clear all orders ─────────────────────────────────────────
+async function clearOrders() {
+  if (!confirm('¿Eliminar todas las órdenes? Esta acción no se puede deshacer.')) return;
+  try {
+    await dbDelete();
+    showToast('✓ Órdenes eliminadas');
+    await loadOrders();
+  } catch (e) {
+    showToast('❌ Error al eliminar');
+    console.error(e);
+  }
+}
+
+// ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.querySelectorAll('.tab')[name === 'vendedor' ? 0 : 1].classList.add('active');
+  if (name === 'admin') loadOrders();
 }
 
-// ── Clear all orders ────────────────────────────────────────
-function clearOrders() {
-  if (orders.length === 0) return;
-  if (confirm('¿Eliminar todas las órdenes? Esta acción no se puede deshacer.')) {
-    orders = [];
-    saveOrders();
-    renderOrders();
-  }
-}
-
-// ── Init ────────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────────
 addProductLine();
 onPermitChange();
-renderOrders();
