@@ -43,6 +43,18 @@
         <input type="text" id="customer-search" placeholder="Escribe nombre o negocio..." oninput="searchCustomers(this.value)" autocomplete="off">
         <div id="customer-suggestions" class="suggestions-dropdown" style="display:none;"></div>
       </div>
+      <div class="field-group">
+        <label>Nivel de cliente</label>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <select id="level-select" onchange="setLevel(this.value)" style="width:auto;">
+            <option value="Retail">Retail</option>
+            <option value="Salon" selected>Salon</option>
+            <option value="Wholesale">Wholesale</option>
+          </select>
+          <span id="level-badge" class="level-badge badge-lista">Salon</span>
+        </div>
+      </div>
+
       <div class="row2">
         <div class="field-group">
           <label>Nombre del cliente</label>
@@ -203,6 +215,18 @@
       <div class="modal-title">Editar orden</div>
 
       <div class="section-label">Datos del cliente</div>
+      <div class="field-group">
+        <label>Nivel de cliente</label>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <select id="level-select" onchange="setLevel(this.value)" style="width:auto;">
+            <option value="Retail">Retail</option>
+            <option value="Salon" selected>Salon</option>
+            <option value="Wholesale">Wholesale</option>
+          </select>
+          <span id="level-badge" class="level-badge badge-lista">Salon</span>
+        </div>
+      </div>
+
       <div class="row2">
         <div class="field-group">
           <label>Nombre del cliente</label>

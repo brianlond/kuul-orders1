@@ -390,3 +390,11 @@ select {
 /* PRODUCT LINE LABEL */
 .product-line-label { font-size: 13px; color: var(--text); flex: 1; padding: 9px 4px; }
 .product-row { display: grid; grid-template-columns: 1fr 72px 36px; gap: 8px; align-items: center; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 8px; }
+
+/* LEVEL BADGE */
+.level-badge {
+  font-size: 12px;
+  padding: 3px 12px;
+  border-radius: 99px;
+  font-weight: 600;
+}

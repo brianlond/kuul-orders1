@@ -9,6 +9,21 @@ const ADMIN_PASS = 'snaPPletapaTio1?';
 // ── Constants ────────────────────────────────────────────────
 const SHIPPING = 9.99;
 const STATUSES = ['Nueva', 'En proceso', 'Lista', 'Entregada'];
+const LEVELS = ['Retail', 'Salon', 'Wholesale'];
+
+// ── Price calculation ────────────────────────────────────────
+let currentLevel = 'Salon'; // default
+
+function getPrice(product) {
+  const retail = parseFloat(product.price_retail) || parseFloat(product.price);
+  if (currentLevel === 'Retail') return retail;
+  const salonDiscount = parseFloat(product.discount_salon) || 0;
+  const salonPrice = retail * (1 - salonDiscount / 100);
+  if (currentLevel === 'Salon') return Math.round(salonPrice * 100) / 100;
+  const wholesaleDiscount = parseFloat(product.discount_wholesale) || 0;
+  const wholesalePrice = salonPrice * (1 - wholesaleDiscount / 100);
+  return Math.round(wholesalePrice * 100) / 100;
+}
 
 // ── State ────────────────────────────────────────────────────
 let isAdmin = false;
@@ -120,7 +135,8 @@ function addProductLine(barcode = '', qty = 1) {
   div.id = 'line-' + id;
   div.dataset.barcode = barcode;
   const product = PRODUCTS.find(p => p.barcode === barcode);
-  const label = product ? `${product.brand} [${product.color_code || '—'}] ${product.name}` : '';
+  const price = product ? getPrice(product) : 0;
+  const label = product ? `${product.brand} [${product.color_code || '—'}] ${product.name} — $${price.toFixed(2)}` : '';
   div.innerHTML = `
     <div class="product-line-label">${label}</div>
     <input type="number" id="qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcTotal()">
@@ -165,7 +181,7 @@ function recalcTotal() {
     const barcode = row.dataset.barcode;
     if (barcode && qty) {
       const product = PRODUCTS.find(p => p.barcode === barcode);
-      if (product) subtotal += parseFloat(product.price) * (parseInt(qty.value) || 0);
+      if (product) subtotal += getPrice(product) * (parseInt(qty.value) || 0);
     }
   });
   const hasShipping = document.getElementById('shipping-toggle').checked;
@@ -264,13 +280,15 @@ async function submitOrder() {
       const product = PRODUCTS.find(p => p.barcode === barcode);
       const q = parseInt(qty.value) || 0;
       if (product && q > 0) {
-        const lineSubtotal = parseFloat(product.price) * q;
+        const price = getPrice(product);
+        const lineSubtotal = price * q;
         lines.push({
           barcode: product.barcode,
           brand: product.brand,
           code: product.color_code || '—',
           name: product.name,
-          price: parseFloat(product.price),
+          price,
+          level: currentLevel,
           qty: q,
           subtotal: lineSubtotal
         });
@@ -322,6 +340,9 @@ function resetForm() {
   document.getElementById('customer-search').value = '';
   document.getElementById('customer-suggestions').style.display = 'none';
   resetSteppedSelector();
+  currentLevel = 'Salon';
+  document.getElementById('level-select').value = 'Salon';
+  updateLevelBadge();
   document.getElementById('tax-toggle').checked = false;
   document.getElementById('shipping-toggle').checked = true;
   document.getElementById('tax-toggle-row').style.opacity = '1';
@@ -443,6 +464,22 @@ async function clearOrders() {
 
 
 
+
+// ── Customer level ───────────────────────────────────────────
+function setLevel(level) {
+  currentLevel = level;
+  document.getElementById('level-select').value = level;
+  updateLevelBadge();
+  if (allVariations.length > 0) renderVariations(allVariations);
+}
+
+function updateLevelBadge() {
+  const badge = document.getElementById('level-badge');
+  const colors = { Retail: 'badge-nueva', Salon: 'badge-lista', Wholesale: 'badge-proceso' };
+  badge.textContent = currentLevel;
+  badge.className = 'level-badge ' + (colors[currentLevel] || '');
+}
+
 // ── Stepped product selector ─────────────────────────────────
 let stepState = { brand: null, category: null, variation: null, qty: 1 };
 let allVariations = [];
@@ -488,11 +525,12 @@ function renderVariations(variations) {
   const container = document.getElementById('variation-options');
   container.innerHTML = variations.map(p => {
     const code = p.color_code && p.color_code !== 'null' ? p.color_code : '—';
+    const price = getPrice(p);
     return `
     <button class="variation-chip" onclick="selectVariation('${p.barcode}')">
       <span class="variation-code">${code}</span>
       <span class="variation-name">${p.name}</span>
-      <span class="variation-price">$${parseFloat(p.price).toFixed(2)}</span>
+      <span class="variation-price">$${price.toFixed(2)}</span>
     </button>
   `}).join('');
 }
@@ -598,6 +636,12 @@ function fillCustomer(id) {
   document.getElementById('email').value = c.email || '';
   document.getElementById('customer-search').value = `${c.name} — ${c.business}`;
   document.getElementById('customer-suggestions').style.display = 'none';
+
+  // Set level from customer profile
+  currentLevel = c.level || 'Salon';
+  document.getElementById('level-select').value = currentLevel;
+  updateLevelBadge();
+  if (allVariations.length > 0) renderVariations(allVariations);
   onPermitChange();
 }
 
@@ -634,9 +678,12 @@ function renderCustomers(customers) {
 
   list.innerHTML = customers.map(c => {
     const lastOrder = c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('es-MX') : '—';
-    const phone = c.phone.replace(/\D/g, '');
+    const phone = c.phone.replace(/[^0-9]/g, '');
     const waLink = `https://wa.me/1${phone}`;
     const emailLink = c.email ? `mailto:${c.email}` : null;
+    const levelColors = { Retail: 'badge-nueva', Salon: 'badge-lista', Wholesale: 'badge-proceso' };
+    const levelColor = levelColors[c.level] || 'badge-nueva';
+    const levelOptions = LEVELS.map(l => `<option value="${l}" ${c.level === l ? 'selected' : ''}>${l}</option>`).join('');
     return `
     <div class="order-card">
       <div class="order-header">
@@ -644,9 +691,8 @@ function renderCustomers(customers) {
           <div class="order-name">${c.name}</div>
           <div class="order-business">${c.business}</div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <a href="${waLink}" target="_blank" class="contact-btn wa-btn" title="WhatsApp">💬 WhatsApp</a>
-          ${emailLink ? `<a href="${emailLink}" class="contact-btn email-btn" title="Email">✉️ Email</a>` : ''}
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <select class="status-select ${levelColor}" onchange="updateCustomerLevel(${c.id}, this.value)">${levelOptions}</select>
         </div>
       </div>
       <div class="order-meta">
@@ -660,8 +706,29 @@ function renderCustomers(customers) {
       <div class="order-meta">
         🛒 ${c.order_count} orden${c.order_count !== 1 ? 'es' : ''} · Última: ${lastOrder}
       </div>
+      <div class="order-meta" style="margin-top:6px; display:flex; gap:8px;">
+        <a href="${waLink}" target="_blank" class="contact-btn wa-btn">💬 WhatsApp</a>
+        ${emailLink ? `<a href="${emailLink}" class="contact-btn email-btn">✉️ Email</a>` : ''}
+      </div>
     </div>
   `}).join('');
+}
+
+async function updateCustomerLevel(id, level) {
+  try {
+    await supabase(`customers?id=eq.${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ level })
+    });
+    // Update in local cache
+    const c = allCustomers.find(x => x.id === id);
+    if (c) c.level = level;
+    showToast(`✓ Nivel actualizado a ${level}`);
+    await loadCustomers();
+  } catch(e) {
+    showToast('❌ Error al actualizar nivel');
+    console.error(e);
+  }
 }
 
 // ── Tab switching ────────────────────────────────────────────
