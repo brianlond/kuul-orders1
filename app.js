@@ -758,10 +758,11 @@ async function loadCatalog() {
   const list = document.getElementById('catalog-list');
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
   try {
-    const products = await supabase('products?select=*&order=brand.asc,color_code.asc,name.asc');
+    const allProds = await supabase('products?select=*&order=brand.asc,name.asc');
+    const products = catalogFilter === 'all' ? allProds : allProds.filter(p => p.brand === catalogFilter);
+    renderCatalogBrandFilter(allProds);
+    populateDataLists(allProds);
     renderCatalog(products);
-    renderCatalogBrandFilter(products);
-    populateDataLists(products);
   } catch(e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando catálogo</div>`;
     console.error(e);
@@ -793,7 +794,7 @@ function populateDataLists(products) {
 }
 
 function renderCatalog(allProducts) {
-  const filtered = catalogFilter === 'all' ? allProducts : allProducts.filter(p => p.brand === catalogFilter);
+  const filtered = allProducts;
   const list = document.getElementById('catalog-list');
   const countLabel = document.getElementById('catalog-count-label');
   countLabel.textContent = filtered.length + ' producto' + (filtered.length !== 1 ? 's' : '');
