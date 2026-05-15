@@ -2,6 +2,18 @@
 const SUPABASE_URL = 'https://qyejhtyryweesbsiwpxn.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5ZWpodHlyeXdlZXNic2l3cHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MTg3MDIsImV4cCI6MjA5NDM5NDcwMn0.fKedoQ-VhAq2NFRp0WA_Ldbomqy9M5jrVY9fWb0SaIc';
 
+// ── Admin credentials ────────────────────────────────────────
+const ADMIN_USER = 'mariapelos';
+const ADMIN_PASS = 'snaPPletapaTio1?';
+
+// ── Constants ────────────────────────────────────────────────
+const SHIPPING = 9.99;
+const STATUSES = ['Nueva', 'En proceso', 'Lista', 'Entregada'];
+
+// ── Session ──────────────────────────────────────────────────
+let isAdmin = false;
+
+// ── Supabase helpers ─────────────────────────────────────────
 async function dbInsert(order) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
     method: 'POST',
@@ -28,6 +40,19 @@ async function dbFetch() {
   return res.json();
 }
 
+async function dbUpdateStatus(id, status) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ status })
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
 async function dbDelete() {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=gte.0`, {
     method: 'DELETE',
@@ -38,9 +63,6 @@ async function dbDelete() {
   });
   if (!res.ok) throw new Error(await res.text());
 }
-
-// ── Constants ────────────────────────────────────────────────
-const SHIPPING = 9.99;
 
 // ── Build product options ────────────────────────────────────
 function buildOptions(selected) {
@@ -138,6 +160,51 @@ function setLoading(btn, loading) {
   btn.textContent = loading ? 'Enviando...' : 'Enviar orden →';
 }
 
+// ── Admin login ──────────────────────────────────────────────
+function showLoginModal() {
+  document.getElementById('login-modal').style.display = 'flex';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  document.getElementById('login-error').textContent = '';
+  setTimeout(() => document.getElementById('login-user').focus(), 100);
+}
+
+function hideLoginModal() {
+  document.getElementById('login-modal').style.display = 'none';
+}
+
+function doLogin() {
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  if (user === ADMIN_USER && pass === ADMIN_PASS) {
+    isAdmin = true;
+    hideLoginModal();
+    showAdminView();
+  } else {
+    document.getElementById('login-error').textContent = 'Usuario o contraseña incorrectos';
+  }
+}
+
+function doLogout() {
+  isAdmin = false;
+  showTab('vendedor');
+}
+
+// handle enter key in login
+document.addEventListener('keydown', e => {
+  if (document.getElementById('login-modal').style.display === 'flex' && e.key === 'Enter') doLogin();
+});
+
+// ── Show admin view ──────────────────────────────────────────
+function showAdminView() {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-admin').classList.add('active');
+  document.getElementById('tab-admin-btn').classList.add('active');
+  document.getElementById('logout-btn').style.display = 'inline-block';
+  loadOrders();
+}
+
 // ── Submit order ─────────────────────────────────────────────
 async function submitOrder() {
   const seller   = getVal('seller-name');
@@ -185,18 +252,14 @@ async function submitOrder() {
   try {
     await dbInsert({
       seller, client, business, phone, permit, address, email, notes,
-      lines,
-      subtotal,
+      lines, subtotal,
       shipping: hasShipping ? shippingAmt : null,
       tax_rate: hasTax ? taxRate : null,
       tax_amount: hasTax ? taxAmt : null,
-      total,
-      status: 'Nueva'
+      total, status: 'Nueva'
     });
     resetForm();
     showToast('✓ Orden enviada correctamente');
-    showTab('admin');
-    await loadOrders();
   } catch (e) {
     showToast('❌ Error al enviar, intenta de nuevo');
     console.error(e);
@@ -220,6 +283,26 @@ function resetForm() {
   addProductLine();
 }
 
+// ── Status badge color ───────────────────────────────────────
+function statusClass(status) {
+  if (status === 'Nueva') return 'badge-nueva';
+  if (status === 'En proceso') return 'badge-proceso';
+  if (status === 'Lista') return 'badge-lista';
+  if (status === 'Entregada') return 'badge-entregada';
+  return '';
+}
+
+// ── Update status ────────────────────────────────────────────
+async function updateStatus(id, status) {
+  try {
+    await dbUpdateStatus(id, status);
+    await loadOrders();
+  } catch(e) {
+    showToast('❌ Error al actualizar estado');
+    console.error(e);
+  }
+}
+
 // ── Render orders ────────────────────────────────────────────
 function renderOrders(orders) {
   const list       = document.getElementById('orders-list');
@@ -233,10 +316,13 @@ function renderOrders(orders) {
     return;
   }
   badge.style.display = '';
-  badge.textContent = orders.length;
+  badge.textContent = orders.filter(o => o.status === 'Nueva').length || orders.length;
 
   list.innerHTML = orders.map(o => {
     const date = new Date(o.created_at).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const statusOptions = STATUSES.map(s =>
+      `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`
+    ).join('');
     return `
     <div class="order-card">
       <div class="order-header">
@@ -244,7 +330,9 @@ function renderOrders(orders) {
           <div class="order-name">${o.client}</div>
           <div class="order-business">${o.business}</div>
         </div>
-        <span class="status-badge">${o.status}</span>
+        <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)">
+          ${statusOptions}
+        </select>
       </div>
       <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}</div>
       <div class="order-meta">
@@ -271,7 +359,7 @@ function renderOrders(orders) {
   `}).join('');
 }
 
-// ── Load orders from Supabase ────────────────────────────────
+// ── Load orders ──────────────────────────────────────────────
 async function loadOrders() {
   const list = document.getElementById('orders-list');
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando órdenes...</div>`;
@@ -299,11 +387,19 @@ async function clearOrders() {
 
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
+  if (name === 'admin') {
+    if (!isAdmin) { showLoginModal(); return; }
+  }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  document.querySelectorAll('.tab')[name === 'vendedor' ? 0 : 1].classList.add('active');
-  if (name === 'admin') loadOrders();
+  document.getElementById('tab-' + name + '-btn').classList.add('active');
+  if (name === 'admin') {
+    document.getElementById('logout-btn').style.display = 'inline-block';
+    loadOrders();
+  } else {
+    document.getElementById('logout-btn').style.display = 'none';
+  }
 }
 
 // ── Init ─────────────────────────────────────────────────────

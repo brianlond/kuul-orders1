@@ -11,16 +11,17 @@
   <header class="header">
     <div class="header-inner">
       <span class="logo">Kuul <span>Orders</span></span>
+      <button class="logout-btn" id="logout-btn" onclick="doLogout()" style="display:none;">Cerrar sesión</button>
     </div>
   </header>
 
   <main class="main">
     <div class="tabs">
-      <button class="tab active" onclick="showTab('vendedor')">
+      <button class="tab active" id="tab-vendedor-btn" onclick="showTab('vendedor')">
         ➕ Nueva orden
       </button>
-      <button class="tab" onclick="showTab('admin')">
-        📋 Ver órdenes <span id="badge-count" class="badge-count" style="display:none;"></span>
+      <button class="tab" id="tab-admin-btn" onclick="showTab('admin')">
+        🔒 Admin <span id="badge-count" class="badge-count" style="display:none;"></span>
       </button>
     </div>
 
@@ -115,6 +116,24 @@
       </div>
     </div>
   </main>
+
+  <!-- LOGIN MODAL -->
+  <div class="modal-overlay" id="login-modal" style="display:none;">
+    <div class="modal">
+      <div class="modal-title">Acceso admin</div>
+      <div class="field-group">
+        <label>Usuario</label>
+        <input type="text" id="login-user" placeholder="Usuario" autocomplete="username">
+      </div>
+      <div class="field-group">
+        <label>Contraseña</label>
+        <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password">
+      </div>
+      <div class="login-error" id="login-error"></div>
+      <button class="submit-btn" onclick="doLogin()">Entrar →</button>
+      <button class="cancel-btn" onclick="hideLoginModal()">Cancelar</button>
+    </div>
+  </div>
 
   <div class="toast" id="toast"></div>
 
