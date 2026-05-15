@@ -754,7 +754,7 @@ document.addEventListener('click', e => {
 let editingProductId = null;
 let catalogFilter = 'all';
 
-async function loadCatalog() {
+window.loadCatalog = async function loadCatalog() {
   const list = document.getElementById('catalog-list');
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
   try {
@@ -1231,7 +1231,7 @@ function showTab(name) {
     document.getElementById('logout-btn').style.display = 'inline-block';
     if (name === 'admin') loadOrders();
     if (name === 'customers') loadCustomers();
-    if (name === 'catalog') loadCatalog();
+    if (name === 'catalog') setTimeout(loadCatalog, 100);
     if (name === 'delivery') loadDeliveryOrders();
     if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
