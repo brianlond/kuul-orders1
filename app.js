@@ -971,6 +971,7 @@ async function openOrderDetail(id) {
   }
   if (!order) { showToast('No se pudo cargar la orden'); return; }
   currentDetailOrder = order;
+  closeHistoryModal();
 
   const date = new Date(order.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   const statusOptions = STATUSES.map(s => `<option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>`).join('');
