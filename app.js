@@ -756,6 +756,7 @@ let catalogFilter = 'all';
 
 window.loadCatalog = async function loadCatalog() {
   const list = document.getElementById('catalog-list');
+  if (!list) return;
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
   try {
     const allProds = await supabase('products?select=*');
@@ -1227,11 +1228,11 @@ function showTab(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (name === 'admin' || name === 'customers') {
+  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery') {
     document.getElementById('logout-btn').style.display = 'inline-block';
     if (name === 'admin') loadOrders();
     if (name === 'customers') loadCustomers();
-    if (name === 'catalog') setTimeout(loadCatalog, 100);
+    if (name === 'catalog') loadCatalog();
     if (name === 'delivery') loadDeliveryOrders();
     if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
