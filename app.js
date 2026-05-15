@@ -1215,7 +1215,7 @@ async function updateCustomerLevel(id, level) {
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
   if ((name === 'admin' || name === 'customers' || name === 'catalog') && !isAdmin) { showLoginModal(); return; }
-  if (name === 'delivery' && !isDelivery) { showLoginModal(); return; }
+  if (name === 'delivery' && !isDelivery && !isAdmin) { showLoginModal(); return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
@@ -1226,6 +1226,7 @@ function showTab(name) {
     if (name === 'customers') loadCustomers();
     if (name === 'catalog') loadCatalog();
     if (name === 'delivery') loadDeliveryOrders();
+    if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
     document.getElementById('logout-btn').style.display = 'none';
   }
