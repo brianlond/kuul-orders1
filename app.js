@@ -429,53 +429,40 @@ async function init() {
 
 init();
 
-// ── Scanner ──────────────────────────────────────────────────
-let scannerStream = null;
-let scannerInterval = null;
-let scannedBarcode = null;
+// ── Scanner (ZXing — works on iPhone, Android, desktop) ─────
+let scannerActive = false;
+let codeReader = null;
 
 async function openScanner() {
   document.getElementById('scanner-modal').style.display = 'flex';
   document.getElementById('scanner-status').textContent = 'Iniciando cámara...';
-  try {
-    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const video = document.getElementById('scanner-video');
-    video.srcObject = scannerStream;
-    await video.play();
-    document.getElementById('scanner-status').textContent = 'Apunta al código de barras...';
-    startDecoding(video);
-  } catch(e) {
-    document.getElementById('scanner-status').textContent = '❌ No se pudo acceder a la cámara. Verifica los permisos.';
-  }
-}
+  scannerActive = true;
 
-function startDecoding(video) {
-  if (!window.BarcodeDetector) {
-    document.getElementById('scanner-status').textContent = 'Este navegador no soporta escaneo. Usa Chrome en Android o Safari en iPhone.';
-    return;
-  }
-  const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] });
-  scannerInterval = setInterval(async () => {
-    try {
-      const barcodes = await detector.detect(video);
-      if (barcodes.length > 0) {
-        const code = barcodes[0].rawValue;
-        clearInterval(scannerInterval);
+  try {
+    const ZXing = await import('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/esm/index.js');
+    codeReader = new ZXing.BrowserMultiFormatReader();
+    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+    const deviceId = devices.length > 1 ? devices[devices.length - 1].deviceId : (devices[0]?.deviceId);
+    document.getElementById('scanner-status').textContent = 'Apunta al código de barras...';
+    await codeReader.decodeFromVideoDevice(deviceId, 'scanner-video', (result, err) => {
+      if (result && scannerActive) {
+        scannerActive = false;
+        const code = result.getText();
         closeScanner();
         handleScannedCode(code);
       }
-    } catch(e) {}
-  }, 300);
+    });
+  } catch(e) {
+    document.getElementById('scanner-status').textContent = '❌ No se pudo acceder a la cámara. Verifica los permisos.';
+    console.error(e);
+  }
 }
 
 function closeScanner() {
-  if (scannerStream) {
-    scannerStream.getTracks().forEach(t => t.stop());
-    scannerStream = null;
-  }
-  if (scannerInterval) {
-    clearInterval(scannerInterval);
-    scannerInterval = null;
+  scannerActive = false;
+  if (codeReader) {
+    codeReader.reset();
+    codeReader = null;
   }
   document.getElementById('scanner-modal').style.display = 'none';
 }
@@ -492,15 +479,15 @@ function handleScannedCode(barcode) {
   document.getElementById('qty-modal-product').textContent = `${product.brand} ${code}${product.name} — $${parseFloat(product.price).toFixed(2)}`;
   document.getElementById('qty-modal-input').value = 1;
   document.getElementById('qty-modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('qty-modal-input').focus(), 100);
+  setTimeout(() => document.getElementById('qty-modal-input').select(), 150);
 }
 
 function confirmScanQty() {
   const qty = parseInt(document.getElementById('qty-modal-input').value) || 1;
+  const barcode = scannedBarcode;
   closeQtyModal();
-  if (scannedBarcode) {
-    addProductLine(scannedBarcode, qty);
-    scannedBarcode = null;
+  if (barcode) {
+    addProductLine(barcode, qty);
     showToast('✓ Producto agregado');
   }
 }
@@ -509,6 +496,8 @@ function closeQtyModal() {
   document.getElementById('qty-modal').style.display = 'none';
   scannedBarcode = null;
 }
+
+let scannedBarcode = null;
 
 document.addEventListener('keydown', e => {
   if (document.getElementById('qty-modal').style.display === 'flex' && e.key === 'Enter') confirmScanQty();
