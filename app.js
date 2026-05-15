@@ -30,7 +30,14 @@ async function supabase(path, options = {}) {
 }
 
 async function dbFetchProducts() {
-  return supabase('products?select=*&active=eq.true&order=brand.asc,name.asc');
+  const prods = await supabase('products?select=*&active=eq.true');
+  return prods.sort((a, b) => {
+    if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
+    const aCode = parseFloat(a.color_code) || 999;
+    const bCode = parseFloat(b.color_code) || 999;
+    if (aCode !== bCode) return aCode - bCode;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 async function dbInsertOrder(order) {
@@ -58,21 +65,10 @@ async function dbDeleteAll() {
 
 // ── Build product options ────────────────────────────────────
 function buildOptions(selected) {
-  let lastBrand = null;
-  let html = '';
-  PRODUCTS.forEach(p => {
-    if (p.brand !== lastBrand) {
-      if (lastBrand !== null) html += '</optgroup>';
-      html += `<optgroup label="${p.brand}">`;
-      lastBrand = p.brand;
-    }
+  return PRODUCTS.map(p => {
     const code = p.color_code ? `[${p.color_code}] ` : '';
-    html += `<option value="${p.barcode}" ${p.barcode === selected ? 'selected' : ''} data-price="${p.price}">
-      ${code}${p.name} — $${parseFloat(p.price).toFixed(2)}
-    </option>`;
-  });
-  if (lastBrand !== null) html += '</optgroup>';
-  return html;
+    return `<option value="${p.barcode}" ${p.barcode === selected ? 'selected' : ''} data-price="${p.price}">${p.brand} ${code}${p.name} — $${parseFloat(p.price).toFixed(2)}</option>`;
+  }).join('');
 }
 
 // ── Add a product line ───────────────────────────────────────
