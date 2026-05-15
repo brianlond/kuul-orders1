@@ -151,6 +151,79 @@
     </div>
   </div>
 
+
+  <!-- EDIT MODAL -->
+  <div class="modal-overlay" id="edit-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+    <div class="modal" style="max-width:560px; width:100%; margin:auto;">
+      <div class="modal-title">Editar orden</div>
+
+      <div class="section-label">Datos del cliente</div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Nombre del cliente</label>
+          <input type="text" id="edit-client-name">
+        </div>
+        <div class="field-group">
+          <label>Nombre del negocio</label>
+          <input type="text" id="edit-business-name">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Teléfono</label>
+          <input type="tel" id="edit-phone">
+        </div>
+        <div class="field-group">
+          <label>Seller Permit # <span class="optional">(opcional)</span></label>
+          <input type="text" id="edit-permit" oninput="onEditPermitChange()">
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Dirección</label>
+        <input type="text" id="edit-address">
+      </div>
+      <div class="field-group">
+        <label>Correo electrónico <span class="optional">(opcional)</span></label>
+        <input type="email" id="edit-email">
+      </div>
+
+      <div class="section-label">Productos</div>
+      <div id="edit-product-lines"></div>
+      <button class="add-product-btn" onclick="addEditLine()">+ Agregar producto</button>
+
+      <div class="section-label">Envío y taxes</div>
+      <div class="toggle-row">
+        <input type="checkbox" id="edit-shipping-toggle" onchange="recalcEditTotal()">
+        <label for="edit-shipping-toggle">Cobrar envío <strong>$9.99</strong></label>
+      </div>
+      <div class="toggle-row" id="edit-tax-toggle-row">
+        <input type="checkbox" id="edit-tax-toggle" onchange="recalcEditTotal()">
+        <label for="edit-tax-toggle">Cobrar tax</label>
+      </div>
+      <div id="edit-tax-rate-row" style="display:none; margin-left:28px; margin-bottom:12px;">
+        <div class="tax-input-row">
+          <input type="number" id="edit-tax-rate" value="10.25" min="0" max="30" step="0.01" oninput="recalcEditTotal()" style="width:80px;">
+          <span class="tax-pct-label">% sobre subtotal</span>
+        </div>
+      </div>
+
+      <div class="summary-table">
+        <div class="summary-row"><span>Subtotal</span><span id="edit-sum-products">$0.00</span></div>
+        <div class="summary-row" id="edit-sum-shipping-row" style="display:none;"><span>Envío</span><span>$9.99</span></div>
+        <div class="summary-row" id="edit-sum-tax-row" style="display:none;"><span id="edit-sum-tax-label">Tax</span><span id="edit-sum-tax-amount">$0.00</span></div>
+        <div class="summary-row total"><span>Total</span><span id="edit-order-total">$0.00</span></div>
+      </div>
+
+      <div class="field-group" style="margin-top:1rem;">
+        <label>Notas</label>
+        <textarea id="edit-notes" rows="2"></textarea>
+      </div>
+
+      <button class="submit-btn" id="edit-save-btn" onclick="saveEditOrder()">Guardar cambios →</button>
+      <button class="cancel-btn" onclick="closeEditModal()">Cancelar</button>
+    </div>
+  </div>
+
   <!-- LOGIN MODAL -->
   <div class="modal-overlay" id="login-modal" style="display:none;">
     <div class="modal">
