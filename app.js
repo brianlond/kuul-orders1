@@ -10,67 +10,69 @@ const ADMIN_PASS = 'snaPPletapaTio1?';
 const SHIPPING = 9.99;
 const STATUSES = ['Nueva', 'En proceso', 'Lista', 'Entregada'];
 
-// ── Session ──────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────────
 let isAdmin = false;
+let PRODUCTS = [];
 
 // ── Supabase helpers ─────────────────────────────────────────
-async function dbInsert(order) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
-    method: 'POST',
+async function supabase(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
     headers: {
       'apikey': SUPABASE_KEY,
       'Authorization': `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
-    },
-    body: JSON.stringify(order)
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function dbFetch() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?select=*&order=created_at.desc`, {
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`
+      ...(options.headers || {})
     }
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return res.status === 204 ? null : res.json();
+}
+
+async function dbFetchProducts() {
+  return supabase('products?select=*&active=eq.true&order=brand.asc,name.asc');
+}
+
+async function dbInsertOrder(order) {
+  return supabase('orders', {
+    method: 'POST',
+    headers: { 'Prefer': 'return=representation' },
+    body: JSON.stringify(order)
+  });
+}
+
+async function dbFetchOrders() {
+  return supabase('orders?select=*&order=created_at.desc');
 }
 
 async function dbUpdateStatus(id, status) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
+  return supabase(`orders?id=eq.${id}`, {
     method: 'PATCH',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json'
-    },
     body: JSON.stringify({ status })
   });
-  if (!res.ok) throw new Error(await res.text());
 }
 
-async function dbDelete() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=gte.0`, {
-    method: 'DELETE',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`
-    }
-  });
-  if (!res.ok) throw new Error(await res.text());
+async function dbDeleteAll() {
+  return supabase('orders?id=gte.0', { method: 'DELETE' });
 }
 
 // ── Build product options ────────────────────────────────────
 function buildOptions(selected) {
-  return PRODUCTS.map(p =>
-    `<option value="${p.barcode}" ${p.barcode === selected ? 'selected' : ''} data-price="${p.price}">
-      [${p.code}] ${p.name} — $${p.price.toFixed(2)}
-    </option>`
-  ).join('');
+  let lastBrand = null;
+  let html = '';
+  PRODUCTS.forEach(p => {
+    if (p.brand !== lastBrand) {
+      if (lastBrand !== null) html += '</optgroup>';
+      html += `<optgroup label="${p.brand}">`;
+      lastBrand = p.brand;
+    }
+    const code = p.color_code ? `[${p.color_code}] ` : '';
+    html += `<option value="${p.barcode}" ${p.barcode === selected ? 'selected' : ''} data-price="${p.price}">
+      ${code}${p.name} — $${parseFloat(p.price).toFixed(2)}
+    </option>`;
+  });
+  if (lastBrand !== null) html += '</optgroup>';
+  return html;
 }
 
 // ── Add a product line ───────────────────────────────────────
@@ -155,11 +157,6 @@ function showToast(msg, dur = 2800) {
   setTimeout(() => t.classList.remove('show'), dur);
 }
 
-function setLoading(btn, loading) {
-  btn.disabled = loading;
-  btn.textContent = loading ? 'Enviando...' : 'Enviar orden →';
-}
-
 // ── Admin login ──────────────────────────────────────────────
 function showLoginModal() {
   document.getElementById('login-modal').style.display = 'flex';
@@ -190,7 +187,6 @@ function doLogout() {
   showTab('vendedor');
 }
 
-// handle enter key in login
 document.addEventListener('keydown', e => {
   if (document.getElementById('login-modal').style.display === 'flex' && e.key === 'Enter') doLogin();
 });
@@ -231,8 +227,17 @@ async function submitOrder() {
       const product = PRODUCTS.find(p => p.barcode === sel.value);
       const q = parseInt(qty.value) || 0;
       if (product && q > 0) {
-        lines.push({ barcode: product.barcode, code: product.code, name: product.name, price: product.price, qty: q, subtotal: product.price * q });
-        subtotal += product.price * q;
+        const lineSubtotal = parseFloat(product.price) * q;
+        lines.push({
+          barcode: product.barcode,
+          brand: product.brand,
+          code: product.color_code || '—',
+          name: product.name,
+          price: parseFloat(product.price),
+          qty: q,
+          subtotal: lineSubtotal
+        });
+        subtotal += lineSubtotal;
       }
     }
   });
@@ -247,10 +252,11 @@ async function submitOrder() {
   const total       = subtotal + shippingAmt + taxAmt;
 
   const btn = document.querySelector('.submit-btn');
-  setLoading(btn, true);
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
 
   try {
-    await dbInsert({
+    await dbInsertOrder({
       seller, client, business, phone, permit, address, email, notes,
       lines, subtotal,
       shipping: hasShipping ? shippingAmt : null,
@@ -264,7 +270,8 @@ async function submitOrder() {
     showToast('❌ Error al enviar, intenta de nuevo');
     console.error(e);
   } finally {
-    setLoading(btn, false);
+    btn.disabled = false;
+    btn.textContent = 'Enviar orden →';
   }
 }
 
@@ -283,12 +290,12 @@ function resetForm() {
   addProductLine();
 }
 
-// ── Status badge color ───────────────────────────────────────
+// ── Status badge class ───────────────────────────────────────
 function statusClass(status) {
-  if (status === 'Nueva') return 'badge-nueva';
+  if (status === 'Nueva')      return 'badge-nueva';
   if (status === 'En proceso') return 'badge-proceso';
-  if (status === 'Lista') return 'badge-lista';
-  if (status === 'Entregada') return 'badge-entregada';
+  if (status === 'Lista')      return 'badge-lista';
+  if (status === 'Entregada')  return 'badge-entregada';
   return '';
 }
 
@@ -315,8 +322,10 @@ function renderOrders(orders) {
     badge.style.display = 'none';
     return;
   }
-  badge.style.display = '';
-  badge.textContent = orders.filter(o => o.status === 'Nueva').length || orders.length;
+
+  const nuevas = orders.filter(o => o.status === 'Nueva').length;
+  badge.style.display = nuevas > 0 ? '' : 'none';
+  badge.textContent = nuevas;
 
   list.innerHTML = orders.map(o => {
     const date = new Date(o.created_at).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -344,7 +353,7 @@ function renderOrders(orders) {
       <div class="order-products">
         ${o.lines.map(l => `
           <div class="order-product-line">
-            <span>[${l.code}] ${l.name} × ${l.qty}</span>
+            <span>${l.brand} [${l.code}] ${l.name} × ${l.qty}</span>
             <span>$${l.subtotal.toFixed(2)}</span>
           </div>
         `).join('')}
@@ -364,7 +373,7 @@ async function loadOrders() {
   const list = document.getElementById('orders-list');
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando órdenes...</div>`;
   try {
-    const orders = await dbFetch();
+    const orders = await dbFetchOrders();
     renderOrders(orders);
   } catch (e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando órdenes</div>`;
@@ -376,7 +385,7 @@ async function loadOrders() {
 async function clearOrders() {
   if (!confirm('¿Eliminar todas las órdenes? Esta acción no se puede deshacer.')) return;
   try {
-    await dbDelete();
+    await dbDeleteAll();
     showToast('✓ Órdenes eliminadas');
     await loadOrders();
   } catch (e) {
@@ -387,9 +396,7 @@ async function clearOrders() {
 
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
-  if (name === 'admin') {
-    if (!isAdmin) { showLoginModal(); return; }
-  }
+  if (name === 'admin' && !isAdmin) { showLoginModal(); return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
@@ -402,6 +409,22 @@ function showTab(name) {
   }
 }
 
-// ── Init ─────────────────────────────────────────────────────
-addProductLine();
-onPermitChange();
+// ── Init — load products from Supabase then boot the form ────
+async function init() {
+  const productLines = document.getElementById('product-lines');
+  productLines.innerHTML = `<div style="font-size:13px; color:var(--text-muted); padding:8px 0;">Cargando productos...</div>`;
+
+  try {
+    PRODUCTS = await dbFetchProducts();
+  } catch(e) {
+    productLines.innerHTML = `<div style="font-size:13px; color:var(--danger);">Error cargando productos</div>`;
+    console.error(e);
+    return;
+  }
+
+  productLines.innerHTML = '';
+  addProductLine();
+  onPermitChange();
+}
+
+init();
