@@ -35,6 +35,9 @@
       <button class="tab" id="tab-inventory-btn" onclick="showTab('inventory')">
         📊 Inventario
       </button>
+      <button class="tab" id="tab-pos-btn" onclick="showTab('pos')">
+        🏪 Caja
+      </button>
     </div>
 
     <!-- VENDEDOR -->
@@ -246,6 +249,64 @@
         <div class="empty-state"><div class="empty-icon">📊</div>Cargando inventario...</div>
       </div>
     </div>
+
+    <!-- POS -->
+    <div id="tab-pos" class="section">
+      <div class="pos-wrap">
+        <div class="pos-left">
+          <div class="pos-search-bar">
+            <input type="text" id="pos-search" placeholder="Buscar producto o escanear código..." oninput="posSearch(this.value)" onkeydown="posScanBarcode(event)" autocomplete="off">
+            <div id="pos-level-wrap">
+              <select id="pos-level" onchange="setPosLevel(this.value)" style="width:auto; font-size:13px;">
+                <option value="Retail">Retail</option>
+                <option value="Salon" selected>Salon</option>
+                <option value="Wholesale">Wholesale</option>
+              </select>
+            </div>
+          </div>
+          <div class="pos-brand-chips" id="pos-brand-chips"></div>
+          <div class="pos-category-chips" id="pos-category-chips" style="display:none;"></div>
+          <div class="pos-products" id="pos-products">
+            <div class="empty-state" style="padding:2rem;">Selecciona una marca para ver productos</div>
+          </div>
+        </div>
+        <div class="pos-right">
+          <div class="pos-cart-header">
+            <span>Carrito</span>
+            <span id="pos-cart-count" style="color:var(--text-muted); font-weight:400;">vacío</span>
+          </div>
+          <div class="pos-cart-items" id="pos-cart-items">
+            <div class="pos-empty-cart">
+              <i class="ti ti-shopping-cart" style="font-size:32px;" aria-hidden="true"></i>
+              <span>Toca un producto para agregar</span>
+            </div>
+          </div>
+          <div class="pos-cart-footer">
+            <div id="pos-client-row" style="margin-bottom:10px;">
+              <div style="position:relative;">
+                <input type="text" id="pos-client-search" placeholder="Buscar cliente (opcional)..." oninput="posSearchClient(this.value)" autocomplete="off" style="font-size:13px;">
+                <div id="pos-client-suggestions" class="suggestions-dropdown" style="display:none;"></div>
+              </div>
+              <div id="pos-client-info" style="font-size:12px; color:var(--text-muted); margin-top:4px; display:none;"></div>
+            </div>
+            <div class="pos-totals">
+              <div class="pos-total-row"><span>Subtotal</span><span id="pos-subtotal">$0.00</span></div>
+              <div class="pos-total-row" id="pos-tax-row" style="display:none;"><span id="pos-tax-label">Tax</span><span id="pos-tax-amt">$0.00</span></div>
+              <div class="pos-total-big"><span>Total</span><span id="pos-total">$0.00</span></div>
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+                <input type="checkbox" id="pos-tax-toggle" onchange="posRecalc()" style="width:16px; height:16px; accent-color:var(--text);">
+                Tax
+              </label>
+              <input type="number" id="pos-tax-rate" value="10.25" min="0" max="30" step="0.01" oninput="posRecalc()" style="width:80px; font-size:13px; padding:5px 8px;">
+              <span style="font-size:13px; color:var(--text-muted); align-self:center;">%</span>
+            </div>
+            <button class="cobrar-btn" id="pos-cobrar-btn" onclick="posCobrar()" disabled>Cobrar $0.00</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 
 
@@ -362,6 +423,26 @@
   </div>
 
 
+
+
+  <!-- COBRAR MODAL -->
+  <div class="modal-overlay" id="cobrar-modal" style="display:none;">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-title">Confirmar venta</div>
+      <div id="cobrar-summary" style="font-size:14px; color:var(--text-muted); margin-bottom:16px;"></div>
+      <div class="field-group">
+        <label>Forma de pago</label>
+        <select id="cobrar-payment">
+          <option value="Efectivo">Efectivo</option>
+          <option value="Tarjeta">Tarjeta</option>
+          <option value="Transferencia">Transferencia</option>
+          <option value="Otro">Otro</option>
+        </select>
+      </div>
+      <button class="submit-btn" id="cobrar-confirm-btn" onclick="confirmCobrar()">Confirmar y cobrar →</button>
+      <button class="cancel-btn" onclick="closeCobrarModal()">Cancelar</button>
+    </div>
+  </div>
 
   <!-- PICKING MODAL -->
   <div class="modal-overlay" id="picking-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">

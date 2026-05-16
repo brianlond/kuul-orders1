@@ -964,6 +964,327 @@ async function deleteProduct(id, name) {
 
 
 
+
+// ── POS ───────────────────────────────────────────────────────
+let posCart = [];
+let posLevel = 'Salon';
+let posSelectedBrand = null;
+let posSelectedCategory = null;
+let posFilteredProducts = [];
+let posClient = null;
+
+function initPOS() {
+  posCart = [];
+  posClient = null;
+  posLevel = 'Salon';
+  document.getElementById('pos-level').value = 'Salon';
+  document.getElementById('pos-client-search').value = '';
+  document.getElementById('pos-client-info').style.display = 'none';
+  renderPOSBrands();
+  renderPOSCart();
+}
+
+function renderPOSBrands() {
+  const brands = [...new Set(PRODUCTS.map(p => p.brand))].sort();
+  const container = document.getElementById('pos-brand-chips');
+  container.innerHTML = brands.map(b => `
+    <button class="filter-chip ${posSelectedBrand === b ? 'active' : ''}" onclick="selectPOSBrand('${b}')">${b}</button>
+  `).join('');
+}
+
+function selectPOSBrand(brand) {
+  posSelectedBrand = brand;
+  posSelectedCategory = null;
+  renderPOSBrands();
+
+  const categories = [...new Set(PRODUCTS.filter(p => p.brand === brand).map(p => p.category))].sort();
+  const container = document.getElementById('pos-category-chips');
+  container.innerHTML = categories.map(c => `
+    <button class="filter-chip ${posSelectedCategory === c ? 'active' : ''}" onclick="selectPOSCategory('${c}')">${c}</button>
+  `).join('');
+  container.style.display = 'flex';
+
+  if (categories.length === 1) selectPOSCategory(categories[0]);
+}
+
+function selectPOSCategory(category) {
+  posSelectedCategory = category;
+  document.querySelectorAll('#pos-category-chips .filter-chip').forEach(b => b.classList.remove('active'));
+  const btn = [...document.querySelectorAll('#pos-category-chips .filter-chip')].find(b => b.textContent === category);
+  if (btn) btn.classList.add('active');
+
+  posFilteredProducts = PRODUCTS.filter(p => p.brand === posSelectedBrand && p.category === category);
+  renderPOSProducts(posFilteredProducts);
+}
+
+function renderPOSProducts(products) {
+  const container = document.getElementById('pos-products');
+  if (!products.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:2rem;">No hay productos</div>';
+    return;
+  }
+  container.innerHTML = products.map(p => {
+    const price = getPrice(p);
+    const code = p.color_code || '—';
+    const inCart = posCart.find(c => c.barcode === p.barcode);
+    return `
+    <div class="pos-product-card ${inCart ? 'in-cart' : ''}" onclick="posAddProduct('${p.barcode}')">
+      ${inCart ? `<div class="pos-in-cart-badge">${inCart.qty}</div>` : ''}
+      <div class="pos-product-code">[${code}]</div>
+      <div class="pos-product-name">${p.name}</div>
+      <div class="pos-product-price">$${price.toFixed(2)}</div>
+    </div>
+  `}).join('');
+}
+
+function posAddProduct(barcode) {
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  if (!product) return;
+  const existing = posCart.find(c => c.barcode === barcode);
+  if (existing) {
+    existing.qty++;
+    existing.subtotal = getPrice(product) * existing.qty;
+  } else {
+    const price = getPrice(product);
+    posCart.push({ barcode: product.barcode, brand: product.brand, code: product.color_code || '—', name: product.name, price, qty: 1, subtotal: price });
+  }
+  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
+function posChangeQty(barcode, delta) {
+  const item = posCart.find(c => c.barcode === barcode);
+  if (!item) return;
+  item.qty = Math.max(0, item.qty + delta);
+  if (item.qty === 0) {
+    posCart = posCart.filter(c => c.barcode !== barcode);
+  } else {
+    const product = PRODUCTS.find(p => p.barcode === barcode);
+    item.price = product ? getPrice(product) : item.price;
+    item.subtotal = item.price * item.qty;
+  }
+  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
+function posRemoveItem(barcode) {
+  posCart = posCart.filter(c => c.barcode !== barcode);
+  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
+function renderPOSCart() {
+  const container = document.getElementById('pos-cart-items');
+  const countEl = document.getElementById('pos-cart-count');
+
+  if (posCart.length === 0) {
+    container.innerHTML = `<div class="pos-empty-cart"><i class="ti ti-shopping-cart" style="font-size:32px;" aria-hidden="true"></i><span>Toca un producto para agregar</span></div>`;
+    countEl.textContent = 'vacío';
+  } else {
+    countEl.textContent = posCart.length + ' producto' + (posCart.length !== 1 ? 's' : '');
+    container.innerHTML = posCart.map(item => `
+      <div class="pos-cart-item">
+        <div class="pos-cart-info">
+          <div class="pos-cart-name">${item.brand} [${item.code}] ${item.name}</div>
+          <div class="pos-cart-price">$${item.price.toFixed(2)} c/u</div>
+        </div>
+        <div class="pos-cart-qty">
+          <button class="qty-btn" onclick="posChangeQty('${item.barcode}', -1)">−</button>
+          <span class="qty-num">${item.qty}</span>
+          <button class="qty-btn" onclick="posChangeQty('${item.barcode}', 1)">+</button>
+        </div>
+        <span class="pos-cart-total">$${item.subtotal.toFixed(2)}</span>
+        <span class="pos-cart-remove" onclick="posRemoveItem('${item.barcode}')">×</span>
+      </div>
+    `).join('');
+  }
+  posRecalc();
+}
+
+function posRecalc() {
+  const subtotal = posCart.reduce((sum, i) => sum + i.subtotal, 0);
+  const hasTax = document.getElementById('pos-tax-toggle').checked;
+  const taxRate = parseFloat(document.getElementById('pos-tax-rate').value) || 0;
+  const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
+  const total = subtotal + taxAmt;
+
+  document.getElementById('pos-subtotal').textContent = '$' + subtotal.toFixed(2);
+  document.getElementById('pos-tax-row').style.display = hasTax ? 'flex' : 'none';
+  document.getElementById('pos-tax-label').textContent = `Tax (${taxRate.toFixed(2)}%)`;
+  document.getElementById('pos-tax-amt').textContent = '$' + taxAmt.toFixed(2);
+  document.getElementById('pos-total').textContent = '$' + total.toFixed(2);
+
+  const btn = document.getElementById('pos-cobrar-btn');
+  btn.textContent = `Cobrar $${total.toFixed(2)}`;
+  btn.disabled = posCart.length === 0;
+}
+
+function setPosLevel(level) {
+  posLevel = level;
+  currentLevel = level;
+  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
+function posSearch(query) {
+  if (!query || query.length < 2) {
+    if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+    return;
+  }
+  const q = query.toLowerCase();
+  const results = PRODUCTS.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    (p.color_code && p.color_code.toLowerCase().includes(q)) ||
+    p.brand.toLowerCase().includes(q)
+  );
+  renderPOSProducts(results);
+}
+
+function posScanBarcode(e) {
+  if (e.key !== 'Enter') return;
+  const barcode = document.getElementById('pos-search').value.trim();
+  document.getElementById('pos-search').value = '';
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  if (product) {
+    posAddProduct(barcode);
+    showToast(`✓ ${product.name} agregado`);
+  } else {
+    showToast('⚠️ Producto no encontrado');
+  }
+}
+
+function posSearchClient(query) {
+  const box = document.getElementById('pos-client-suggestions');
+  if (!query || query.length < 2) { box.style.display = 'none'; return; }
+  const q = query.toLowerCase();
+  const matches = allCustomers.filter(c =>
+    c.name.toLowerCase().includes(q) || c.business.toLowerCase().includes(q) || c.phone.includes(q)
+  ).slice(0, 5);
+  if (!matches.length) { box.style.display = 'none'; return; }
+  box.innerHTML = matches.map(c => `
+    <div class="suggestion-item" onclick="selectPOSClient(${c.id})">
+      <div class="suggestion-name">${c.name}</div>
+      <div class="suggestion-detail">${c.business} · ${c.phone}</div>
+    </div>
+  `).join('');
+  box.style.display = 'block';
+}
+
+function selectPOSClient(id) {
+  posClient = allCustomers.find(c => c.id === id);
+  if (!posClient) return;
+  document.getElementById('pos-client-search').value = `${posClient.name} — ${posClient.business}`;
+  document.getElementById('pos-client-suggestions').style.display = 'none';
+  document.getElementById('pos-client-info').style.display = 'block';
+  document.getElementById('pos-client-info').textContent = `${posClient.phone} · ${posClient.address || ''}`;
+  // Set level from client profile
+  posLevel = posClient.level || 'Salon';
+  document.getElementById('pos-level').value = posLevel;
+  currentLevel = posLevel;
+  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
+function posCobrar() {
+  if (posCart.length === 0) return;
+  const subtotal = posCart.reduce((sum, i) => sum + i.subtotal, 0);
+  const hasTax = document.getElementById('pos-tax-toggle').checked;
+  const taxRate = parseFloat(document.getElementById('pos-tax-rate').value) || 0;
+  const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
+  const total = subtotal + taxAmt;
+
+  const clientName = posClient ? posClient.name : 'Cliente general';
+  document.getElementById('cobrar-summary').innerHTML = `
+    <strong>${clientName}</strong><br>
+    ${posCart.length} producto${posCart.length !== 1 ? 's' : ''} · Total: <strong>$${total.toFixed(2)}</strong>
+  `;
+  document.getElementById('cobrar-modal').style.display = 'flex';
+}
+
+function closeCobrarModal() {
+  document.getElementById('cobrar-modal').style.display = 'none';
+}
+
+async function confirmCobrar() {
+  const payment = document.getElementById('cobrar-payment').value;
+  const subtotal = posCart.reduce((sum, i) => sum + i.subtotal, 0);
+  const hasTax = document.getElementById('pos-tax-toggle').checked;
+  const taxRate = parseFloat(document.getElementById('pos-tax-rate').value) || 0;
+  const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
+  const total = subtotal + taxAmt;
+
+  const btn = document.getElementById('cobrar-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Procesando...';
+
+  try {
+    const orderData = {
+      seller: 'Caja',
+      client: posClient ? posClient.name : 'Cliente general',
+      business: posClient ? posClient.business : 'Venta en bodega',
+      phone: posClient ? posClient.phone : '—',
+      permit: posClient ? (posClient.permit || '') : '',
+      address: posClient ? (posClient.address || '') : 'Bodega',
+      email: posClient ? (posClient.email || '') : '',
+      notes: `Venta en caja · Pago: ${payment}`,
+      lines: posCart,
+      subtotal,
+      shipping: null,
+      tax_rate: hasTax ? taxRate : null,
+      tax_amount: hasTax ? taxAmt : null,
+      total,
+      status: 'Entregada'
+    };
+
+    const inserted = await dbInsertOrder(orderData);
+
+    // Deduct inventory
+    for (const item of posCart) {
+      try {
+        const prod = PRODUCTS.find(p => p.barcode === item.barcode);
+        if (prod && prod.id) {
+          const current = await supabase(`products?id=eq.${prod.id}&select=id,stock`);
+          if (current && current[0]) {
+            const newStock = Math.max(0, (current[0].stock || 0) - item.qty);
+            await supabase(`products?id=eq.${prod.id}`, { method: 'PATCH', body: JSON.stringify({ stock: newStock }) });
+            await supabase('inventory_movements', {
+              method: 'POST',
+              headers: { 'Prefer': 'return=representation' },
+              body: JSON.stringify({ product_id: prod.id, type: 'out', quantity: item.qty, order_id: inserted[0]?.id, notes: `Venta en caja` })
+            });
+          }
+        }
+      } catch(e) { console.error('Stock error:', e); }
+    }
+
+    // Update customer if selected
+    if (posClient) {
+      await dbUpsertCustomer({ client: posClient.name, business: posClient.business, phone: posClient.phone, address: posClient.address, permit: posClient.permit, email: posClient.email });
+    }
+
+    closeCobrarModal();
+    showToast(`✓ Venta registrada — $${total.toFixed(2)}`);
+
+    // Print receipt
+    if (inserted && inserted[0]) printOrder(inserted[0].id);
+
+    // Reset POS
+    posCart = [];
+    posClient = null;
+    document.getElementById('pos-client-search').value = '';
+    document.getElementById('pos-client-info').style.display = 'none';
+    if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+    renderPOSCart();
+
+  } catch(e) {
+    showToast('❌ Error al procesar venta');
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar y cobrar →';
+  }
+}
+
 // ── Picking ───────────────────────────────────────────────────
 let pickingOrder = null;
 
@@ -1586,12 +1907,13 @@ function showTab(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery' || name === 'inventory') {
+  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery' || name === 'inventory' || name === 'pos') {
     document.getElementById('logout-btn').style.display = 'inline-block';
     if (name === 'admin') loadOrders();
     if (name === 'customers') loadCustomers();
     if (name === 'catalog') loadCatalog();
     if (name === 'inventory') loadInventory();
+    if (name === 'pos') initPOS();
     if (name === 'delivery') loadDeliveryOrders();
     if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
