@@ -413,19 +413,6 @@ async function submitOrder() {
       tax_amount: hasTax ? taxAmt : null,
       total, status: 'Nueva'
     });
-    // Deduct stock for each product
-    if (insertedOrder && insertedOrder[0]) {
-      for (const line of lines) {
-        try {
-          const prod = await supabase(`products?id=eq.${PRODUCTS.find(p=>p.barcode===line.barcode)?.id || 0}&select=id,stock`);
-          if (prod && prod[0]) {
-            const newStock = Math.max(0, (prod[0].stock || 0) - line.qty);
-            await supabase(`products?id=eq.${prod[0].id}`, { method: 'PATCH', body: JSON.stringify({ stock: newStock }) });
-            await supabase('inventory_movements', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify({ product_id: prod[0].id, type: 'out', quantity: line.qty, order_id: insertedOrder[0].id, notes: `Orden #${insertedOrder[0].id}` }) });
-          }
-        } catch(e) { console.error('Stock deduction error:', e); }
-      }
-    }
     resetForm();
     showToast('✓ Orden enviada correctamente');
   } catch (e) {
@@ -511,6 +498,7 @@ function renderOrders(orders) {
         <div style="display:flex; gap:8px; align-items:center;">
         <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Imprimir orden">🖨️</button>
         <button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Editar orden">✏️</button>
+        ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;" title="Hacer picking">📦 Picking</button>` : ''}
         <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)">
           ${statusOptions}
         </select>
@@ -974,6 +962,178 @@ async function deleteProduct(id, name) {
   }
 }
 
+
+
+// ── Picking ───────────────────────────────────────────────────
+let pickingOrder = null;
+
+async function openPicking(id) {
+  const order = allOrders.find(o => o.id === id) || window._orders?.find(o => o.id === id);
+  if (!order) {
+    try {
+      const res = await supabase(`orders?id=eq.${id}&select=*`);
+      pickingOrder = res && res[0];
+    } catch(e) { showToast('❌ Error cargando orden'); return; }
+  } else {
+    pickingOrder = order;
+  }
+  if (!pickingOrder) return;
+
+  // Init picking state from saved or fresh
+  const savedPicking = pickingOrder.picking || {};
+  
+  document.getElementById('picking-order-title').textContent = `Picking — ${pickingOrder.client}`;
+  document.getElementById('picking-business').textContent = pickingOrder.business;
+  
+  const linesHTML = pickingOrder.lines.map((l, idx) => {
+    const checked = savedPicking[idx] || false;
+    return `
+    <div class="picking-item ${checked ? 'picked' : ''}" id="pick-item-${idx}">
+      <div class="picking-checkbox ${checked ? 'checked' : ''}">
+        ${checked ? '✓' : ''}
+      </div>
+      <div class="picking-info">
+        <div class="picking-product">${l.brand} [${l.code}] ${l.name}</div>
+        <div class="picking-qty">Cantidad: <strong>${l.qty}</strong> &nbsp;·&nbsp; <span style="font-family:monospace; font-size:11px; color:var(--text-faint);">${l.barcode}</span></div>
+      </div>
+    </div>
+  `}).join('');
+
+  document.getElementById('picking-lines').innerHTML = linesHTML;
+  updatePickingProgress();
+  document.getElementById('picking-modal').style.display = 'flex';
+  // Focus scan input
+  setTimeout(() => document.getElementById('picking-scan-input').focus(), 200);
+}
+
+function handlePickingScan(e) {
+  if (e.key !== 'Enter') return;
+  const input = document.getElementById('picking-scan-input');
+  const barcode = input.value.trim();
+  input.value = '';
+  if (!barcode || !pickingOrder) return;
+
+  // Find matching product in order
+  const idx = pickingOrder.lines.findIndex(l => l.barcode === barcode);
+  if (idx === -1) {
+    showPickingScanFeedback('❌ Producto no encontrado en esta orden', 'error');
+    return;
+  }
+
+  const item = document.getElementById(`pick-item-${idx}`);
+  if (item.classList.contains('picked')) {
+    showPickingScanFeedback('⚠️ Este producto ya fue escaneado', 'warning');
+    return;
+  }
+
+  // Mark as picked
+  item.classList.add('picked');
+  const checkbox = item.querySelector('.picking-checkbox');
+  checkbox.classList.add('checked');
+  checkbox.textContent = '✓';
+  item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  showPickingScanFeedback(`✓ ${pickingOrder.lines[idx].name}`, 'success');
+  updatePickingProgress();
+}
+
+function showPickingScanFeedback(msg, type) {
+  const el = document.getElementById('picking-scan-feedback');
+  const colors = { success: '#16a34a', error: '#dc2626', warning: '#d97706' };
+  el.textContent = msg;
+  el.style.color = colors[type] || '#16a34a';
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, 2000);
+}
+
+function togglePick(idx) {
+  // Manual override — admin can tap to toggle
+  const item = document.getElementById(`pick-item-${idx}`);
+  const checkbox = item.querySelector('.picking-checkbox');
+  const isPicked = item.classList.contains('picked');
+  if (isPicked) {
+    item.classList.remove('picked');
+    checkbox.classList.remove('checked');
+    checkbox.textContent = '';
+  } else {
+    item.classList.add('picked');
+    checkbox.classList.add('checked');
+    checkbox.textContent = '✓';
+  }
+  updatePickingProgress();
+}
+
+function updatePickingProgress() {
+  const total = pickingOrder.lines.length;
+  const picked = document.querySelectorAll('.picking-item.picked').length;
+  document.getElementById('picking-progress').textContent = `${picked} / ${total} productos`;
+  document.getElementById('picking-confirm-btn').disabled = picked < total;
+  document.getElementById('picking-confirm-btn').style.opacity = picked < total ? '0.5' : '1';
+}
+
+async function savePicking() {
+  // Save partial progress
+  const picking = {};
+  pickingOrder.lines.forEach((l, idx) => {
+    picking[idx] = document.getElementById(`pick-item-${idx}`).classList.contains('picked');
+  });
+  try {
+    await supabase(`orders?id=eq.${pickingOrder.id}`, { method: 'PATCH', body: JSON.stringify({ picking }) });
+    showToast('✓ Progreso guardado');
+  } catch(e) { showToast('❌ Error al guardar'); }
+}
+
+async function confirmPicking() {
+  if (!pickingOrder) return;
+  if (!confirm('¿Confirmar picking completo? Esto descontará el inventario y marcará la orden como Lista.')) return;
+
+  const btn = document.getElementById('picking-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Procesando...';
+
+  try {
+    // Deduct stock for each product
+    for (const line of pickingOrder.lines) {
+      try {
+        const prod = PRODUCTS.find(p => p.barcode === line.barcode);
+        if (prod && prod.id) {
+          const current = await supabase(`products?id=eq.${prod.id}&select=id,stock`);
+          if (current && current[0]) {
+            const newStock = Math.max(0, (current[0].stock || 0) - line.qty);
+            await supabase(`products?id=eq.${prod.id}`, { method: 'PATCH', body: JSON.stringify({ stock: newStock }) });
+            await supabase('inventory_movements', {
+              method: 'POST',
+              headers: { 'Prefer': 'return=representation' },
+              body: JSON.stringify({ product_id: prod.id, type: 'out', quantity: line.qty, order_id: pickingOrder.id, notes: `Picking orden #${pickingOrder.id}` })
+            });
+          }
+        }
+      } catch(e) { console.error('Stock error:', e); }
+    }
+
+    // Mark picking complete and update status
+    const picking = {};
+    pickingOrder.lines.forEach((l, idx) => { picking[idx] = true; });
+    await supabase(`orders?id=eq.${pickingOrder.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'Lista', picking })
+    });
+
+    closePicking();
+    showToast('✓ Picking completo — orden marcada como Lista');
+    await loadOrders();
+  } catch(e) {
+    showToast('❌ Error al confirmar picking');
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✅ Confirmar picking completo';
+  }
+}
+
+function closePicking() {
+  document.getElementById('picking-modal').style.display = 'none';
+  pickingOrder = null;
+}
 
 // ── Inventory ─────────────────────────────────────────────────
 async function loadInventory() {

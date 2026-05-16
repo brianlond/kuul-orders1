@@ -362,6 +362,37 @@
   </div>
 
 
+
+  <!-- PICKING MODAL -->
+  <div class="modal-overlay" id="picking-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+    <div class="modal" style="max-width:520px; width:100%; margin:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+        <div class="modal-title" id="picking-order-title" style="margin:0;">Picking</div>
+        <button onclick="closePicking()" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);">×</button>
+      </div>
+      <div id="picking-business" style="font-size:13px; color:var(--text-muted); margin-bottom:16px;"></div>
+      
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span style="font-size:13px; font-weight:600;" id="picking-progress">0 / 0 productos</span>
+        <button onclick="savePicking()" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit; font-size:12px;">💾 Guardar progreso</button>
+      </div>
+
+      <div style="background:var(--bg); border:2px dashed var(--border-strong); border-radius:var(--radius); padding:12px 14px; margin-bottom:16px;">
+        <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-faint); display:block; margin-bottom:6px;">📡 Escanear código de barras</label>
+        <input type="text" id="picking-scan-input" placeholder="Apunta el escáner aquí..." onkeydown="handlePickingScan(event)" autocomplete="off" style="background:white;">
+        <div id="picking-scan-feedback" style="font-size:13px; font-weight:600; margin-top:6px; min-height:18px; transition:opacity 0.3s; opacity:0;"></div>
+        <div style="font-size:11px; color:var(--text-faint); margin-top:4px;">También puedes tocar cada producto manualmente para marcarlo.</div>
+      </div>
+
+      <div id="picking-lines"></div>
+
+      <button class="submit-btn" id="picking-confirm-btn" onclick="confirmPicking()" style="margin-top:16px; opacity:0.5;" disabled>
+        ✅ Confirmar picking completo
+      </button>
+      <button class="cancel-btn" onclick="closePicking()">Cerrar</button>
+    </div>
+  </div>
+
   <!-- STOCK MODAL -->
   <div class="modal-overlay" id="stock-modal" style="display:none;">
     <div class="modal" style="max-width:360px;">

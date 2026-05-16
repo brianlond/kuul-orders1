@@ -410,3 +410,14 @@ select {
 .filter-chip { padding: 6px 14px; border: 1px solid var(--border); border-radius: 99px; background: none; color: var(--text-muted); font-size: 13px; font-family: inherit; cursor: pointer; transition: all 0.15s; }
 .filter-chip:hover { border-color: var(--text); color: var(--text); }
 .filter-chip.active { background: var(--text); color: #fff; border-color: var(--text); font-weight: 500; }
+
+/* PICKING */
+.picking-item { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; cursor: pointer; transition: all 0.15s; user-select: none; }
+.picking-item:hover { background: var(--bg); }
+.picking-item.picked { background: #f0fdf4; border-color: #bbf7d0; }
+.picking-checkbox { width: 28px; height: 28px; border: 2px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; flex-shrink: 0; transition: all 0.15s; }
+.picking-checkbox.checked { background: #16a34a; border-color: #16a34a; color: #fff; }
+.picking-info { flex: 1; }
+.picking-product { font-size: 14px; font-weight: 500; }
+.picking-item.picked .picking-product { text-decoration: line-through; color: var(--text-muted); }
+.picking-qty { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
