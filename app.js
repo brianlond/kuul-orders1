@@ -2053,7 +2053,7 @@ async function updateCustomerLevel(id, level) {
 
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
-  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory') && !isAdmin) { showLoginModal(); return; }
+  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers') && !isAdmin) { showLoginModal(); return; }
   if (name === 'delivery' && !isDelivery && !isAdmin) { showLoginModal(); return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -2066,6 +2066,7 @@ function showTab(name) {
     if (name === 'catalog') loadCatalog();
     if (name === 'inventory') loadInventory();
     if (name === 'pos') initPOS();
+  if (name === 'sellers') initSellersTab();
     if (name === 'delivery') loadDeliveryOrders();
     if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
@@ -2510,7 +2511,6 @@ const WEEKLY_GOAL = 2500;
 const WEEKLY_BONUS = 125;
 
 function initSellersTab() {
-  // Set current week as default
   const weekInput = document.getElementById('sellers-week');
   if (!weekInput.value) {
     const now = new Date();
@@ -2530,7 +2530,6 @@ function getWeekNumber(date) {
 }
 
 function getWeekRange(weekStr) {
-  // weekStr format: "2026-W20"
   const [year, w] = weekStr.split('-W');
   const jan4 = new Date(Date.UTC(parseInt(year), 0, 4));
   const weekStart = new Date(jan4);
@@ -2544,27 +2543,22 @@ function getWeekRange(weekStr) {
 async function loadSellersReport() {
   const container = document.getElementById('sellers-report');
   const weekInput = document.getElementById('sellers-week');
-  if (!weekInput.value) return;
+  if (!weekInput || !weekInput.value) return;
 
   container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Cargando...</div>';
 
   const { start, end } = getWeekRange(weekInput.value);
 
   try {
-    // Fetch orders in this week range
     const startStr = start.toISOString();
     const endStr = end.toISOString();
     const orders = await supabase(`orders?created_at=gte.${startStr}&created_at=lte.${endStr}&select=*`);
 
     if (!orders || orders.length === 0) {
-      container.innerHTML = `<div style="text-align:center; padding:60px; color:var(--text-muted);">
-        <div style="font-size:40px; margin-bottom:12px;">📭</div>
-        <div style="font-size:16px;">Sin órdenes esta semana</div>
-      </div>`;
+      container.innerHTML = `<div style="text-align:center; padding:60px; color:var(--text-muted);"><div style="font-size:40px; margin-bottom:12px;">📭</div><div style="font-size:16px;">Sin órdenes esta semana</div></div>`;
       return;
     }
 
-    // Group by seller
     const sellers = {};
     orders.forEach(o => {
       const seller = o.seller || 'Sin nombre';
@@ -2573,16 +2567,12 @@ async function loadSellersReport() {
       sellers[seller].total += parseFloat(o.subtotal || 0);
     });
 
-    // Format week range for display
     const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
     const weekLabel = `${fmtDate(start)} – ${fmtDate(end)}`;
-
-    // Build report
     const sortedSellers = Object.values(sellers).sort((a,b) => b.total - a.total);
     const totalWeek = sortedSellers.reduce((s, sel) => s + sel.total, 0);
 
-    let html = `
-    <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px; display:flex; gap:24px; flex-wrap:wrap;">
+    let html = `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px; display:flex; gap:24px; flex-wrap:wrap;">
       <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Semana</div><div style="font-size:16px; font-weight:600; color:var(--text);">${weekLabel}</div></div>
       <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Total vendido</div><div style="font-size:16px; font-weight:600; color:var(--gold);">$${totalWeek.toFixed(2)}</div></div>
       <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Órdenes</div><div style="font-size:16px; font-weight:600; color:var(--text);">${orders.length}</div></div>
@@ -2597,11 +2587,10 @@ async function loadSellersReport() {
       const totalPay = commission + bonus;
       const remaining = Math.max(0, WEEKLY_GOAL - sel.total);
 
-      html += `
-      <div style="background:var(--surface); border:1px solid ${hitGoal ? 'var(--gold-border)' : 'var(--border)'}; border-radius:var(--radius-lg); padding:20px; margin-bottom:16px; ${hitGoal ? 'background:var(--gold-pale);' : ''}">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+      html += `<div style="background:${hitGoal ? 'var(--gold-pale)' : 'var(--surface)'}; border:1px solid ${hitGoal ? 'var(--gold-border)' : 'var(--border)'}; border-radius:var(--radius-lg); padding:20px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
           <div style="display:flex; align-items:center; gap:10px;">
-            <div style="width:40px; height:40px; background:var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px; flex-shrink:0;">${sel.name.charAt(0).toUpperCase()}</div>
+            <div style="width:40px; height:40px; background:var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px;">${sel.name.charAt(0).toUpperCase()}</div>
             <div>
               <div style="font-size:18px; font-weight:600; color:var(--text);">${sel.name}</div>
               <div style="font-size:12px; color:var(--text-muted);">${sel.orders.length} orden${sel.orders.length !== 1 ? 'es' : ''}</div>
@@ -2609,20 +2598,16 @@ async function loadSellersReport() {
           </div>
           ${hitGoal ? '<div style="background:var(--gold); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;">🏆 META ALCANZADA</div>' : ''}
         </div>
-
-        <!-- Progress bar -->
         <div style="margin-bottom:16px;">
           <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
             <span style="font-size:12px; color:var(--text-muted);">Progreso hacia meta $${WEEKLY_GOAL.toLocaleString()}</span>
             <span style="font-size:12px; font-weight:600; color:${hitGoal ? 'var(--gold)' : 'var(--text)'};">${progress.toFixed(0)}%</span>
           </div>
           <div style="background:var(--border); border-radius:99px; height:10px; overflow:hidden;">
-            <div style="height:100%; width:${progress}%; background:${hitGoal ? 'var(--gold)' : '#6b9e6b'}; border-radius:99px; transition:width 0.5s;"></div>
+            <div style="height:100%; width:${progress}%; background:${hitGoal ? 'var(--gold)' : '#6b9e6b'}; border-radius:99px;"></div>
           </div>
           ${!hitGoal ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Faltan $${remaining.toFixed(2)} para la meta</div>` : ''}
         </div>
-
-        <!-- Numbers -->
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
           <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px;">
             <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Ventas (subtotal)</div>
@@ -2632,8 +2617,7 @@ async function loadSellersReport() {
             <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Comisión 20%</div>
             <div style="font-size:18px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${commission.toFixed(2)}</div>
           </div>
-          ${hitGoal ? `
-          <div style="background:#fef9ee; border:1px solid var(--gold-border); border-radius:var(--radius); padding:10px 14px;">
+          ${hitGoal ? `<div style="background:#fef9ee; border:1px solid var(--gold-border); border-radius:var(--radius); padding:10px 14px;">
             <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:4px;">Bono meta 🏆</div>
             <div style="font-size:18px; font-weight:700; color:var(--gold); font-family:var(--font-display);">+$${bonus.toFixed(2)}</div>
           </div>` : ''}

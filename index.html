@@ -40,6 +40,9 @@
       <button class="tab" id="tab-inventory-btn" onclick="showTab('inventory')">
         📊 Inventario
       </button>
+      <button class="tab" id="tab-sellers-btn" onclick="showTab('sellers')">
+        💰 Vendedores
+      </button>
       <button class="tab" id="tab-pos-btn" onclick="showTab('pos')">
         🏪 Caja
       </button>
@@ -270,6 +273,23 @@
       </div>
     </div>
 
+    <!-- SELLERS -->
+    <div id="tab-sellers" class="section" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Comisiones y Metas</h2>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">20% comisión · Meta semanal $2,500 → +$125</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <label style="font-size:13px; color:var(--text-muted);">Semana:</label>
+          <input type="week" id="sellers-week" onchange="loadSellersReport()" style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface); color:var(--text);">
+          <button onclick="loadSellersReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
+        </div>
+      </div>
+      <div id="sellers-report"></div>
+    </div>
+
+
     <!-- POS -->
     <div id="tab-pos" class="section">
       <div class="pos-wrap">
@@ -479,17 +499,27 @@
   <div class="modal-overlay" id="picking-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
     <div class="modal" style="max-width:520px; width:100%; margin:auto;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
-        <div class="modal-title" id="picking-order-title" style="margin:0;">Hoja de empaque</div>
+        <div class="modal-title" id="picking-order-title" style="margin:0;">Picking</div>
         <button onclick="closePicking()" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);">×</button>
       </div>
-      <div id="picking-business" style="font-size:13px; color:var(--text-muted); margin-bottom:8px;"></div>
+      <div id="picking-business" style="font-size:13px; color:var(--text-muted); margin-bottom:16px;"></div>
+      
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <span style="font-size:13px; font-weight:600; color:var(--text-muted);" id="picking-progress">0 / 0 productos</span>
-        <button onclick="printPackingSlip()" style="font-size:12px; padding:5px 12px; border:1px solid var(--gold-border); border-radius:var(--radius); background:var(--gold-pale); color:var(--gold); cursor:pointer; font-family:inherit; font-weight:600;">🖨️ Imprimir</button>
+        <span style="font-size:13px; font-weight:600;" id="picking-progress">0 / 0 productos</span>
+        <button onclick="savePicking()" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit; font-size:12px;">💾 Guardar progreso</button>
       </div>
+
+      <div style="background:var(--bg); border:2px dashed var(--border-strong); border-radius:var(--radius); padding:12px 14px; margin-bottom:16px;">
+        <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-faint); display:block; margin-bottom:6px;">📡 Escanear código de barras</label>
+        <input type="text" id="picking-scan-input" placeholder="Apunta el escáner aquí..." onkeydown="handlePickingScan(event)" autocomplete="off" style="background:white;">
+        <div id="picking-scan-feedback" style="font-size:13px; font-weight:600; margin-top:6px; min-height:18px; transition:opacity 0.3s; opacity:0;"></div>
+        <div style="font-size:11px; color:var(--text-faint); margin-top:4px;">También puedes tocar cada producto manualmente para marcarlo.</div>
+      </div>
+
       <div id="picking-lines"></div>
+
       <button class="submit-btn" id="picking-confirm-btn" onclick="confirmPicking()" style="margin-top:16px; opacity:0.5;" disabled>
-        ✅ Confirmar — orden lista para envío
+        ✅ Confirmar picking completo
       </button>
       <button class="cancel-btn" onclick="closePicking()">Cerrar</button>
     </div>
@@ -695,51 +725,6 @@
       <button class="submit-btn" onclick="doLogin()">Entrar →</button>
       <button class="cancel-btn" onclick="hideLoginModal()">Cancelar</button>
     </div>
-  </div>
-
-
-  <!-- SELLERS TAB -->
-  <div class="tab-content" id="tab-sellers" style="display:none;">
-    <div class="section">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
-        <div>
-          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Comisiones y Metas</h2>
-          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">20% comisión · Meta semanal $2,500 → +$125</div>
-        </div>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <label style="font-size:13px; color:var(--text-muted);">Semana:</label>
-          <input type="week" id="sellers-week" onchange="loadSellersReport()" style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface); color:var(--text);">
-          <button onclick="loadSellersReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
-        </div>
-      </div>
-      <div id="sellers-report"></div>
-    </div>
-  </div>
-
-  <!-- INVOICE OVERLAY -->
-  <div id="invoice-overlay" style="display:none; position:fixed; inset:0; background:rgba(28,26,22,0.6); z-index:60; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(2px);">
-    <div style="background:var(--surface); border-radius:var(--radius-xl); width:100%; max-width:800px; height:90vh; display:flex; flex-direction:column; box-shadow:var(--shadow-lg); overflow:hidden;">
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0;">
-        <span style="font-family:var(--font-display); font-size:18px; font-weight:600; color:var(--text);">Invoice</span>
-        <div style="display:flex; gap:8px;">
-          <button onclick="printInvoiceFrame()" style="background:var(--gold); color:#fff; border:none; padding:8px 18px; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🖨️ Imprimir / PDF</button>
-          <button onclick="closeInvoice()" style="background:none; border:1px solid var(--border); padding:8px 14px; border-radius:var(--radius); font-size:13px; cursor:pointer; color:var(--text-muted); font-family:var(--font-sans);">Cerrar</button>
-        </div>
-      </div>
-      <iframe id="invoice-frame" style="flex:1; border:none; width:100%;" srcdoc=""></iframe>
-    </div>
-  </div>
-
-
-  <!-- BARCODE SCANNER MODAL -->
-  <div id="scanner-overlay" style="display:none; position:fixed; inset:0; background:#000; z-index:70; flex-direction:column;">
-    <video id="scanner-video" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover;" playsinline autoplay muted></video>
-    <div style="position:absolute; inset:0; pointer-events:none; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2;">
-      <div style="width:260px; height:180px; border:3px solid var(--gold); border-radius:12px; box-shadow:0 0 0 9999px rgba(0,0,0,0.45);"></div>
-      <div style="margin-top:20px; color:#fff; font-size:14px; font-weight:600; text-shadow:0 1px 4px #000;">Apunta al código de barras</div>
-      <div id="scanner-status" style="color:#ddd; font-size:12px; margin-top:6px; text-shadow:0 1px 4px #000;">Buscando...</div>
-    </div>
-    <button onclick="closeBarcodeScanner()" style="position:absolute; bottom:40px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.6); border:1px solid #fff; color:#fff; padding:12px 32px; border-radius:24px; font-size:15px; cursor:pointer; backdrop-filter:blur(4px); z-index:3;">Cancelar</button>
   </div>
 
   <div class="toast" id="toast"></div>
