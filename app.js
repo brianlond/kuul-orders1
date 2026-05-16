@@ -1577,8 +1577,7 @@ function printPackingSlip() {
   if (!pickingOrder) return;
   const o = pickingOrder;
   const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-  const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Empaque #${String(o.id).padStart(5,'0')}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Empaque #${String(o.id).padStart(5,'0')}</title>
   <style>
     * { box-sizing:border-box; margin:0; padding:0; }
     body { font-family: Arial, sans-serif; font-size:13px; max-width:480px; margin:20px auto; padding:20px; color:#111; }
@@ -1635,12 +1634,19 @@ function printPackingSlip() {
     <span>Vendedor: ${o.seller}</span>
     <span>Total: $${parseFloat(o.total).toFixed(2)}</span>
   </div>
-  <button class="print-btn" onclick="window.print()">🖨️ Imprimir</button>
-  </body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 400);
+  </body></html>`;
+  const overlay = document.getElementById('invoice-overlay');
+  const frame = document.getElementById('invoice-frame');
+  if (overlay && frame) {
+    frame.srcdoc = html;
+    overlay.style.display = 'flex';
+  } else {
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+  }
 }
+
 
 async function confirmPicking() {
   if (!pickingOrder) return;
