@@ -977,6 +977,11 @@ function initPOS() {
   posCart = [];
   posClient = null;
   posLevel = 'Salon';
+  posMobileCartVisible = false;
+  const left = document.querySelector('.pos-left');
+  const right = document.querySelector('.pos-right');
+  if (left) left.style.display = 'flex';
+  if (right) right.style.display = 'flex';
   document.getElementById('pos-level').value = 'Salon';
   document.getElementById('pos-client-search').value = '';
   document.getElementById('pos-client-info').style.display = 'none';
@@ -1073,6 +1078,42 @@ function posRemoveItem(barcode) {
   renderPOSCart();
 }
 
+// ── POS Mobile view toggle ───────────────────────────────────
+let posMobileCartVisible = false;
+
+function togglePOSMobileView() {
+  posMobileCartVisible = !posMobileCartVisible;
+  const left = document.querySelector('.pos-left');
+  const right = document.querySelector('.pos-right');
+  if (!left || !right) return;
+  if (posMobileCartVisible) {
+    left.style.display = 'none';
+    right.style.display = 'flex';
+  } else {
+    left.style.display = 'flex';
+    right.style.display = 'none';
+  }
+}
+
+function updatePOSFAB() {
+  const fab = document.getElementById('pos-cart-fab');
+  const fabCount = document.getElementById('pos-fab-count');
+  const fabTotal = document.getElementById('pos-fab-total');
+  if (!fab) return;
+
+  const isMobile = window.innerWidth < 700;
+  fab.style.display = isMobile ? 'flex' : 'none';
+
+  const totalQty = posCart.reduce((s, i) => s + i.qty, 0);
+  const subtotal = posCart.reduce((s, i) => s + i.subtotal, 0);
+  if (fabCount) fabCount.textContent = totalQty;
+  if (fabTotal) fabTotal.textContent = '$' + subtotal.toFixed(2);
+
+  // On mobile, show back button in cart view
+  const backBtn = document.getElementById('pos-back-btn');
+  if (backBtn) backBtn.style.display = isMobile ? 'block' : 'none';
+}
+
 function renderPOSCart() {
   const container = document.getElementById('pos-cart-items');
   const countEl = document.getElementById('pos-cart-count');
@@ -1099,6 +1140,7 @@ function renderPOSCart() {
     `).join('');
   }
   posRecalc();
+  updatePOSFAB();
 }
 
 function posRecalc() {

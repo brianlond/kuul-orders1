@@ -242,3 +242,51 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   .pos-left { height: 55vh; }
   .pos-right { height: 45vh; }
 }
+
+/* POS MOBILE FAB */
+.pos-cart-fab {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  background: var(--gold);
+  color: #fff;
+  border: none;
+  border-radius: 99px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(184,149,42,0.4);
+  z-index: 30;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+.pos-cart-fab:hover { background: var(--gold-light); }
+
+@media (max-width: 700px) {
+  .pos-wrap {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+    border: none;
+    box-shadow: none;
+  }
+  .pos-left {
+    height: calc(100vh - 180px);
+    min-height: 400px;
+    border-right: none;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .pos-right {
+    height: calc(100vh - 180px);
+    min-height: 400px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+}
