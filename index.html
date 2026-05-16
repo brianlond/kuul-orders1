@@ -276,6 +276,7 @@
         <div class="pos-left">
           <div class="pos-search-bar">
             <input type="text" id="pos-search" placeholder="Buscar producto o escanear código..." oninput="posSearch(this.value)" onkeydown="posScanBarcode(event)" autocomplete="off">
+            <button onclick="openBarcodeScanner()" title="Escanear con cámara" style="flex-shrink:0; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); padding:8px 12px; font-size:18px; cursor:pointer; line-height:1;">📷</button>
             <div id="pos-level-wrap">
               <select id="pos-level" onchange="setPosLevel(this.value)" style="width:auto; font-size:13px;">
                 <option value="Retail">Retail</option>
@@ -710,6 +711,19 @@
       </div>
       <iframe id="invoice-frame" style="flex:1; border:none; width:100%;" srcdoc=""></iframe>
     </div>
+  </div>
+
+
+  <!-- BARCODE SCANNER MODAL -->
+  <div id="scanner-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:70; flex-direction:column; align-items:center; justify-content:center; gap:16px;">
+    <div style="color:#fff; font-size:16px; font-weight:600;">Apunta al código de barras</div>
+    <div style="position:relative; width:300px; height:300px; border-radius:12px; overflow:hidden; background:#000;">
+      <video id="scanner-video" style="width:100%; height:100%; object-fit:cover;" playsinline autoplay></video>
+      <div style="position:absolute; inset:0; border:3px solid var(--gold); border-radius:12px; pointer-events:none;"></div>
+      <div style="position:absolute; top:50%; left:10%; right:10%; height:2px; background:var(--gold); opacity:0.8; transform:translateY(-50%); pointer-events:none;"></div>
+    </div>
+    <div id="scanner-status" style="color:#ccc; font-size:13px;">Buscando código...</div>
+    <button onclick="closeBarcodeScanner()" style="background:none; border:1px solid #fff; color:#fff; padding:10px 24px; border-radius:8px; font-size:14px; cursor:pointer;">Cancelar</button>
   </div>
 
   <div class="toast" id="toast"></div>

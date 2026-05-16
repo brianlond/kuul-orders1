@@ -1319,6 +1319,86 @@ function posSearch(query) {
   renderPOSProducts(results);
 }
 
+// ── BARCODE SCANNER (CAMERA) ──────────────────────────────
+let scannerStream = null;
+let scannerAnimFrame = null;
+
+async function openBarcodeScanner() {
+  const overlay = document.getElementById('scanner-overlay');
+  const video = document.getElementById('scanner-video');
+  overlay.style.display = 'flex';
+  document.getElementById('scanner-status').textContent = 'Iniciando cámara...';
+
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = scannerStream;
+    await video.play();
+    document.getElementById('scanner-status').textContent = 'Apunta al código de barras';
+    scanBarcodeFrame(video);
+  } catch(e) {
+    document.getElementById('scanner-status').textContent = '❌ No se pudo acceder a la cámara';
+    console.error(e);
+  }
+}
+
+function scanBarcodeFrame(video) {
+  if (!document.getElementById('scanner-overlay') || 
+      document.getElementById('scanner-overlay').style.display === 'none') return;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  try {
+    if ('BarcodeDetector' in window) {
+      const detector = new BarcodeDetector({ formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39'] });
+      detector.detect(canvas).then(barcodes => {
+        if (barcodes.length > 0) {
+          const barcode = barcodes[0].rawValue;
+          closeBarcodeScanner();
+          handleScannedBarcode(barcode);
+        } else {
+          scannerAnimFrame = requestAnimationFrame(() => scanBarcodeFrame(video));
+        }
+      }).catch(() => {
+        scannerAnimFrame = requestAnimationFrame(() => scanBarcodeFrame(video));
+      });
+    } else {
+      // BarcodeDetector not supported — fallback message
+      document.getElementById('scanner-status').textContent = '⚠️ Tu navegador no soporta escaneo. Usa Chrome en Android.';
+    }
+  } catch(e) {
+    scannerAnimFrame = requestAnimationFrame(() => scanBarcodeFrame(video));
+  }
+}
+
+function handleScannedBarcode(barcode) {
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  if (product) {
+    posAddToCart(product);
+    showToast(`✓ ${product.brand} [${product.color_code}] ${product.name}`);
+  } else {
+    showToast(`❌ Código no encontrado: ${barcode}`);
+  }
+}
+
+function closeBarcodeScanner() {
+  if (scannerStream) {
+    scannerStream.getTracks().forEach(t => t.stop());
+    scannerStream = null;
+  }
+  if (scannerAnimFrame) {
+    cancelAnimationFrame(scannerAnimFrame);
+    scannerAnimFrame = null;
+  }
+  const overlay = document.getElementById('scanner-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
 function posScanBarcode(e) {
   if (e.key !== 'Enter') return;
   const barcode = document.getElementById('pos-search').value.trim();
