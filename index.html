@@ -37,7 +37,7 @@
       <button class="tab" id="tab-delivery-btn" onclick="showTab('delivery')">
         🚚 Reparto
       </button>
-      <button class="tab" id="tab-inventory-btn" onclick="showTab('inventory')" style="display:none;">
+      <button class="tab" id="tab-inventory-btn" onclick="showTab('inventory')">
         📊 Inventario
       </button>
       <button class="tab" id="tab-pos-btn" onclick="showTab('pos')">
@@ -123,7 +123,7 @@
           <div class="step-label">④ Cantidad</div>
           <div class="qty-selector">
             <button class="qty-btn" onclick="changeQty(-1)">−</button>
-            <span id="qty-display" contenteditable="true" oninput="onQtyInput(this)" onkeydown="onQtyKeydown(event)" style="min-width:36px; text-align:center; outline:none; border-bottom:2px solid var(--gold-border); padding:0 4px;">1</span>
+            <span id="qty-display">1</span>
             <button class="qty-btn" onclick="changeQty(1)">+</button>
             <button class="qty-confirm-btn" onclick="confirmAddProduct()">Agregar a la orden ✓</button>
           </div>
@@ -146,7 +146,7 @@
       </div>
       <div id="tax-rate-row" style="display:none; margin-left:28px; margin-bottom:12px;">
         <div class="tax-input-row">
-          <input type="number" id="tax-rate" value="10.25" min="0" max="30" step="0.01" oninput="recalcTotal()" style="width:80px;">
+          <input type="number" id="tax-rate" value="9.75" min="0" max="30" step="0.01" oninput="recalcTotal()" style="width:80px;">
           <span class="tax-pct-label">% sobre subtotal de productos</span>
         </div>
       </div>
@@ -321,7 +321,7 @@
                 <input type="checkbox" id="pos-tax-toggle" onchange="posRecalc()" style="width:16px; height:16px; accent-color:var(--gold);">
                 Tax
               </label>
-              <input type="number" id="pos-tax-rate" value="10.25" min="0" max="30" step="0.01" oninput="posRecalc()" style="width:72px; font-size:13px; padding:5px 8px;">
+              <input type="number" id="pos-tax-rate" value="9.75" min="0" max="30" step="0.01" oninput="posRecalc()" style="width:72px; font-size:13px; padding:5px 8px;">
               <span style="font-size:13px; color:var(--text-muted);">%</span>
             </div>
             <div style="display:flex; gap:6px; margin-bottom:8px; align-items:center;">
@@ -479,18 +479,28 @@
   <div class="modal-overlay" id="picking-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
     <div class="modal" style="max-width:520px; width:100%; margin:auto;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
-        <div class="modal-title" id="picking-order-title" style="margin:0;">Hoja de empaque</div>
+        <div class="modal-title" id="picking-order-title" style="margin:0;">Picking</div>
         <button onclick="closePicking()" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);">×</button>
       </div>
       <div id="picking-business" style="font-size:13px; color:var(--text-muted); margin-bottom:16px;"></div>
-      <div style="font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:12px;" id="picking-progress"></div>
-      <div id="picking-lines"></div>
-      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-        <button class="submit-btn" id="picking-confirm-btn" onclick="confirmPicking()" style="flex:1; margin:0;">
-          ✅ Orden lista para envío
-        </button>
-        <button onclick="printPackingSlip()" class="contact-btn" style="border:1px solid var(--gold-border); color:var(--gold); background:var(--gold-pale); cursor:pointer; font-family:inherit; padding:10px 16px; font-size:13px; font-weight:600;">🖨️ Imprimir</button>
+      
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span style="font-size:13px; font-weight:600;" id="picking-progress">0 / 0 productos</span>
+        <button onclick="savePicking()" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit; font-size:12px;">💾 Guardar progreso</button>
       </div>
+
+      <div style="background:var(--bg); border:2px dashed var(--border-strong); border-radius:var(--radius); padding:12px 14px; margin-bottom:16px;">
+        <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-faint); display:block; margin-bottom:6px;">📡 Escanear código de barras</label>
+        <input type="text" id="picking-scan-input" placeholder="Apunta el escáner aquí..." onkeydown="handlePickingScan(event)" autocomplete="off" style="background:white;">
+        <div id="picking-scan-feedback" style="font-size:13px; font-weight:600; margin-top:6px; min-height:18px; transition:opacity 0.3s; opacity:0;"></div>
+        <div style="font-size:11px; color:var(--text-faint); margin-top:4px;">También puedes tocar cada producto manualmente para marcarlo.</div>
+      </div>
+
+      <div id="picking-lines"></div>
+
+      <button class="submit-btn" id="picking-confirm-btn" onclick="confirmPicking()" style="margin-top:16px; opacity:0.5;" disabled>
+        ✅ Confirmar picking completo
+      </button>
       <button class="cancel-btn" onclick="closePicking()">Cerrar</button>
     </div>
   </div>
@@ -694,36 +704,6 @@
       <div class="login-error" id="login-error"></div>
       <button class="submit-btn" onclick="doLogin()">Entrar →</button>
       <button class="cancel-btn" onclick="hideLoginModal()">Cancelar</button>
-    </div>
-  </div>
-
-
-  <!-- INVOICE OVERLAY -->
-  <div id="invoice-overlay" style="display:none; position:fixed; inset:0; background:rgba(28,26,22,0.6); z-index:60; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(2px);">
-    <div style="background:var(--surface); border-radius:var(--radius-xl); width:100%; max-width:800px; height:90vh; display:flex; flex-direction:column; box-shadow:var(--shadow-lg); overflow:hidden;">
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0;">
-        <span style="font-family:var(--font-display); font-size:18px; font-weight:600; color:var(--text);">Invoice</span>
-        <div style="display:flex; gap:8px;">
-          <button onclick="printInvoiceFrame()" style="background:var(--gold); color:#fff; border:none; padding:8px 18px; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🖨️ Imprimir / PDF</button>
-          <button onclick="closeInvoice()" style="background:none; border:1px solid var(--border); padding:8px 14px; border-radius:var(--radius); font-size:13px; cursor:pointer; color:var(--text-muted); font-family:var(--font-sans);">Cerrar</button>
-        </div>
-      </div>
-      <iframe id="invoice-frame" style="flex:1; border:none; width:100%;" srcdoc=""></iframe>
-    </div>
-  </div>
-
-
-  <!-- INVOICE OVERLAY -->
-  <div id="invoice-overlay" style="display:none; position:fixed; inset:0; background:rgba(28,26,22,0.6); z-index:60; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(2px);">
-    <div style="background:var(--surface); border-radius:var(--radius-xl); width:100%; max-width:800px; height:90vh; display:flex; flex-direction:column; box-shadow:var(--shadow-lg); overflow:hidden;">
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0;">
-        <span style="font-family:var(--font-display); font-size:18px; font-weight:600; color:var(--text);">Invoice</span>
-        <div style="display:flex; gap:8px;">
-          <button onclick="printInvoiceFrame()" style="background:var(--gold); color:#fff; border:none; padding:8px 18px; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🖨️ Imprimir / PDF</button>
-          <button onclick="closeInvoice()" style="background:none; border:1px solid var(--border); padding:8px 14px; border-radius:var(--radius); font-size:13px; cursor:pointer; color:var(--text-muted); font-family:var(--font-sans);">Cerrar</button>
-        </div>
-      </div>
-      <iframe id="invoice-frame" style="flex:1; border:none; width:100%;" srcdoc=""></iframe>
     </div>
   </div>
 
