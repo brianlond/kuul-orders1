@@ -1394,28 +1394,26 @@ function scanBarcodeFrame(video) {
 }
 
 function handleScannedBarcode(barcode) {
-  // DEBUG: show what was scanned
-  alert('Código leído: ' + barcode + ' (largo: ' + barcode.length + ')');
-  // Normalize: trim, remove leading zeros variations
   const normalized = barcode.trim();
-  let product = PRODUCTS.find(p => p.barcode === normalized);
   
-  // Try without leading zeros
-  if (!product) product = PRODUCTS.find(p => p.barcode === normalized.replace(/^0+/, ''));
-  
-  // Try matching last N digits
+  // Check if PRODUCTS is loaded
+  if (!PRODUCTS || PRODUCTS.length === 0) {
+    showToast('⚠️ Productos no cargados aún, intenta de nuevo');
+    return;
+  }
+
+  let product = PRODUCTS.find(p => String(p.barcode).trim() === normalized);
+  if (!product) product = PRODUCTS.find(p => String(p.barcode).trim() === normalized.replace(/^0+/, ''));
   if (!product && normalized.length > 6) {
-    product = PRODUCTS.find(p => p.barcode && normalized.endsWith(p.barcode));
-    if (!product) product = PRODUCTS.find(p => p.barcode && p.barcode.endsWith(normalized));
+    product = PRODUCTS.find(p => p.barcode && normalized.endsWith(String(p.barcode).trim()));
+    if (!product) product = PRODUCTS.find(p => p.barcode && String(p.barcode).trim().endsWith(normalized));
   }
 
   if (product) {
-    posAddToCart(product);
+    posAddProduct(product.barcode);
     showToast(`✓ ${product.brand} [${product.color_code}] ${product.name}`);
   } else {
-    // Show what was scanned so user can debug
-    showToast(`❌ No encontrado: "${normalized}"`);
-    console.log('Scanned barcode:', normalized, '| Products sample:', PRODUCTS.slice(0,3).map(p => p.barcode));
+    showToast(`❌ No encontrado: ${normalized} (${PRODUCTS.length} productos cargados)`);
   }
 }
 
