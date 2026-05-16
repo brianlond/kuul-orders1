@@ -1330,66 +1330,70 @@ async function openBarcodeScanner() {
   overlay.style.display = 'flex';
   document.getElementById('scanner-status').textContent = 'Iniciando cámara...';
 
-  // Load ZXing if not loaded
-  if (!window.ZXing) {
-    try {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-    } catch(e) {
-      alert('No se pudo cargar el escáner. Verifica tu conexión.');
-      closeBarcodeScanner();
-      return;
-    }
-  }
-
   try {
-    const codeReader = new ZXing.BrowserMultiFormatReader();
-    zxingReader = codeReader;
-
-    // Get camera stream directly first to check permissions
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: { ideal: 'environment' } } 
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }
     });
     scannerStream = stream;
-
-    // Attach stream to video manually
-    const video = document.getElementById('scanner-video');
     video.srcObject = stream;
     video.setAttribute('playsinline', '');
     video.muted = true;
-    await video.play();
+    video.play();
 
     document.getElementById('scanner-status').textContent = 'Apunta al código de barras';
 
-    // Use ZXing to decode from the video element continuously
-    const scanLoop = async () => {
-      if (!zxingReader) return;
+    // Use BarcodeDetector if available (Chrome/Android), else poll with canvas
+    if ('BarcodeDetector' in window) {
+      const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] });
+      const detect = async () => {
+        if (!scannerStream) return;
+        try {
+          const results = await detector.detect(video);
+          if (results.length > 0) {
+            closeBarcodeScanner();
+            handleScannedBarcode(results[0].rawValue);
+            return;
+          }
+        } catch(e) {}
+        scannerAnimFrame = requestAnimationFrame(detect);
+      };
+      setTimeout(() => { scannerAnimFrame = requestAnimationFrame(detect); }, 500);
+    } else {
+      // Safari fallback: load ZXing
+      if (!window.ZXing) {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js';
+        document.head.appendChild(script);
+        await new Promise(r => { script.onload = r; script.onerror = r; });
+      }
+      if (!window.ZXing) {
+        document.getElementById('scanner-status').textContent = '⚠️ Escáner no disponible en este navegador';
+        return;
+      }
+      const codeReader = new ZXing.BrowserMultiFormatReader();
+      zxingReader = codeReader;
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      try {
-        const result = await codeReader.decodeFromCanvas(canvas);
-        if (result) {
-          closeBarcodeScanner();
-          handleScannedBarcode(result.getText());
-          return;
-        }
-      } catch(e) { /* not found, keep scanning */ }
-      scannerAnimFrame = requestAnimationFrame(scanLoop);
-    };
-    scannerAnimFrame = requestAnimationFrame(scanLoop);
-
+      const detect = async () => {
+        if (!scannerStream || !zxingReader) return;
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        try {
+          const result = await codeReader.decodeFromCanvas(canvas);
+          if (result) {
+            closeBarcodeScanner();
+            handleScannedBarcode(result.getText());
+            return;
+          }
+        } catch(e) {}
+        scannerAnimFrame = setTimeout(detect, 200);
+      };
+      setTimeout(detect, 800);
+    }
   } catch(e) {
-    alert('Error: ' + e.message);
+    alert('Error al acceder a la cámara: ' + e.message);
     closeBarcodeScanner();
-    console.error(e);
   }
 }
 
