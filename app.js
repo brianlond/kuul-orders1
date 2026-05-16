@@ -1122,8 +1122,18 @@ function posRecalc() {
 function setPosLevel(level) {
   posLevel = level;
   currentLevel = level;
+  recalcCartPrices();
   if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
   renderPOSCart();
+}
+
+function recalcCartPrices() {
+  posCart = posCart.map(item => {
+    const product = PRODUCTS.find(p => p.barcode === item.barcode);
+    if (!product) return item;
+    const price = getPrice(product);
+    return { ...item, price, subtotal: price * item.qty };
+  });
 }
 
 function posSearch(query) {
@@ -1181,6 +1191,7 @@ function selectPOSClient(id) {
   posLevel = posClient.level || 'Salon';
   document.getElementById('pos-level').value = posLevel;
   currentLevel = posLevel;
+  recalcCartPrices();
   if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
   renderPOSCart();
 }
