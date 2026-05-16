@@ -457,10 +457,7 @@
           <option value="Otro">Otro</option>
         </select>
       </div>
-      <div class="toggle-row" id="cobrar-wa-row" style="display:none;">
-        <input type="checkbox" id="cobrar-wa-toggle" style="width:16px; height:16px; accent-color:var(--gold);" checked>
-        <label for="cobrar-wa-toggle" style="color:#16a34a;">💬 Enviar recibo por WhatsApp</label>
-      </div>
+
       <button class="submit-btn" id="cobrar-confirm-btn" onclick="confirmCobrar()">Confirmar y cobrar →</button>
       <button class="cancel-btn" onclick="closeCobrarModal()">Cancelar</button>
     </div>
@@ -687,9 +684,7 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <a id="wa-send-btn" href="#" target="_blank" style="display:none; position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:#16a34a; color:#fff; padding:12px 24px; border-radius:99px; font-size:14px; font-weight:600; text-decoration:none; align-items:center; gap:8px; box-shadow:0 4px 16px rgba(22,163,74,0.4); z-index:101; font-family:var(--font-sans); white-space:nowrap;">
-    💬 Enviar recibo por WhatsApp
-  </a>
+
 
   <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
   <script src="app.js"></script>

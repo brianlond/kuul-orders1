@@ -1323,9 +1323,7 @@ function posCobrar() {
     <strong>${clientName}</strong><br>
     ${posCart.length} producto${posCart.length !== 1 ? 's' : ''}${discAmt2 > 0 ? ` · Descuento: -$${discAmt2.toFixed(2)}` : ''} · Total: <strong>$${total3.toFixed(2)}</strong>
   `;
-  // Show WA toggle only if client has phone
-  const waRow = document.getElementById('cobrar-wa-row');
-  if (waRow) waRow.style.display = (posClient && posClient.phone) ? 'flex' : 'none';
+
   document.getElementById('cobrar-modal').style.display = 'flex';
 }
 
@@ -1407,24 +1405,7 @@ async function confirmCobrar() {
       printOrder(inserted[0].id);
     }
 
-    // Show WhatsApp button if client has phone
-    if (posClient && posClient.phone && document.getElementById('cobrar-wa-toggle')?.checked) {
-      const phone = posClient.phone.replace(/[^0-9]/g, '');
-      const lines = orderData.lines.map(i => `• ${i.name} x${i.qty} — $${i.subtotal.toFixed(2)}`).join('%0A');
-      const discLine = discountAmt > 0 ? `%0ADescuento: -$${discountAmt.toFixed(2)}` : '';
-      const msg = `Hola ${posClient.name}, gracias por tu compra en LucyGlam Beauty 🌟%0A%0AResumen:%0A${lines}${discLine}%0A%0ATotal: $${total2.toFixed(2)}%0APago: ${payment}%0A%0A¡Gracias por preferirnos!`;
-      const waUrl = `https://wa.me/1${phone}?text=${msg}`;
-      showToast('✓ Venta registrada — toca para enviar WhatsApp');
-      // Show WA button in toast area
-      const waBtn = document.getElementById('wa-send-btn');
-      if (waBtn) {
-        waBtn.href = waUrl;
-        waBtn.style.display = 'flex';
-        setTimeout(() => { waBtn.style.display = 'none'; }, 15000);
-      }
-    } else {
-      showToast(`✓ Venta registrada — $${total2.toFixed(2)}`);
-    }
+    showToast(`✓ Venta registrada — $${total2.toFixed(2)}`);
 
     // Reset POS
     posCart = [];
