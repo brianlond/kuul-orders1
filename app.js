@@ -2059,14 +2059,14 @@ function showTab(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery' || name === 'inventory' || name === 'pos') {
+  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery' || name === 'inventory' || name === 'pos' || name === 'sellers') {
     document.getElementById('logout-btn').style.display = 'inline-block';
     if (name === 'admin') loadOrders();
     if (name === 'customers') loadCustomers();
     if (name === 'catalog') loadCatalog();
     if (name === 'inventory') loadInventory();
     if (name === 'pos') initPOS();
-  if (name === 'sellers') initSellersTab();
+    if (name === 'sellers') initSellersTab();
     if (name === 'delivery') loadDeliveryOrders();
     if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
