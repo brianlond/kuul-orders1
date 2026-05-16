@@ -308,10 +308,13 @@ function renderDeliveryOrders(orders) {
     const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
     return `
     <div class="order-card">
-      <div class="order-header">
-        <div>
-          <div class="order-name">${o.client}</div>
-          <div class="order-business">${o.business}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:var(--font-display); font-size:22px; font-weight:600; color:var(--gold); letter-spacing:0.02em; flex-shrink:0;">#${String(o.id).padStart(5,'0')}</span>
+          <div>
+            <div class="order-name">${o.client}</div>
+            <div class="order-business">${o.business}</div>
+          </div>
         </div>
         <span class="status-badge badge-lista">Lista</span>
       </div>
@@ -511,7 +514,6 @@ function renderOrders(orders) {
         <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)">
           ${statusOptions}
         </select>
-        </div>
       </div>
       <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}${o.payment_method ? ` · 💳 ${o.payment_method}` : ''}</div>
       <div class="order-meta">
@@ -1119,6 +1121,18 @@ function posAddProduct(barcode) {
   renderPOSCart();
 }
 
+function posSetQty(barcode, value) {
+  const qty = Math.max(1, parseInt(value) || 1);
+  const item = posCart.find(c => c.barcode === barcode);
+  if (!item) return;
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  item.qty = qty;
+  item.price = product ? getPrice(product) : item.price;
+  item.subtotal = item.price * qty;
+  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
 function posChangeQty(barcode, delta) {
   const item = posCart.find(c => c.barcode === barcode);
   if (!item) return;
@@ -1193,7 +1207,7 @@ function renderPOSCart() {
         </div>
         <div class="pos-cart-qty">
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', -1)">−</button>
-          <span class="qty-num">${item.qty}</span>
+          <input type="number" value="${item.qty}" min="1" max="999" onclick="this.select()" onchange="posSetQty('${item.barcode}', this.value)" style="width:38px; text-align:center; padding:3px 2px; border:1px solid var(--border); border-radius:4px; font-size:13px; font-weight:500; background:var(--surface);">
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', 1)">+</button>
         </div>
         <span class="pos-cart-total">$${item.subtotal.toFixed(2)}</span>
@@ -2333,6 +2347,29 @@ const LOGO_B64 = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BS
 function printOrder(id) {
   const order = window._orders ? window._orders.find(o => o.id === id) : null;
   if (!order) return;
+  const html = buildInvoiceHTML(order);
+  const overlay = document.getElementById('invoice-overlay');
+  const frame = document.getElementById('invoice-frame');
+  if (overlay && frame) {
+    frame.srcdoc = html;
+    overlay.style.display = 'flex';
+  } else {
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+  }
+}
+
+function closeInvoice() {
+  document.getElementById('invoice-overlay').style.display = 'none';
+  document.getElementById('invoice-frame').srcdoc = '';
+}
+
+function printInvoiceFrame() {
+  document.getElementById('invoice-frame').contentWindow.print();
+}
+
+function buildInvoiceHTML(order) {
   const date = new Date(order.created_at).toLocaleString('es-MX', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
@@ -2498,8 +2535,5 @@ function printOrder(id) {
 </body>
 </html>`;
 
-  const win = window.open('', '_blank');
-  win.document.write(html);
-  win.document.close();
-  win.focus();
+  return html;
 }
