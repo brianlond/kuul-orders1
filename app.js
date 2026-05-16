@@ -24,13 +24,12 @@ let currentLevel = 'Salon'; // default
 
 function getPrice(product) {
   const retail = parseFloat(product.price_retail) || parseFloat(product.price);
+  const salon = parseFloat(product.price);
   if (currentLevel === 'Retail') return retail;
-  const salonDiscount = parseFloat(product.discount_salon) || 0;
-  const salonPrice = retail * (1 - salonDiscount / 100);
-  if (currentLevel === 'Salon') return Math.round(salonPrice * 100) / 100;
+  if (currentLevel === 'Salon') return salon;
+  // Wholesale = salon * (1 - discount_wholesale / 100)
   const wholesaleDiscount = parseFloat(product.discount_wholesale) || 0;
-  const wholesalePrice = salonPrice * (1 - wholesaleDiscount / 100);
-  return Math.round(wholesalePrice * 100) / 100;
+  return Math.round(salon * (1 - wholesaleDiscount / 100) * 100) / 100;
 }
 
 // ── State ────────────────────────────────────────────────────
