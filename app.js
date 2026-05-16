@@ -2370,17 +2370,6 @@ function printFromDetail() {
   if (currentDetailOrder) printOrder(currentDetailOrder.id);
 }
 
-// ── Order filters ─────────────────────────────────────────────
-let currentFilter = 'all';
-let allOrders = [];
-
-function filterOrders(status, btn) {
-  currentFilter = status;
-  document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  const filtered = status === 'all' ? allOrders : allOrders.filter(o => o.status === status);
-  renderOrders(filtered);
-}
 
 // ── Day summary ───────────────────────────────────────────────
 function renderDaySummary(orders) {
