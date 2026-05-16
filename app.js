@@ -1265,8 +1265,13 @@ async function confirmCobrar() {
     closeCobrarModal();
     showToast(`✓ Venta registrada — $${total.toFixed(2)}`);
 
-    // Print receipt
-    if (inserted && inserted[0]) printOrder(inserted[0].id);
+    // Print receipt directly with full order data
+    if (inserted && inserted[0]) {
+      const orderForPrint = { ...orderData, id: inserted[0].id, created_at: new Date().toISOString() };
+      if (!window._orders) window._orders = [];
+      window._orders.unshift(orderForPrint);
+      printOrder(inserted[0].id);
+    }
 
     // Reset POS
     posCart = [];
