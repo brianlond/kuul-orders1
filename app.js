@@ -1331,10 +1331,18 @@ async function openBarcodeScanner() {
 
   try {
     scannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: { facingMode: { ideal: 'environment' } }
     });
     video.srcObject = scannerStream;
+    video.setAttribute('playsinline', true);
+    video.muted = true;
     await video.play();
+    // Wait for video to have dimensions
+    await new Promise(resolve => {
+      if (video.videoWidth > 0) { resolve(); return; }
+      video.onloadedmetadata = resolve;
+      setTimeout(resolve, 1000);
+    });
     document.getElementById('scanner-status').textContent = 'Apunta al código de barras';
     scanBarcodeFrame(video);
   } catch(e) {
@@ -1377,12 +1385,26 @@ function scanBarcodeFrame(video) {
 }
 
 function handleScannedBarcode(barcode) {
-  const product = PRODUCTS.find(p => p.barcode === barcode);
+  // Normalize: trim, remove leading zeros variations
+  const normalized = barcode.trim();
+  let product = PRODUCTS.find(p => p.barcode === normalized);
+  
+  // Try without leading zeros
+  if (!product) product = PRODUCTS.find(p => p.barcode === normalized.replace(/^0+/, ''));
+  
+  // Try matching last N digits
+  if (!product && normalized.length > 6) {
+    product = PRODUCTS.find(p => p.barcode && normalized.endsWith(p.barcode));
+    if (!product) product = PRODUCTS.find(p => p.barcode && p.barcode.endsWith(normalized));
+  }
+
   if (product) {
     posAddToCart(product);
     showToast(`✓ ${product.brand} [${product.color_code}] ${product.name}`);
   } else {
-    showToast(`❌ Código no encontrado: ${barcode}`);
+    // Show what was scanned so user can debug
+    showToast(`❌ No encontrado: "${normalized}"`);
+    console.log('Scanned barcode:', normalized, '| Products sample:', PRODUCTS.slice(0,3).map(p => p.barcode));
   }
 }
 
