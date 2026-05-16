@@ -1327,26 +1327,35 @@ async function openBarcodeScanner() {
   const overlay = document.getElementById('scanner-overlay');
   const video = document.getElementById('scanner-video');
   overlay.style.display = 'flex';
-  document.getElementById('scanner-status').textContent = 'Iniciando cámara...';
 
   try {
     scannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } }
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
     video.srcObject = scannerStream;
-    video.setAttribute('playsinline', true);
+    video.setAttribute('playsinline', '');
+    video.setAttribute('muted', '');
     video.muted = true;
-    await video.play();
-    // Wait for video to have dimensions
-    await new Promise(resolve => {
-      if (video.videoWidth > 0) { resolve(); return; }
-      video.onloadedmetadata = resolve;
-      setTimeout(resolve, 1000);
-    });
-    document.getElementById('scanner-status').textContent = 'Apunta al código de barras';
-    scanBarcodeFrame(video);
+    // Must call play() directly without await on some Android browsers
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(e => console.warn('Play error:', e));
+    }
+    // Give camera time to start
+    setTimeout(() => {
+      if (video.videoWidth > 0) {
+        document.getElementById('scanner-status').textContent = 'Buscando código...';
+        scanBarcodeFrame(video);
+      } else {
+        video.oncanplay = () => {
+          document.getElementById('scanner-status').textContent = 'Buscando código...';
+          scanBarcodeFrame(video);
+        };
+      }
+    }, 800);
   } catch(e) {
-    document.getElementById('scanner-status').textContent = '❌ No se pudo acceder a la cámara';
+    alert('No se pudo acceder a la cámara. Verifica los permisos en tu navegador.');
+    closeBarcodeScanner();
     console.error(e);
   }
 }
