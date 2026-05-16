@@ -1394,6 +1394,8 @@ function scanBarcodeFrame(video) {
 }
 
 function handleScannedBarcode(barcode) {
+  // DEBUG: show what was scanned
+  alert('Código leído: ' + barcode + ' (largo: ' + barcode.length + ')');
   // Normalize: trim, remove leading zeros variations
   const normalized = barcode.trim();
   let product = PRODUCTS.find(p => p.barcode === normalized);
