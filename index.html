@@ -123,7 +123,7 @@
           <div class="step-label">④ Cantidad</div>
           <div class="qty-selector">
             <button class="qty-btn" onclick="changeQty(-1)">−</button>
-            <span id="qty-display">1</span>
+            <span id="qty-display" contenteditable="true" oninput="onQtyInput(this)" onkeydown="onQtyKeydown(event)" style="min-width:36px; text-align:center; outline:none; border-bottom:2px solid var(--gold-border); padding:0 4px;">1</span>
             <button class="qty-btn" onclick="changeQty(1)">+</button>
             <button class="qty-confirm-btn" onclick="confirmAddProduct()">Agregar a la orden ✓</button>
           </div>

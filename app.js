@@ -659,11 +659,26 @@ function selectVariation(barcode) {
   document.getElementById('qty-display').textContent = 1;
   document.getElementById('step-qty').style.display = 'block';
   document.getElementById('step-qty').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => document.getElementById('qty-display').focus(), 100);
 }
 
 function changeQty(delta) {
-  stepState.qty = Math.max(1, (stepState.qty || 1) + delta);
-  document.getElementById('qty-display').textContent = stepState.qty;
+  const el = document.getElementById('qty-display');
+  const current = parseInt(el.textContent) || 1;
+  stepState.qty = Math.max(1, current + delta);
+  el.textContent = stepState.qty;
+}
+
+function onQtyInput(el) {
+  const val = parseInt(el.textContent) || 1;
+  stepState.qty = Math.max(1, val);
+}
+
+function onQtyKeydown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmAddProduct(); }
+  if (!/[\d]/.test(e.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab'].includes(e.key)) {
+    e.preventDefault();
+  }
 }
 
 function confirmAddProduct() {
@@ -1119,6 +1134,18 @@ function posAddProduct(barcode) {
   renderPOSCart();
 }
 
+function posSetQty(barcode, value) {
+  const qty = Math.max(1, parseInt(value) || 1);
+  const item = posCart.find(c => c.barcode === barcode);
+  if (!item) return;
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  item.qty = qty;
+  item.price = product ? getPrice(product) : item.price;
+  item.subtotal = item.price * qty;
+  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
 function posChangeQty(barcode, delta) {
   const item = posCart.find(c => c.barcode === barcode);
   if (!item) return;
@@ -1193,7 +1220,10 @@ function renderPOSCart() {
         </div>
         <div class="pos-cart-qty">
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', -1)">−</button>
-          <span class="qty-num">${item.qty}</span>
+          <input type="number" class="qty-num-input" value="${item.qty}" min="1" max="999" 
+            onchange="posSetQty('${item.barcode}', this.value)"
+            onclick="this.select()"
+            style="width:38px; text-align:center; padding:3px 2px; border:1px solid var(--border); border-radius:4px; font-size:13px; font-weight:500;">
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', 1)">+</button>
         </div>
         <span class="pos-cart-total">$${item.subtotal.toFixed(2)}</span>
