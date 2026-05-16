@@ -1351,24 +1351,43 @@ async function openBarcodeScanner() {
     const codeReader = new ZXing.BrowserMultiFormatReader();
     zxingReader = codeReader;
 
-    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-    // Prefer back camera
-    const backCamera = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
-    const deviceId = backCamera ? backCamera.deviceId : undefined;
-
-    codeReader.decodeFromVideoDevice(deviceId, 'scanner-video', (result, err) => {
-      if (result) {
-        closeBarcodeScanner();
-        handleScannedBarcode(result.getText());
-      }
-      if (err && !(err instanceof ZXing.NotFoundException)) {
-        console.warn('Scan error:', err);
-      }
+    // Get camera stream directly first to check permissions
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: { ideal: 'environment' } } 
     });
+    scannerStream = stream;
+
+    // Attach stream to video manually
+    const video = document.getElementById('scanner-video');
+    video.srcObject = stream;
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+    await video.play();
 
     document.getElementById('scanner-status').textContent = 'Apunta al código de barras';
+
+    // Use ZXing to decode from the video element continuously
+    const scanLoop = async () => {
+      if (!zxingReader) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      try {
+        const result = await codeReader.decodeFromCanvas(canvas);
+        if (result) {
+          closeBarcodeScanner();
+          handleScannedBarcode(result.getText());
+          return;
+        }
+      } catch(e) { /* not found, keep scanning */ }
+      scannerAnimFrame = requestAnimationFrame(scanLoop);
+    };
+    scannerAnimFrame = requestAnimationFrame(scanLoop);
+
   } catch(e) {
-    alert('No se pudo acceder a la cámara. Verifica los permisos.');
+    alert('Error: ' + e.message);
     closeBarcodeScanner();
     console.error(e);
   }
