@@ -308,13 +308,10 @@ function renderDeliveryOrders(orders) {
     const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
     return `
     <div class="order-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-family:var(--font-display); font-size:22px; font-weight:600; color:var(--gold); letter-spacing:0.02em; flex-shrink:0;">#${String(o.id).padStart(5,'0')}</span>
-          <div>
-            <div class="order-name">${o.client}</div>
-            <div class="order-business">${o.business}</div>
-          </div>
+      <div class="order-header">
+        <div>
+          <div class="order-name">${o.client}</div>
+          <div class="order-business">${o.business}</div>
         </div>
         <span class="status-badge badge-lista">Lista</span>
       </div>
@@ -501,48 +498,22 @@ function renderOrders(orders) {
     ).join('');
     return `
     <div class="order-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-family:var(--font-display); font-size:22px; font-weight:600; color:var(--gold); letter-spacing:0.02em; flex-shrink:0;">#${String(o.id).padStart(5,'0')}</span>
-          <div>
-            <div class="order-name">${o.client}</div>
-            <div class="order-business">${o.business}</div>
-          </div>
+      <div class="order-header">
+        <div>
+          <div class="order-name">${o.client}</div>
+          <div class="order-business">${o.business}</div>
         </div>
-        <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)" style="flex-shrink:0;">
+        <div style="display:flex; gap:8px; align-items:center;">
+        <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Imprimir orden">🖨️</button>
+        <button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Editar orden">✏️</button>
+        ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;" title="Hacer picking">📦 Picking</button>` : ''}
+        <button onclick="duplicateOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Duplicar orden">📋 Duplicar</button>
+        <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)">
           ${statusOptions}
         </select>
-      </div>
-      <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; margin-bottom:10px; display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
-        <div style="display:flex; align-items:center; gap:6px;">
-          <span style="font-size:14px;">👤</span>
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Vendedor</div>
-            <div style="font-size:13px; font-weight:600; color:var(--text);">${o.seller}</div>
-          </div>
         </div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <span style="font-size:14px;">🕐</span>
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Fecha</div>
-            <div style="font-size:13px; font-weight:600; color:var(--text);">${date}</div>
-          </div>
-        </div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <span style="font-size:14px;">📞</span>
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Teléfono</div>
-            <div style="font-size:13px; font-weight:600; color:var(--text);">${o.phone}</div>
-          </div>
-        </div>
-        ${o.payment_method ? `<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:14px;">💳</span><div><div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Pago</div><div style="font-size:13px; font-weight:600; color:var(--text);">${o.payment_method}</div></div></div>` : ''}
       </div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-        <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Imprimir">🖨️</button>
-        ${o.status === 'Nueva' ? `<button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Editar">✏️</button>` : ''}
-        ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;">📦 Empaque</button>` : ''}
-        <button onclick="duplicateOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Duplicar">📋 Duplicar</button>
-      </div>
+      <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}${o.payment_method ? ` · 💳 ${o.payment_method}` : ''}</div>
       <div class="order-meta">
         📍 ${o.address}
         ${o.permit ? ` · Permit: ${o.permit}` : ' · <span class="warn">Sin seller permit</span>'}
@@ -632,11 +603,6 @@ function selectBrand(brand) {
   stepState = { brand, category: null, variation: null, qty: 1 };
   document.querySelectorAll('#brand-options .step-chip').forEach(b => b.classList.remove('active'));
   document.querySelector(`#brand-options .step-chip[onclick="selectBrand('${brand}')"]`).classList.add('active');
-  // Reset category and variation
-  document.querySelectorAll('#category-options .step-chip').forEach(b => b.classList.remove('active'));
-  document.getElementById('step-variation').style.display = 'none';
-  document.getElementById('step-qty').style.display = 'none';
-  document.getElementById('variation-search').value = '';
 
   const categories = [...new Set(PRODUCTS.filter(p => p.brand === brand).map(p => p.category))].sort();
   const container = document.getElementById('category-options');
@@ -1096,13 +1062,7 @@ function renderPOSBrands() {
 function selectPOSBrand(brand) {
   posSelectedBrand = brand;
   posSelectedCategory = null;
-  posFilteredProducts = [];
   renderPOSBrands();
-  // Clear product grid and reset active category chip
-  const prodContainer = document.getElementById('pos-products');
-  if (prodContainer) prodContainer.innerHTML = '';
-  // Reset active state on category chips
-  document.querySelectorAll('#pos-category-chips .filter-chip').forEach(c => c.classList.remove('active'));
 
   const categories = [...new Set(PRODUCTS.filter(p => p.brand === brand).map(p => p.category))].sort();
   const container = document.getElementById('pos-category-chips');
@@ -1155,18 +1115,6 @@ function posAddProduct(barcode) {
     const price = getPrice(product);
     posCart.push({ barcode: product.barcode, brand: product.brand, code: product.color_code || '—', name: product.name, price, qty: 1, subtotal: price });
   }
-  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
-  renderPOSCart();
-}
-
-function posSetQty(barcode, value) {
-  const qty = Math.max(1, parseInt(value) || 1);
-  const item = posCart.find(c => c.barcode === barcode);
-  if (!item) return;
-  const product = PRODUCTS.find(p => p.barcode === barcode);
-  item.qty = qty;
-  item.price = product ? getPrice(product) : item.price;
-  item.subtotal = item.price * qty;
   if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
   renderPOSCart();
 }
@@ -1245,7 +1193,7 @@ function renderPOSCart() {
         </div>
         <div class="pos-cart-qty">
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', -1)">−</button>
-          <input type="number" value="${item.qty}" min="1" max="999" onclick="this.select()" onchange="posSetQty('${item.barcode}', this.value)" style="width:38px; text-align:center; padding:3px 2px; border:1px solid var(--border); border-radius:4px; font-size:13px; font-weight:500; background:var(--surface);">
+          <span class="qty-num">${item.qty}</span>
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', 1)">+</button>
         </div>
         <span class="pos-cart-total">$${item.subtotal.toFixed(2)}</span>
@@ -1317,131 +1265,6 @@ function posSearch(query) {
     p.brand.toLowerCase().includes(q)
   );
   renderPOSProducts(results);
-}
-
-// ── BARCODE SCANNER (CAMERA) ──────────────────────────────
-let scannerStream = null;
-let scannerAnimFrame = null;
-let zxingReader = null;
-
-async function openBarcodeScanner() {
-  const overlay = document.getElementById('scanner-overlay');
-  const video = document.getElementById('scanner-video');
-  overlay.style.display = 'flex';
-  document.getElementById('scanner-status').textContent = 'Iniciando cámara...';
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } }
-    });
-    scannerStream = stream;
-    video.srcObject = stream;
-    video.setAttribute('playsinline', '');
-    video.muted = true;
-    video.play();
-
-    document.getElementById('scanner-status').textContent = 'Apunta al código de barras';
-
-    // Use BarcodeDetector if available (Chrome/Android), else poll with canvas
-    if ('BarcodeDetector' in window) {
-      const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] });
-      const detect = async () => {
-        if (!scannerStream) return;
-        try {
-          const results = await detector.detect(video);
-          if (results.length > 0) {
-            closeBarcodeScanner();
-            handleScannedBarcode(results[0].rawValue);
-            return;
-          }
-        } catch(e) {}
-        scannerAnimFrame = requestAnimationFrame(detect);
-      };
-      setTimeout(() => { scannerAnimFrame = requestAnimationFrame(detect); }, 500);
-    } else {
-      // Safari fallback: load ZXing
-      if (!window.ZXing) {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js';
-        document.head.appendChild(script);
-        await new Promise(r => { script.onload = r; script.onerror = r; });
-      }
-      if (!window.ZXing) {
-        document.getElementById('scanner-status').textContent = '⚠️ Escáner no disponible en este navegador';
-        return;
-      }
-      const codeReader = new ZXing.BrowserMultiFormatReader();
-      zxingReader = codeReader;
-      const canvas = document.createElement('canvas');
-      const detect = async () => {
-        if (!scannerStream || !zxingReader) return;
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        try {
-          const result = await codeReader.decodeFromCanvas(canvas);
-          if (result) {
-            closeBarcodeScanner();
-            handleScannedBarcode(result.getText());
-            return;
-          }
-        } catch(e) {}
-        scannerAnimFrame = setTimeout(detect, 200);
-      };
-      setTimeout(detect, 800);
-    }
-  } catch(e) {
-    alert('Error al acceder a la cámara: ' + e.message);
-    closeBarcodeScanner();
-  }
-}
-
-function scanBarcodeFrame(video) {
-  // Legacy fallback — not used with ZXing
-}
-
-function handleScannedBarcode(barcode) {
-  const normalized = barcode.trim();
-  
-  // Check if PRODUCTS is loaded
-  if (!PRODUCTS || PRODUCTS.length === 0) {
-    showToast('⚠️ Productos no cargados aún, intenta de nuevo');
-    return;
-  }
-
-  let product = PRODUCTS.find(p => String(p.barcode).trim() === normalized);
-  if (!product) product = PRODUCTS.find(p => String(p.barcode).trim() === normalized.replace(/^0+/, ''));
-  if (!product && normalized.length > 6) {
-    product = PRODUCTS.find(p => p.barcode && normalized.endsWith(String(p.barcode).trim()));
-    if (!product) product = PRODUCTS.find(p => p.barcode && String(p.barcode).trim().endsWith(normalized));
-  }
-
-  if (product) {
-    posAddProduct(product.barcode);
-    showToast(`✓ ${product.brand} [${product.color_code}] ${product.name}`);
-  } else {
-    showToast(`❌ No encontrado: ${normalized} (${PRODUCTS.length} productos cargados)`);
-  }
-}
-
-function closeBarcodeScanner() {
-  if (zxingReader) {
-    try { zxingReader.reset(); } catch(e) {}
-    zxingReader = null;
-  }
-  if (scannerStream) {
-    scannerStream.getTracks().forEach(t => t.stop());
-    scannerStream = null;
-  }
-  if (scannerAnimFrame) {
-    cancelAnimationFrame(scannerAnimFrame);
-    scannerAnimFrame = null;
-  }
-  const video = document.getElementById('scanner-video');
-  if (video) { video.srcObject = null; }
-  const overlay = document.getElementById('scanner-overlay');
-  if (overlay) overlay.style.display = 'none';
 }
 
 function posScanBarcode(e) {
@@ -1618,53 +1441,85 @@ async function confirmCobrar() {
 let pickingOrder = null;
 
 async function openPicking(id) {
-  let order = allOrders.find(o => o.id === id) || window._orders?.find(o => o.id === id);
+  const order = allOrders.find(o => o.id === id) || window._orders?.find(o => o.id === id);
   if (!order) {
     try {
       const res = await supabase(`orders?id=eq.${id}&select=*`);
-      order = res && res[0];
+      pickingOrder = res && res[0];
     } catch(e) { showToast('❌ Error cargando orden'); return; }
+  } else {
+    pickingOrder = order;
   }
-  if (!order) return;
-  pickingOrder = order;
+  if (!pickingOrder) return;
 
-  // Load saved picking state
-  const saved = order.picking || {};
-
-  document.getElementById('picking-order-title').textContent = `Empaque — Orden #${String(order.id).padStart(5,'0')}`;
-  document.getElementById('picking-business').textContent = `${order.client} · ${order.business}`;
-
-  const linesHTML = order.lines.map((l, i) => {
-    const done = saved[i] || false;
-    const delivered = saved[`delivered_${i}`] !== undefined ? saved[`delivered_${i}`] : l.qty;
-    const short = delivered < l.qty;
+  // Init picking state from saved or fresh
+  const savedPicking = pickingOrder.picking || {};
+  
+  document.getElementById('picking-order-title').textContent = `Picking — ${pickingOrder.client}`;
+  document.getElementById('picking-business').textContent = pickingOrder.business;
+  
+  const linesHTML = pickingOrder.lines.map((l, idx) => {
+    const checked = savedPicking[idx] || false;
     return `
-    <div class="picking-item ${done ? 'picked' : ''} ${short && done ? 'short' : ''}" id="pick-item-${i}" style="cursor:default;">
-      <div class="picking-checkbox ${done ? 'checked' : ''}" onclick="togglePick(${i})" style="cursor:pointer; flex-shrink:0;">${done ? '✓' : ''}</div>
-      <div class="picking-info" style="flex:1; min-width:0;">
+    <div class="picking-item ${checked ? 'picked' : ''}" id="pick-item-${idx}">
+      <div class="picking-checkbox ${checked ? 'checked' : ''}">
+        ${checked ? '✓' : ''}
+      </div>
+      <div class="picking-info">
         <div class="picking-product">${l.brand} [${l.code}] ${l.name}</div>
-        <div class="picking-qty" style="font-size:11px; color:var(--text-faint); font-family:monospace; margin-top:2px;">${l.barcode}</div>
+        <div class="picking-qty">Cantidad: <strong>${l.qty}</strong> &nbsp;·&nbsp; <span style="font-family:monospace; font-size:11px; color:var(--text-faint);">${l.barcode}</span></div>
       </div>
-      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; margin-left:8px;">
-        <div style="font-size:11px; color:var(--text-faint);">Ordenadas: <strong style="color:var(--text);">${l.qty}</strong></div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <span style="font-size:11px; color:var(--text-faint);">Entregadas:</span>
-          <input type="number" id="delivered-${i}" value="${delivered}" min="0" max="${l.qty}" 
-            onclick="event.stopPropagation()" 
-            oninput="updateDelivered(${i}, ${l.qty})"
-            style="width:52px; text-align:center; padding:3px 6px; border:1px solid ${short ? 'var(--danger)' : 'var(--border)'}; border-radius:4px; font-size:13px; font-weight:600; background:${short ? 'var(--danger-bg)' : 'var(--surface)'}; color:${short ? 'var(--danger)' : 'var(--text)'};">
-        </div>
-        ${short ? `<div style="font-size:10px; color:var(--danger); font-weight:600;">⚠ Faltan ${l.qty - delivered}</div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
+    </div>
+  `}).join('');
 
   document.getElementById('picking-lines').innerHTML = linesHTML;
   updatePickingProgress();
   document.getElementById('picking-modal').style.display = 'flex';
+  // Focus scan input
+  setTimeout(() => document.getElementById('picking-scan-input').focus(), 200);
+}
+
+function handlePickingScan(e) {
+  if (e.key !== 'Enter') return;
+  const input = document.getElementById('picking-scan-input');
+  const barcode = input.value.trim();
+  input.value = '';
+  if (!barcode || !pickingOrder) return;
+
+  // Find matching product in order
+  const idx = pickingOrder.lines.findIndex(l => l.barcode === barcode);
+  if (idx === -1) {
+    showPickingScanFeedback('❌ Producto no encontrado en esta orden', 'error');
+    return;
+  }
+
+  const item = document.getElementById(`pick-item-${idx}`);
+  if (item.classList.contains('picked')) {
+    showPickingScanFeedback('⚠️ Este producto ya fue escaneado', 'warning');
+    return;
+  }
+
+  // Mark as picked
+  item.classList.add('picked');
+  const checkbox = item.querySelector('.picking-checkbox');
+  checkbox.classList.add('checked');
+  checkbox.textContent = '✓';
+  item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  showPickingScanFeedback(`✓ ${pickingOrder.lines[idx].name}`, 'success');
+  updatePickingProgress();
+}
+
+function showPickingScanFeedback(msg, type) {
+  const el = document.getElementById('picking-scan-feedback');
+  const colors = { success: '#16a34a', error: '#dc2626', warning: '#d97706' };
+  el.textContent = msg;
+  el.style.color = colors[type] || '#16a34a';
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, 2000);
 }
 
 function togglePick(idx) {
+  // Manual override — admin can tap to toggle
   const item = document.getElementById(`pick-item-${idx}`);
   const checkbox = item.querySelector('.picking-checkbox');
   const isPicked = item.classList.contains('picked');
@@ -1680,142 +1535,71 @@ function togglePick(idx) {
   updatePickingProgress();
 }
 
-function updateDelivered(idx, ordered) {
-  const input = document.getElementById(`delivered-${idx}`);
-  let val = Math.max(0, Math.min(ordered, parseInt(input.value) || 0));
-  input.value = val;
-  const short = val < ordered;
-  input.style.borderColor = short ? 'var(--danger)' : 'var(--border)';
-  input.style.background = short ? 'var(--danger-bg)' : 'var(--surface)';
-  input.style.color = short ? 'var(--danger)' : 'var(--text)';
-  // Auto-check item when quantity is set
-  if (val > 0) {
-    const item = document.getElementById(`pick-item-${idx}`);
-    const checkbox = item.querySelector('.picking-checkbox');
-    item.classList.add('picked');
-    checkbox.classList.add('checked');
-    checkbox.textContent = '✓';
-  }
-  updatePickingProgress();
-}
-
 function updatePickingProgress() {
-  if (!pickingOrder) return;
   const total = pickingOrder.lines.length;
   const picked = document.querySelectorAll('.picking-item.picked').length;
   document.getElementById('picking-progress').textContent = `${picked} / ${total} productos`;
-  const btn = document.getElementById('picking-confirm-btn');
-  btn.disabled = picked < total;
-  btn.style.opacity = picked < total ? '0.5' : '1';
+  document.getElementById('picking-confirm-btn').disabled = picked < total;
+  document.getElementById('picking-confirm-btn').style.opacity = picked < total ? '0.5' : '1';
 }
 
-function printPackingSlip() {
-  if (!pickingOrder) return;
-  const o = pickingOrder;
-  const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Empaque #${String(o.id).padStart(5,'0')}</title>
-  <style>
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family: Arial, sans-serif; font-size:13px; max-width:480px; margin:20px auto; padding:20px; color:#111; }
-    .header { display:flex; justify-content:space-between; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid #b8952a; }
-    .title { font-size:20px; font-weight:700; color:#b8952a; }
-    .subtitle { font-size:12px; color:#999; margin-top:2px; }
-    .client-box { background:#faf9f7; border:1px solid #e8d5a3; border-radius:8px; padding:12px; margin-bottom:16px; }
-    .label { font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:#b0a898; margin-bottom:2px; }
-    .value { font-size:14px; font-weight:600; margin-bottom:6px; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .products-title { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#b8952a; font-weight:700; margin-bottom:8px; }
-    .product-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #ede9e0; border-radius:6px; margin-bottom:6px; }
-    .qty-box { width:32px; height:32px; background:#f5edda; border:1px solid #e8d5a3; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#b8952a; flex-shrink:0; }
-    .check-box { width:20px; height:20px; border:1.5px solid #ccc; border-radius:4px; margin-left:auto; flex-shrink:0; }
-    .prod-name { font-size:13px; font-weight:500; }
-    .prod-code { font-size:10px; color:#b0a898; font-family:monospace; }
-    .notes { margin-top:12px; padding:10px; background:#fef9ee; border-left:3px solid #b8952a; font-style:italic; font-size:12px; color:#666; }
-    .footer { margin-top:16px; padding-top:12px; border-top:1px solid #eee; display:flex; justify-content:space-between; font-size:11px; color:#aaa; }
-    .print-btn { position:fixed; bottom:20px; right:20px; background:#b8952a; color:#fff; border:none; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
-    @media print { .print-btn { display:none; } }
-  </style></head><body>
-  <div class="header">
-    <div>
-      <div class="title">Hoja de Empaque</div>
-      <div class="subtitle">Orden #${String(o.id).padStart(5,'0')} · ${date}</div>
-    </div>
-    <div style="text-align:right; font-size:11px; color:#aaa;">LucyGlam Beauty</div>
-  </div>
-  <div class="client-box">
-    <div class="grid">
-      <div><div class="label">Cliente</div><div class="value">${o.client}</div></div>
-      <div><div class="label">Negocio</div><div class="value">${o.business}</div></div>
-    </div>
-    <div><div class="label">Teléfono</div><div class="value">${o.phone}</div></div>
-    <div><div class="label">Dirección</div><div class="value">${o.address}</div></div>
-  </div>
-  <div class="products-title">${o.lines.reduce((s,l)=>s+l.qty,0)} unidades · ${o.lines.length} referencia${o.lines.length!==1?'s':''}</div>
-  ${o.lines.map((l,i)=>{
-    const delivered = o.picking && o.picking[`delivered_${i}`] !== undefined ? o.picking[`delivered_${i}`] : null;
-    const short = delivered !== null && delivered < l.qty;
-    return `
-    <div class="product-row" style="${short ? 'background:#fff5f5; border-color:#fca5a5;' : ''}">
-      <div class="qty-box">${l.qty}</div>
-      <div style="flex:1;">
-        <div class="prod-name">${l.brand} [${l.code}] ${l.name}</div>
-        <div class="prod-code">${l.barcode}</div>
-        ${short ? `<div style="font-size:10px; color:#dc2626; font-weight:600; margin-top:2px;">⚠ Entregadas: ${delivered} / ${l.qty}</div>` : ''}
-      </div>
-      <div class="check-box"></div>
-    </div>`;
-  }).join('')}
-  ${o.notes ? `<div class="notes">📝 ${o.notes}</div>` : ''}
-  <div class="footer">
-    <span>Vendedor: ${o.seller}</span>
-    <span>Total: $${parseFloat(o.total).toFixed(2)}</span>
-  </div>
-  </body></html>`;
-  const overlay = document.getElementById('invoice-overlay');
-  const frame = document.getElementById('invoice-frame');
-  if (overlay && frame) {
-    frame.srcdoc = html;
-    overlay.style.display = 'flex';
-  } else {
-    const win = window.open('', '_blank');
-    win.document.write(html);
-    win.document.close();
-  }
+async function savePicking() {
+  // Save partial progress
+  const picking = {};
+  pickingOrder.lines.forEach((l, idx) => {
+    picking[idx] = document.getElementById(`pick-item-${idx}`).classList.contains('picked');
+  });
+  try {
+    await supabase(`orders?id=eq.${pickingOrder.id}`, { method: 'PATCH', body: JSON.stringify({ picking }) });
+    showToast('✓ Progreso guardado');
+  } catch(e) { showToast('❌ Error al guardar'); }
 }
-
 
 async function confirmPicking() {
   if (!pickingOrder) return;
-  if (!confirm('¿Marcar esta orden como Lista para envío?')) return;
+  if (!confirm('¿Confirmar picking completo? Esto descontará el inventario y marcará la orden como Lista.')) return;
+
   const btn = document.getElementById('picking-confirm-btn');
   btn.disabled = true;
   btn.textContent = 'Procesando...';
+
   try {
-    // Save picking state
+    // Deduct stock for each product
+    for (const line of pickingOrder.lines) {
+      try {
+        const prod = PRODUCTS.find(p => p.barcode === line.barcode);
+        if (prod && prod.id) {
+          const current = await supabase(`products?id=eq.${prod.id}&select=id,stock`);
+          if (current && current[0]) {
+            const newStock = Math.max(0, (current[0].stock || 0) - line.qty);
+            await supabase(`products?id=eq.${prod.id}`, { method: 'PATCH', body: JSON.stringify({ stock: newStock }) });
+            await supabase('inventory_movements', {
+              method: 'POST',
+              headers: { 'Prefer': 'return=representation' },
+              body: JSON.stringify({ product_id: prod.id, type: 'out', quantity: line.qty, order_id: pickingOrder.id, notes: `Picking orden #${pickingOrder.id}` })
+            });
+          }
+        }
+      } catch(e) { console.error('Stock error:', e); }
+    }
+
+    // Mark picking complete and update status
     const picking = {};
-    pickingOrder.lines.forEach((l, i) => {
-      picking[i] = document.getElementById(`pick-item-${i}`)?.classList.contains('picked') || false;
-      const deliveredInput = document.getElementById(`delivered-${i}`);
-      picking[`delivered_${i}`] = deliveredInput ? parseInt(deliveredInput.value) || 0 : l.qty;
-    });
-    // Build updated lines with delivered quantities
-    const updatedLines = pickingOrder.lines.map((l, i) => ({
-      ...l,
-      delivered: picking[`delivered_${i}`] !== undefined ? picking[`delivered_${i}`] : l.qty
-    }));
+    pickingOrder.lines.forEach((l, idx) => { picking[idx] = true; });
     await supabase(`orders?id=eq.${pickingOrder.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'Lista', picking, lines: updatedLines })
+      body: JSON.stringify({ status: 'Lista', picking })
     });
+
     closePicking();
-    showToast('✓ Orden marcada como Lista');
+    showToast('✓ Picking completo — orden marcada como Lista');
     await loadOrders();
   } catch(e) {
-    showToast('❌ Error al confirmar');
+    showToast('❌ Error al confirmar picking');
     console.error(e);
   } finally {
     btn.disabled = false;
-    btn.textContent = '✅ Confirmar — orden lista para envío';
+    btn.textContent = '✅ Confirmar picking completo';
   }
 }
 
@@ -2549,45 +2333,19 @@ const LOGO_B64 = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BS
 function printOrder(id) {
   const order = window._orders ? window._orders.find(o => o.id === id) : null;
   if (!order) return;
-  const html = buildInvoiceHTML(order);
-  const overlay = document.getElementById('invoice-overlay');
-  const frame = document.getElementById('invoice-frame');
-  if (overlay && frame) {
-    frame.srcdoc = html;
-    overlay.style.display = 'flex';
-  } else {
-    const win = window.open('', '_blank');
-    win.document.write(html);
-    win.document.close();
-  }
-}
-
-function closeInvoice() {
-  document.getElementById('invoice-overlay').style.display = 'none';
-  document.getElementById('invoice-frame').srcdoc = '';
-}
-
-function printInvoiceFrame() {
-  document.getElementById('invoice-frame').contentWindow.print();
-}
-
-function buildInvoiceHTML(order) {
   const date = new Date(order.created_at).toLocaleString('es-MX', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   });
 
-  const linesHTML = order.lines.map(l => {
-    const delivered = l.delivered !== undefined && l.delivered !== l.qty ? l.delivered : null;
-    const subtotal = delivered !== null ? parseFloat(l.price) * delivered : parseFloat(l.subtotal);
-    return `
+  const linesHTML = order.lines.map(l => `
     <tr>
-      <td>${l.brand} [${l.code}] ${l.name}${delivered !== null ? `<br><span style="font-size:10px; color:#dc2626; font-weight:600;">⚠ Entregadas: ${delivered} de ${l.qty} pedidas</span>` : ''}</td>
-      <td style="text-align:center;">${delivered !== null ? delivered : l.qty}</td>
+      <td>${l.brand} [${l.code}] ${l.name}</td>
+      <td style="text-align:center;">${l.qty}</td>
       <td style="text-align:right;">$${parseFloat(l.price).toFixed(2)}</td>
-      <td style="text-align:right;">$${subtotal.toFixed(2)}</td>
-    </tr>`;
-  }).join('');
+      <td style="text-align:right;">$${parseFloat(l.subtotal).toFixed(2)}</td>
+    </tr>
+  `).join('');
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -2740,5 +2498,8 @@ function buildInvoiceHTML(order) {
 </body>
 </html>`;
 
-  return html;
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
 }
