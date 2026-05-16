@@ -2507,9 +2507,6 @@ async function init() {
 init();
 
 // ── Scanner (ZXing UMD — iPhone, Android, desktop) ──────────
-let scannerActive = false;
-let codeReader = null;
-let scannedBarcode = null;
 
 async function openScanner() {
   document.getElementById('scanner-modal').style.display = 'flex';
@@ -2580,7 +2577,6 @@ document.addEventListener('keydown', e => {
 });
 
 // ── Edit order ───────────────────────────────────────────────
-let editingOrderId = null;
 let editLineCount = 0;
 
 function openEditModal(id) {
