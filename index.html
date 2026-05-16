@@ -698,6 +698,24 @@
   </div>
 
 
+  <!-- SELLERS TAB -->
+  <div class="tab-content" id="tab-sellers" style="display:none;">
+    <div class="section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Comisiones y Metas</h2>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">20% comisión · Meta semanal $2,500 → +$125</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <label style="font-size:13px; color:var(--text-muted);">Semana:</label>
+          <input type="week" id="sellers-week" onchange="loadSellersReport()" style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface); color:var(--text);">
+          <button onclick="loadSellersReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
+        </div>
+      </div>
+      <div id="sellers-report"></div>
+    </div>
+  </div>
+
   <!-- INVOICE OVERLAY -->
   <div id="invoice-overlay" style="display:none; position:fixed; inset:0; background:rgba(28,26,22,0.6); z-index:60; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(2px);">
     <div style="background:var(--surface); border-radius:var(--radius-xl); width:100%; max-width:800px; height:90vh; display:flex; flex-direction:column; box-shadow:var(--shadow-lg); overflow:hidden;">
