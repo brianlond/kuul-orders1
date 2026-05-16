@@ -498,22 +498,48 @@ function renderOrders(orders) {
     ).join('');
     return `
     <div class="order-card">
-      <div class="order-header">
-        <div>
-          <div class="order-name">${o.client}</div>
-          <div class="order-business">${o.business}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:var(--font-display); font-size:22px; font-weight:600; color:var(--gold); letter-spacing:0.02em; flex-shrink:0;">#${String(o.id).padStart(5,'0')}</span>
+          <div>
+            <div class="order-name">${o.client}</div>
+            <div class="order-business">${o.business}</div>
+          </div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-        <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Imprimir orden">🖨️</button>
-        <button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Editar orden">✏️</button>
-        ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;" title="Hacer picking">📦 Picking</button>` : ''}
-        <button onclick="duplicateOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Duplicar orden">📋 Duplicar</button>
-        <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)">
+        <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)" style="flex-shrink:0;">
           ${statusOptions}
         </select>
-        </div>
       </div>
-      <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}${o.payment_method ? ` · 💳 ${o.payment_method}` : ''}</div>
+      <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; margin-bottom:10px; display:flex; gap:16px; flex-wrap:wrap; align-items:center;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:16px;">👤</span>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Vendedor</div>
+            <div style="font-size:13px; font-weight:600; color:var(--text);">${o.seller}</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:16px;">🕐</span>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Fecha</div>
+            <div style="font-size:13px; font-weight:600; color:var(--text);">${date}</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:16px;">📞</span>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Teléfono</div>
+            <div style="font-size:13px; font-weight:600; color:var(--text);">${o.phone}</div>
+          </div>
+        </div>
+        ${o.payment_method ? `<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:16px;">💳</span><div><div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Pago</div><div style="font-size:13px; font-weight:600; color:var(--text);">${o.payment_method}</div></div></div>` : ''}
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+        <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Imprimir orden">🖨️</button>
+        <button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Editar orden">✏️</button>
+        ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;">📦 Empaque</button>` : ''}
+        <button onclick="duplicateOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Duplicar orden">📋 Duplicar</button>
+      </div>
       <div class="order-meta">
         📍 ${o.address}
         ${o.permit ? ` · Permit: ${o.permit}` : ' · <span class="warn">Sin seller permit</span>'}
