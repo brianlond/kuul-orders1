@@ -1322,77 +1322,60 @@ function posSearch(query) {
 // ── BARCODE SCANNER (CAMERA) ──────────────────────────────
 let scannerStream = null;
 let scannerAnimFrame = null;
+let zxingReader = null;
 
 async function openBarcodeScanner() {
   const overlay = document.getElementById('scanner-overlay');
   const video = document.getElementById('scanner-video');
   overlay.style.display = 'flex';
+  document.getElementById('scanner-status').textContent = 'Iniciando cámara...';
+
+  // Load ZXing if not loaded
+  if (!window.ZXing) {
+    try {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    } catch(e) {
+      alert('No se pudo cargar el escáner. Verifica tu conexión.');
+      closeBarcodeScanner();
+      return;
+    }
+  }
 
   try {
-    scannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    const codeReader = new ZXing.BrowserMultiFormatReader();
+    zxingReader = codeReader;
+
+    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+    // Prefer back camera
+    const backCamera = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+    const deviceId = backCamera ? backCamera.deviceId : undefined;
+
+    codeReader.decodeFromVideoDevice(deviceId, 'scanner-video', (result, err) => {
+      if (result) {
+        closeBarcodeScanner();
+        handleScannedBarcode(result.getText());
+      }
+      if (err && !(err instanceof ZXing.NotFoundException)) {
+        console.warn('Scan error:', err);
+      }
     });
-    video.srcObject = scannerStream;
-    video.setAttribute('playsinline', '');
-    video.setAttribute('muted', '');
-    video.muted = true;
-    // Must call play() directly without await on some Android browsers
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(e => console.warn('Play error:', e));
-    }
-    // Wait for video to be ready
-    const startScanning = () => {
-      document.getElementById('scanner-status').textContent = 'Buscando código...';
-      scanBarcodeFrame(video);
-    };
-    video.onloadedmetadata = () => {
-      video.play().catch(e => console.warn(e));
-      setTimeout(startScanning, 300);
-    };
-    video.oncanplay = startScanning;
-    // Fallback
-    setTimeout(() => {
-      if (video.readyState >= 2) startScanning();
-    }, 1500);
+
+    document.getElementById('scanner-status').textContent = 'Apunta al código de barras';
   } catch(e) {
-    alert('No se pudo acceder a la cámara. Verifica los permisos en tu navegador.');
+    alert('No se pudo acceder a la cámara. Verifica los permisos.');
     closeBarcodeScanner();
     console.error(e);
   }
 }
 
 function scanBarcodeFrame(video) {
-  if (!document.getElementById('scanner-overlay') || 
-      document.getElementById('scanner-overlay').style.display === 'none') return;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
-
-  try {
-    if ('BarcodeDetector' in window) {
-      const detector = new BarcodeDetector({ formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39'] });
-      detector.detect(canvas).then(barcodes => {
-        if (barcodes.length > 0) {
-          const barcode = barcodes[0].rawValue;
-          closeBarcodeScanner();
-          handleScannedBarcode(barcode);
-        } else {
-          scannerAnimFrame = requestAnimationFrame(() => scanBarcodeFrame(video));
-        }
-      }).catch(() => {
-        scannerAnimFrame = requestAnimationFrame(() => scanBarcodeFrame(video));
-      });
-    } else {
-      // BarcodeDetector not supported — fallback message
-      document.getElementById('scanner-status').textContent = '⚠️ Tu navegador no soporta escaneo. Usa Chrome en Android.';
-    }
-  } catch(e) {
-    scannerAnimFrame = requestAnimationFrame(() => scanBarcodeFrame(video));
-  }
+  // Legacy fallback — not used with ZXing
 }
 
 function handleScannedBarcode(barcode) {
@@ -1420,6 +1403,10 @@ function handleScannedBarcode(barcode) {
 }
 
 function closeBarcodeScanner() {
+  if (zxingReader) {
+    try { zxingReader.reset(); } catch(e) {}
+    zxingReader = null;
+  }
   if (scannerStream) {
     scannerStream.getTracks().forEach(t => t.stop());
     scannerStream = null;
@@ -1428,6 +1415,8 @@ function closeBarcodeScanner() {
     cancelAnimationFrame(scannerAnimFrame);
     scannerAnimFrame = null;
   }
+  const video = document.getElementById('scanner-video');
+  if (video) { video.srcObject = null; }
   const overlay = document.getElementById('scanner-overlay');
   if (overlay) overlay.style.display = 'none';
 }
