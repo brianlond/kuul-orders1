@@ -1096,7 +1096,13 @@ function renderPOSBrands() {
 function selectPOSBrand(brand) {
   posSelectedBrand = brand;
   posSelectedCategory = null;
+  posFilteredProducts = [];
   renderPOSBrands();
+  // Clear product grid and reset active category chip
+  const prodContainer = document.getElementById('pos-products');
+  if (prodContainer) prodContainer.innerHTML = '';
+  // Reset active state on category chips
+  document.querySelectorAll('#pos-category-chips .filter-chip').forEach(c => c.classList.remove('active'));
 
   const categories = [...new Set(PRODUCTS.filter(p => p.brand === brand).map(p => p.category))].sort();
   const container = document.getElementById('pos-category-chips');
