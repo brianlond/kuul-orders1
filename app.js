@@ -645,6 +645,8 @@ function renderVariations(variations) {
 }
 
 function filterVariations(query) {
+  const q = query.toLowerCase();
+  const filtered = q.length < 1 ? allVariations : allVariations.filter(p =>
     p.name.toLowerCase().includes(q) ||
     (p.color_code && p.color_code.toLowerCase().includes(q))
   );
@@ -714,7 +716,9 @@ function resetSteppedSelector() {
 
 // ── Order search ──────────────────────────────────────────────
 function searchOrders(query) {
+  const q = query.toLowerCase().trim();
   if (!q) {
+    const filtered = currentFilter === 'all' ? allOrders : allOrders.filter(o => o.status === currentFilter);
     renderOrders(filtered);
     return;
   }
@@ -1236,6 +1240,7 @@ function posSearch(query) {
     if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
     return;
   }
+  const results = PRODUCTS.filter(p =>
     p.name.toLowerCase().includes(q) ||
     (p.color_code && p.color_code.toLowerCase().includes(q)) ||
     p.brand.toLowerCase().includes(q)
@@ -1255,7 +1260,10 @@ function posScanBarcode(e) {
 }
 
 function posSearchClient(query) {
+  const box = document.getElementById('pos-client-suggestions');
   if (!query || query.length < 2) { box.style.display = 'none'; return; }
+  const q = query.toLowerCase();
+  const matches = allCustomers.filter(c =>
     c.name.toLowerCase().includes(q) || c.business.toLowerCase().includes(q) || c.phone.includes(q)
   ).slice(0, 5);
   if (!matches.length) { box.style.display = 'none'; return; }
