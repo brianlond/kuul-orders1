@@ -499,6 +499,7 @@ function renderOrders(orders) {
         <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Imprimir orden">🖨️</button>
         <button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Editar orden">✏️</button>
         ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;" title="Hacer picking">📦 Picking</button>` : ''}
+        <button onclick="duplicateOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Duplicar orden">📋 Duplicar</button>
         <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)">
           ${statusOptions}
         </select>
@@ -686,6 +687,55 @@ function resetSteppedSelector() {
   document.getElementById('step-qty').style.display = 'none';
   document.querySelectorAll('.step-chip, .variation-chip').forEach(b => b.classList.remove('active'));
   document.getElementById('variation-search').value = '';
+}
+
+
+// ── Order search ──────────────────────────────────────────────
+function searchOrders(query) {
+  const q = query.toLowerCase().trim();
+  if (!q) {
+    const filtered = currentFilter === 'all' ? allOrders : allOrders.filter(o => o.status === currentFilter);
+    renderOrders(filtered);
+    return;
+  }
+  const results = allOrders.filter(o =>
+    o.client.toLowerCase().includes(q) ||
+    o.business.toLowerCase().includes(q) ||
+    o.phone.includes(q) ||
+    String(o.id).includes(q) ||
+    (o.seller && o.seller.toLowerCase().includes(q))
+  );
+  renderOrders(results);
+  document.getElementById('order-count-label').textContent = results.length + ' resultado' + (results.length !== 1 ? 's' : '');
+}
+
+// ── Duplicate order ───────────────────────────────────────────
+function duplicateOrder(id) {
+  const order = allOrders.find(o => o.id === id);
+  if (!order) return;
+
+  // Switch to nueva orden tab and prefill
+  showTab('vendedor');
+  setTimeout(() => {
+    document.getElementById('client-name').value = order.client;
+    document.getElementById('business-name').value = order.business;
+    document.getElementById('phone').value = order.phone;
+    document.getElementById('permit').value = order.permit || '';
+    document.getElementById('address').value = order.address;
+    document.getElementById('email').value = order.email || '';
+    document.getElementById('notes').value = order.notes || '';
+    onPermitChange();
+
+    // Reset product lines
+    document.getElementById('product-lines').innerHTML = '';
+    lineCount = 0;
+    resetSteppedSelector();
+
+    // Add products from original order
+    order.lines.forEach(l => addProductLine(l.barcode, l.qty));
+    recalcTotal();
+    showToast('✓ Orden duplicada — revisa y envía');
+  }, 100);
 }
 
 // ── Customer search / autofill ───────────────────────────────
@@ -1147,10 +1197,23 @@ function posRecalc() {
   const subtotal = posCart.reduce((sum, i) => sum + i.subtotal, 0);
   const hasTax = document.getElementById('pos-tax-toggle').checked;
   const taxRate = parseFloat(document.getElementById('pos-tax-rate').value) || 0;
-  const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
-  const total = subtotal + taxAmt;
+  
+  // Discount
+  const discountType = document.getElementById('pos-discount-type')?.value || 'pct';
+  const discountVal = parseFloat(document.getElementById('pos-discount-val')?.value) || 0;
+  const discountAmt = discountType === 'pct' ? subtotal * (discountVal / 100) : Math.min(discountVal, subtotal);
+  const subtotalAfterDiscount = subtotal - discountAmt;
+  
+  const taxAmt = hasTax ? subtotalAfterDiscount * (taxRate / 100) : 0;
+  const total = subtotalAfterDiscount + taxAmt;
 
   document.getElementById('pos-subtotal').textContent = '$' + subtotal.toFixed(2);
+  
+  const discRow = document.getElementById('pos-discount-row');
+  if (discRow) discRow.style.display = discountAmt > 0 ? 'flex' : 'none';
+  const discAmt = document.getElementById('pos-discount-amt');
+  if (discAmt) discAmt.textContent = '-$' + discountAmt.toFixed(2);
+  
   document.getElementById('pos-tax-row').style.display = hasTax ? 'flex' : 'none';
   document.getElementById('pos-tax-label').textContent = `Tax (${taxRate.toFixed(2)}%)`;
   document.getElementById('pos-tax-amt').textContent = '$' + taxAmt.toFixed(2);
@@ -1246,11 +1309,23 @@ function posCobrar() {
   const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
   const total = subtotal + taxAmt;
 
+  const subtotal2 = posCart.reduce((sum, i) => sum + i.subtotal, 0);
+  const discType = document.getElementById('pos-discount-type')?.value || 'pct';
+  const discVal = parseFloat(document.getElementById('pos-discount-val')?.value) || 0;
+  const discAmt2 = discType === 'pct' ? subtotal2 * (discVal / 100) : Math.min(discVal, subtotal2);
+  const hasTax2 = document.getElementById('pos-tax-toggle').checked;
+  const taxRate2 = parseFloat(document.getElementById('pos-tax-rate').value) || 0;
+  const taxAmt3 = hasTax2 ? (subtotal2 - discAmt2) * (taxRate2 / 100) : 0;
+  const total3 = subtotal2 - discAmt2 + taxAmt3;
+
   const clientName = posClient ? posClient.name : 'Cliente general';
   document.getElementById('cobrar-summary').innerHTML = `
     <strong>${clientName}</strong><br>
-    ${posCart.length} producto${posCart.length !== 1 ? 's' : ''} · Total: <strong>$${total.toFixed(2)}</strong>
+    ${posCart.length} producto${posCart.length !== 1 ? 's' : ''}${discAmt2 > 0 ? ` · Descuento: -$${discAmt2.toFixed(2)}` : ''} · Total: <strong>$${total3.toFixed(2)}</strong>
   `;
+  // Show WA toggle only if client has phone
+  const waRow = document.getElementById('cobrar-wa-row');
+  if (waRow) waRow.style.display = (posClient && posClient.phone) ? 'flex' : 'none';
   document.getElementById('cobrar-modal').style.display = 'flex';
 }
 
@@ -1266,11 +1341,19 @@ async function confirmCobrar() {
   const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
   const total = subtotal + taxAmt;
 
+  const discountType = document.getElementById('pos-discount-type')?.value || 'pct';
+  const discountVal = parseFloat(document.getElementById('pos-discount-val')?.value) || 0;
+  const discountAmt = discountType === 'pct' ? subtotal * (discountVal / 100) : Math.min(discountVal, subtotal);
+  const subtotalAfterDiscount = subtotal - discountAmt;
+  const taxAmt2 = hasTax ? subtotalAfterDiscount * (taxRate / 100) : 0;
+  const total2 = subtotalAfterDiscount + taxAmt2;
+
   const btn = document.getElementById('cobrar-confirm-btn');
   btn.disabled = true;
   btn.textContent = 'Procesando...';
 
   try {
+    const discountNote = discountAmt > 0 ? ` · Descuento: -$${discountAmt.toFixed(2)}` : '';
     const orderData = {
       seller: 'Caja',
       client: posClient ? posClient.name : 'Cliente general',
@@ -1279,13 +1362,13 @@ async function confirmCobrar() {
       permit: posClient ? (posClient.permit || '') : '',
       address: posClient ? (posClient.address || '') : 'Bodega',
       email: posClient ? (posClient.email || '') : '',
-      notes: `Venta en caja · Pago: ${payment}`,
+      notes: `Venta en caja · Pago: ${payment}${discountNote}`,
       lines: posCart,
       subtotal,
       shipping: null,
       tax_rate: hasTax ? taxRate : null,
-      tax_amount: hasTax ? taxAmt : null,
-      total,
+      tax_amount: hasTax ? taxAmt2 : null,
+      total: total2,
       status: 'Entregada'
     };
 
@@ -1320,10 +1403,17 @@ async function confirmCobrar() {
 
     // Print receipt directly with full order data
     if (inserted && inserted[0]) {
-      const orderForPrint = { ...orderData, id: inserted[0].id, created_at: new Date().toISOString() };
+      const orderForPrint = { ...orderData, id: inserted[0].id, created_at: new Date().toISOString(), total: total2 };
       if (!window._orders) window._orders = [];
       window._orders.unshift(orderForPrint);
       printOrder(inserted[0].id);
+    }
+
+    // WhatsApp receipt if client has phone
+    if (posClient && posClient.phone && document.getElementById('cobrar-wa-toggle')?.checked) {
+      const phone = posClient.phone.replace(/[^0-9]/g, '');
+      const msg = encodeURIComponent(`Hola ${posClient.name}, gracias por tu compra en LucyGlam Beauty 🌟\n\nResumen:\n${posCart.map(i => `• ${i.name} x${i.qty} — $${i.subtotal.toFixed(2)}`).join('\n')}\n\nTotal: $${total2.toFixed(2)}\nPago: ${payment}\n\n¡Gracias por preferirnos!`);
+      window.open(`https://wa.me/1${phone}?text=${msg}`, '_blank');
     }
 
     // Reset POS

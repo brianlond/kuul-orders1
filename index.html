@@ -173,6 +173,9 @@
         <div class="summary-stat"><div class="stat-value" id="stat-total">$0</div><div class="stat-label">Total hoy</div></div>
         <div class="summary-stat"><div class="stat-value" id="stat-new">0</div><div class="stat-label">Nuevas</div></div>
       </div>
+      <div class="field-group" style="margin-bottom:12px; position:relative;">
+        <input type="text" id="order-search" placeholder="🔍 Buscar por cliente, negocio, teléfono o # de orden..." oninput="searchOrders(this.value)" autocomplete="off">
+      </div>
       <div class="filter-bar">
         <button class="filter-chip active" onclick="filterOrders('all', this)">Todas</button>
         <button class="filter-chip" onclick="filterOrders('Nueva', this)">Nueva</button>
@@ -297,16 +300,25 @@
             </div>
             <div class="pos-totals">
               <div class="pos-total-row"><span>Subtotal</span><span id="pos-subtotal">$0.00</span></div>
+              <div class="pos-total-row" id="pos-discount-row" style="display:none; color:var(--success);"><span>Descuento</span><span id="pos-discount-amt">-$0.00</span></div>
               <div class="pos-total-row" id="pos-tax-row" style="display:none;"><span id="pos-tax-label">Tax</span><span id="pos-tax-amt">$0.00</span></div>
               <div class="pos-total-big"><span>Total</span><span id="pos-total">$0.00</span></div>
             </div>
-            <div style="display:flex; gap:8px; margin-bottom:8px;">
-              <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
-                <input type="checkbox" id="pos-tax-toggle" onchange="posRecalc()" style="width:16px; height:16px; accent-color:var(--text);">
+            <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; flex-wrap:wrap;">
+              <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" id="pos-tax-toggle" onchange="posRecalc()" style="width:16px; height:16px; accent-color:var(--gold);">
                 Tax
               </label>
-              <input type="number" id="pos-tax-rate" value="10.25" min="0" max="30" step="0.01" oninput="posRecalc()" style="width:80px; font-size:13px; padding:5px 8px;">
-              <span style="font-size:13px; color:var(--text-muted); align-self:center;">%</span>
+              <input type="number" id="pos-tax-rate" value="10.25" min="0" max="30" step="0.01" oninput="posRecalc()" style="width:72px; font-size:13px; padding:5px 8px;">
+              <span style="font-size:13px; color:var(--text-muted);">%</span>
+            </div>
+            <div style="display:flex; gap:6px; margin-bottom:8px; align-items:center;">
+              <span style="font-size:13px; color:var(--text-muted); white-space:nowrap;">Descuento:</span>
+              <select id="pos-discount-type" onchange="posRecalc()" style="width:auto; font-size:13px; padding:5px 8px;">
+                <option value="pct">%</option>
+                <option value="fixed">$</option>
+              </select>
+              <input type="number" id="pos-discount-val" value="0" min="0" step="0.01" oninput="posRecalc()" style="width:72px; font-size:13px; padding:5px 8px;">
             </div>
             <button class="cobrar-btn" id="pos-cobrar-btn" onclick="posCobrar()" disabled>Cobrar $0.00</button>
           </div>
@@ -444,6 +456,10 @@
           <option value="Transferencia">Transferencia</option>
           <option value="Otro">Otro</option>
         </select>
+      </div>
+      <div class="toggle-row" id="cobrar-wa-row" style="display:none;">
+        <input type="checkbox" id="cobrar-wa-toggle" style="width:16px; height:16px; accent-color:var(--gold);" checked>
+        <label for="cobrar-wa-toggle" style="color:#16a34a;">💬 Enviar recibo por WhatsApp</label>
       </div>
       <button class="submit-btn" id="cobrar-confirm-btn" onclick="confirmCobrar()">Confirmar y cobrar →</button>
       <button class="cancel-btn" onclick="closeCobrarModal()">Cancelar</button>
