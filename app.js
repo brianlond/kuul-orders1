@@ -1341,18 +1341,20 @@ async function openBarcodeScanner() {
     if (playPromise !== undefined) {
       playPromise.catch(e => console.warn('Play error:', e));
     }
-    // Give camera time to start
+    // Wait for video to be ready
+    const startScanning = () => {
+      document.getElementById('scanner-status').textContent = 'Buscando código...';
+      scanBarcodeFrame(video);
+    };
+    video.onloadedmetadata = () => {
+      video.play().catch(e => console.warn(e));
+      setTimeout(startScanning, 300);
+    };
+    video.oncanplay = startScanning;
+    // Fallback
     setTimeout(() => {
-      if (video.videoWidth > 0) {
-        document.getElementById('scanner-status').textContent = 'Buscando código...';
-        scanBarcodeFrame(video);
-      } else {
-        video.oncanplay = () => {
-          document.getElementById('scanner-status').textContent = 'Buscando código...';
-          scanBarcodeFrame(video);
-        };
-      }
-    }, 800);
+      if (video.readyState >= 2) startScanning();
+    }, 1500);
   } catch(e) {
     alert('No se pudo acceder a la cámara. Verifica los permisos en tu navegador.');
     closeBarcodeScanner();
