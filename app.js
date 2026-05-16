@@ -2510,6 +2510,28 @@ const COMMISSION_RATE = 0.20;
 const WEEKLY_GOAL = 2500;
 const WEEKLY_BONUS = 125;
 
+function sellersWeekPrev() {
+  const input = document.getElementById('sellers-week');
+  if (!input.value) return;
+  const { start } = getWeekRange(input.value);
+  start.setDate(start.getDate() - 7);
+  const year = start.getFullYear();
+  const week = getWeekNumber(start);
+  input.value = `${year}-W${String(week).padStart(2,'0')}`;
+  loadSellersReport();
+}
+
+function sellersWeekNext() {
+  const input = document.getElementById('sellers-week');
+  if (!input.value) return;
+  const { start } = getWeekRange(input.value);
+  start.setDate(start.getDate() + 7);
+  const year = start.getFullYear();
+  const week = getWeekNumber(start);
+  input.value = `${year}-W${String(week).padStart(2,'0')}`;
+  loadSellersReport();
+}
+
 function initSellersTab() {
   const weekInput = document.getElementById('sellers-week');
   if (!weekInput.value) {
