@@ -1500,12 +1500,25 @@ async function openPicking(id) {
 
   const linesHTML = order.lines.map((l, i) => {
     const done = saved[i] || false;
+    const delivered = saved[`delivered_${i}`] !== undefined ? saved[`delivered_${i}`] : l.qty;
+    const short = delivered < l.qty;
     return `
-    <div class="picking-item ${done ? 'picked' : ''}" id="pick-item-${i}" onclick="togglePick(${i})">
-      <div class="picking-checkbox ${done ? 'checked' : ''}">${done ? '✓' : ''}</div>
-      <div class="picking-info">
+    <div class="picking-item ${done ? 'picked' : ''} ${short && done ? 'short' : ''}" id="pick-item-${i}" style="cursor:default;">
+      <div class="picking-checkbox ${done ? 'checked' : ''}" onclick="togglePick(${i})" style="cursor:pointer; flex-shrink:0;">${done ? '✓' : ''}</div>
+      <div class="picking-info" style="flex:1; min-width:0;">
         <div class="picking-product">${l.brand} [${l.code}] ${l.name}</div>
-        <div class="picking-qty">Cantidad: <strong>${l.qty}</strong> &nbsp;·&nbsp; <span style="font-family:monospace; font-size:11px; color:var(--text-faint);">${l.barcode}</span></div>
+        <div class="picking-qty" style="font-size:11px; color:var(--text-faint); font-family:monospace; margin-top:2px;">${l.barcode}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; margin-left:8px;">
+        <div style="font-size:11px; color:var(--text-faint);">Ordenadas: <strong style="color:var(--text);">${l.qty}</strong></div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:11px; color:var(--text-faint);">Entregadas:</span>
+          <input type="number" id="delivered-${i}" value="${delivered}" min="0" max="${l.qty}" 
+            onclick="event.stopPropagation()" 
+            oninput="updateDelivered(${i}, ${l.qty})"
+            style="width:52px; text-align:center; padding:3px 6px; border:1px solid ${short ? 'var(--danger)' : 'var(--border)'}; border-radius:4px; font-size:13px; font-weight:600; background:${short ? 'var(--danger-bg)' : 'var(--surface)'}; color:${short ? 'var(--danger)' : 'var(--text)'};">
+        </div>
+        ${short ? `<div style="font-size:10px; color:var(--danger); font-weight:600;">⚠ Faltan ${l.qty - delivered}</div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -1524,6 +1537,25 @@ function togglePick(idx) {
     checkbox.classList.remove('checked');
     checkbox.textContent = '';
   } else {
+    item.classList.add('picked');
+    checkbox.classList.add('checked');
+    checkbox.textContent = '✓';
+  }
+  updatePickingProgress();
+}
+
+function updateDelivered(idx, ordered) {
+  const input = document.getElementById(`delivered-${idx}`);
+  let val = Math.max(0, Math.min(ordered, parseInt(input.value) || 0));
+  input.value = val;
+  const short = val < ordered;
+  input.style.borderColor = short ? 'var(--danger)' : 'var(--border)';
+  input.style.background = short ? 'var(--danger-bg)' : 'var(--surface)';
+  input.style.color = short ? 'var(--danger)' : 'var(--text)';
+  // Auto-check item when quantity is set
+  if (val > 0) {
+    const item = document.getElementById(`pick-item-${idx}`);
+    const checkbox = item.querySelector('.picking-checkbox');
     item.classList.add('picked');
     checkbox.classList.add('checked');
     checkbox.textContent = '✓';
@@ -1584,15 +1616,20 @@ function printPackingSlip() {
     <div><div class="label">Dirección</div><div class="value">${o.address}</div></div>
   </div>
   <div class="products-title">${o.lines.reduce((s,l)=>s+l.qty,0)} unidades · ${o.lines.length} referencia${o.lines.length!==1?'s':''}</div>
-  ${o.lines.map(l=>`
-    <div class="product-row">
+  ${o.lines.map((l,i)=>{
+    const delivered = o.picking && o.picking[`delivered_${i}`] !== undefined ? o.picking[`delivered_${i}`] : null;
+    const short = delivered !== null && delivered < l.qty;
+    return `
+    <div class="product-row" style="${short ? 'background:#fff5f5; border-color:#fca5a5;' : ''}">
       <div class="qty-box">${l.qty}</div>
       <div style="flex:1;">
         <div class="prod-name">${l.brand} [${l.code}] ${l.name}</div>
         <div class="prod-code">${l.barcode}</div>
+        ${short ? `<div style="font-size:10px; color:#dc2626; font-weight:600; margin-top:2px;">⚠ Entregadas: ${delivered} / ${l.qty}</div>` : ''}
       </div>
       <div class="check-box"></div>
-    </div>`).join('')}
+    </div>`;
+  }).join('')}
   ${o.notes ? `<div class="notes">📝 ${o.notes}</div>` : ''}
   <div class="footer">
     <span>Vendedor: ${o.seller}</span>
@@ -1616,10 +1653,17 @@ async function confirmPicking() {
     const picking = {};
     pickingOrder.lines.forEach((l, i) => {
       picking[i] = document.getElementById(`pick-item-${i}`)?.classList.contains('picked') || false;
+      const deliveredInput = document.getElementById(`delivered-${i}`);
+      picking[`delivered_${i}`] = deliveredInput ? parseInt(deliveredInput.value) || 0 : l.qty;
     });
+    // Build updated lines with delivered quantities
+    const updatedLines = pickingOrder.lines.map((l, i) => ({
+      ...l,
+      delivered: picking[`delivered_${i}`] !== undefined ? picking[`delivered_${i}`] : l.qty
+    }));
     await supabase(`orders?id=eq.${pickingOrder.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'Lista', picking })
+      body: JSON.stringify({ status: 'Lista', picking, lines: updatedLines })
     });
     closePicking();
     showToast('✓ Orden marcada como Lista');
@@ -2391,14 +2435,17 @@ function buildInvoiceHTML(order) {
     hour: '2-digit', minute: '2-digit'
   });
 
-  const linesHTML = order.lines.map(l => `
+  const linesHTML = order.lines.map(l => {
+    const delivered = l.delivered !== undefined && l.delivered !== l.qty ? l.delivered : null;
+    const subtotal = delivered !== null ? parseFloat(l.price) * delivered : parseFloat(l.subtotal);
+    return `
     <tr>
-      <td>${l.brand} [${l.code}] ${l.name}</td>
-      <td style="text-align:center;">${l.qty}</td>
+      <td>${l.brand} [${l.code}] ${l.name}${delivered !== null ? `<br><span style="font-size:10px; color:#dc2626; font-weight:600;">⚠ Entregadas: ${delivered} de ${l.qty} pedidas</span>` : ''}</td>
+      <td style="text-align:center;">${delivered !== null ? delivered : l.qty}</td>
       <td style="text-align:right;">$${parseFloat(l.price).toFixed(2)}</td>
-      <td style="text-align:right;">$${parseFloat(l.subtotal).toFixed(2)}</td>
-    </tr>
-  `).join('');
+      <td style="text-align:right;">$${subtotal.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
 
   const html = `<!DOCTYPE html>
 <html lang="es">
