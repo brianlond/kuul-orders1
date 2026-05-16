@@ -632,6 +632,11 @@ function selectBrand(brand) {
   stepState = { brand, category: null, variation: null, qty: 1 };
   document.querySelectorAll('#brand-options .step-chip').forEach(b => b.classList.remove('active'));
   document.querySelector(`#brand-options .step-chip[onclick="selectBrand('${brand}')"]`).classList.add('active');
+  // Reset category and variation
+  document.querySelectorAll('#category-options .step-chip').forEach(b => b.classList.remove('active'));
+  document.getElementById('step-variation').style.display = 'none';
+  document.getElementById('step-qty').style.display = 'none';
+  document.getElementById('variation-search').value = '';
 
   const categories = [...new Set(PRODUCTS.filter(p => p.brand === brand).map(p => p.category))].sort();
   const container = document.getElementById('category-options');
