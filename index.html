@@ -32,6 +32,9 @@
       <button class="tab" id="tab-delivery-btn" onclick="showTab('delivery')">
         🚚 Reparto
       </button>
+      <button class="tab" id="tab-inventory-btn" onclick="showTab('inventory')">
+        📊 Inventario
+      </button>
     </div>
 
     <!-- VENDEDOR -->
@@ -219,6 +222,30 @@
         <div class="empty-state"><div class="empty-icon">🚚</div>No hay órdenes para entregar</div>
       </div>
     </div>
+
+    <!-- INVENTORY -->
+    <div id="tab-inventory" class="section">
+      <div class="day-summary" id="inv-summary" style="display:none;">
+        <div class="summary-stat"><div class="stat-value" id="inv-stat-ok" style="color:#4ade80;">0</div><div class="stat-label">OK</div></div>
+        <div class="summary-stat"><div class="stat-value" id="inv-stat-low" style="color:#fbbf24;">0</div><div class="stat-label">Stock bajo</div></div>
+        <div class="summary-stat"><div class="stat-value" id="inv-stat-out" style="color:#f87171;">0</div><div class="stat-label">Agotados</div></div>
+      </div>
+      <div class="filter-bar">
+        <select id="inv-filter" onchange="loadInventory()" style="width:auto; font-size:13px; padding:6px 12px;">
+          <option value="all">Todos los productos</option>
+          <option value="low">Stock bajo</option>
+          <option value="out">Agotados</option>
+          <option value="ok">En stock OK</option>
+        </select>
+      </div>
+      <div class="admin-bar">
+        <span id="inventory-count-label" class="order-count">0 productos</span>
+        <button class="clear-btn" onclick="loadInventory()">🔄 Actualizar</button>
+      </div>
+      <div id="inventory-list">
+        <div class="empty-state"><div class="empty-icon">📊</div>Cargando inventario...</div>
+      </div>
+    </div>
   </main>
 
 
@@ -331,6 +358,39 @@
       <div id="pm-error" style="font-size:13px; color:var(--danger); margin-bottom:8px;"></div>
       <button class="submit-btn" id="pm-save-btn" onclick="saveProduct()">Guardar producto →</button>
       <button class="cancel-btn" onclick="closeProductModal()">Cancelar</button>
+    </div>
+  </div>
+
+
+  <!-- STOCK MODAL -->
+  <div class="modal-overlay" id="stock-modal" style="display:none;">
+    <div class="modal" style="max-width:360px;">
+      <div class="modal-title" id="stock-modal-title">Agregar stock</div>
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Stock actual: <strong id="stock-current">0</strong> unidades</div>
+      <div class="field-group">
+        <label>Cantidad a agregar</label>
+        <input type="number" id="stock-qty" min="1" placeholder="Ej: 24" style="font-size:20px; text-align:center;">
+      </div>
+      <div class="field-group">
+        <label>Notas <span class="optional">(opcional)</span></label>
+        <input type="text" id="stock-notes" placeholder="Ej: Compra de reposición">
+      </div>
+      <button class="submit-btn" id="stock-save-btn" onclick="saveStock()">Guardar →</button>
+      <button class="cancel-btn" onclick="closeStockModal()">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- MIN STOCK MODAL -->
+  <div class="modal-overlay" id="min-modal" style="display:none;">
+    <div class="modal" style="max-width:360px;">
+      <div class="modal-title" id="min-modal-title">Ajustar mínimo</div>
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">El sistema te avisará cuando el stock baje de este número.</div>
+      <div class="field-group">
+        <label>Stock mínimo</label>
+        <input type="number" id="min-qty" min="0" style="font-size:20px; text-align:center;">
+      </div>
+      <button class="submit-btn" onclick="saveMin()">Guardar →</button>
+      <button class="cancel-btn" onclick="closeMinModal()">Cancelar</button>
     </div>
   </div>
 

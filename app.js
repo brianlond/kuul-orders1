@@ -405,7 +405,7 @@ async function submitOrder() {
 
   try {
     await dbUpsertCustomer({ client, business, phone, address, permit, email });
-    await dbInsertOrder({
+    const insertedOrder = await dbInsertOrder({
       seller, client, business, phone, permit, address, email, notes,
       lines, subtotal,
       shipping: hasShipping ? shippingAmt : null,
@@ -413,6 +413,19 @@ async function submitOrder() {
       tax_amount: hasTax ? taxAmt : null,
       total, status: 'Nueva'
     });
+    // Deduct stock for each product
+    if (insertedOrder && insertedOrder[0]) {
+      for (const line of lines) {
+        try {
+          const prod = await supabase(`products?id=eq.${PRODUCTS.find(p=>p.barcode===line.barcode)?.id || 0}&select=id,stock`);
+          if (prod && prod[0]) {
+            const newStock = Math.max(0, (prod[0].stock || 0) - line.qty);
+            await supabase(`products?id=eq.${prod[0].id}`, { method: 'PATCH', body: JSON.stringify({ stock: newStock }) });
+            await supabase('inventory_movements', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify({ product_id: prod[0].id, type: 'out', quantity: line.qty, order_id: insertedOrder[0].id, notes: `Orden #${insertedOrder[0].id}` }) });
+          }
+        } catch(e) { console.error('Stock deduction error:', e); }
+      }
+    }
     resetForm();
     showToast('✓ Orden enviada correctamente');
   } catch (e) {
@@ -961,6 +974,191 @@ async function deleteProduct(id, name) {
   }
 }
 
+
+// ── Inventory ─────────────────────────────────────────────────
+async function loadInventory() {
+  const list = document.getElementById('inventory-list');
+  if (!list) return;
+  list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando inventario...</div>`;
+  try {
+    const products = await supabase('products?select=*&active=eq.true');
+    products.sort((a,b) => a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name));
+
+    // Get movements for forecast
+    const movements = await supabase('inventory_movements?select=*&order=created_at.desc');
+    renderInventory(products, movements);
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando inventario</div>`;
+    console.error(e);
+  }
+}
+
+function calcForecast(productId, movements) {
+  const sales = movements.filter(m => m.product_id === productId && m.type === 'out');
+  if (sales.length === 0) return { weeklyAvg: 0, daysLeft: null };
+
+  // Group sales by week
+  const now = new Date();
+  const weeksAgo = (date) => Math.floor((now - new Date(date)) / (7 * 24 * 60 * 60 * 1000));
+  const weekMap = {};
+  sales.forEach(s => {
+    const w = weeksAgo(s.created_at);
+    if (w < 8) weekMap[w] = (weekMap[w] || 0) + s.quantity;
+  });
+  const weeks = Object.values(weekMap);
+  const weeklyAvg = weeks.length > 0 ? weeks.reduce((a,b) => a+b, 0) / Math.max(weeks.length, 1) : 0;
+  return { weeklyAvg: Math.round(weeklyAvg * 10) / 10 };
+}
+
+function renderInventory(products, movements) {
+  const list = document.getElementById('inventory-list');
+  const filter = document.getElementById('inv-filter')?.value || 'all';
+
+  let filtered = products;
+  if (filter === 'low') filtered = products.filter(p => (p.stock || 0) <= (p.stock_min || 5) && (p.stock || 0) > 0);
+  if (filter === 'out') filtered = products.filter(p => (p.stock || 0) === 0);
+  if (filter === 'ok') filtered = products.filter(p => (p.stock || 0) > (p.stock_min || 5));
+
+  document.getElementById('inventory-count-label').textContent = filtered.length + ' producto' + (filtered.length !== 1 ? 's' : '');
+
+  // Summary stats
+  const total = products.length;
+  const outOfStock = products.filter(p => (p.stock || 0) === 0).length;
+  const lowStock = products.filter(p => (p.stock || 0) > 0 && (p.stock || 0) <= (p.stock_min || 5)).length;
+  const ok = total - outOfStock - lowStock;
+  document.getElementById('inv-stat-ok').textContent = ok;
+  document.getElementById('inv-stat-low').textContent = lowStock;
+  document.getElementById('inv-stat-out').textContent = outOfStock;
+  document.getElementById('inv-summary').style.display = 'flex';
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div>No hay productos en esta categoría</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(p => {
+    const stock = p.stock || 0;
+    const min = p.stock_min || 5;
+    const { weeklyAvg } = calcForecast(p.id, movements);
+    const daysLeft = weeklyAvg > 0 ? Math.round((stock / weeklyAvg) * 7) : null;
+    const statusColor = stock === 0 ? 'var(--danger)' : stock <= min ? 'var(--warning)' : 'var(--success)';
+    const statusLabel = stock === 0 ? '⚠️ Agotado' : stock <= min ? '⚠️ Stock bajo' : '✅ OK';
+
+    return `
+    <div class="order-card">
+      <div class="order-header">
+        <div>
+          <div class="order-name" style="font-size:14px;">${p.brand} [${p.color_code || '—'}] ${p.name}</div>
+          <div class="order-business">${p.category}</div>
+        </div>
+        <span style="font-size:12px; font-weight:600; color:${statusColor};">${statusLabel}</span>
+      </div>
+      <div style="display:flex; gap:16px; align-items:center; margin:10px 0; flex-wrap:wrap;">
+        <div style="text-align:center;">
+          <div style="font-size:24px; font-weight:700; color:${statusColor};">${stock}</div>
+          <div style="font-size:11px; color:var(--text-muted);">En stock</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:18px; font-weight:600; color:var(--text-muted);">${min}</div>
+          <div style="font-size:11px; color:var(--text-muted);">Mínimo</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:18px; font-weight:600; color:var(--text-muted);">${weeklyAvg > 0 ? weeklyAvg : '—'}</div>
+          <div style="font-size:11px; color:var(--text-muted);">Prom/semana</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:18px; font-weight:600; color:${daysLeft !== null && daysLeft < 14 ? 'var(--warning)' : 'var(--text-muted)'};">${daysLeft !== null ? daysLeft + 'd' : '—'}</div>
+          <div style="font-size:11px; color:var(--text-muted);">Días restantes</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button onclick="openStockModal(${p.id}, '${p.name.replace(/'/g,"\'")}', ${stock}, ${min})" class="submit-btn" style="flex:1; margin:0; padding:7px 12px; font-size:12px;">📦 Agregar stock</button>
+        <button onclick="openMinModal(${p.id}, '${p.name.replace(/'/g,"\'")}', ${min})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">⚙️ Ajustar mínimo</button>
+      </div>
+    </div>
+  `}).join('');
+}
+
+// ── Stock modal ───────────────────────────────────────────────
+let stockProductId = null;
+
+function openStockModal(id, name, currentStock, min) {
+  stockProductId = id;
+  document.getElementById('stock-modal-title').textContent = name;
+  document.getElementById('stock-current').textContent = currentStock;
+  document.getElementById('stock-qty').value = '';
+  document.getElementById('stock-notes').value = '';
+  document.getElementById('stock-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('stock-qty').focus(), 100);
+}
+
+function closeStockModal() {
+  document.getElementById('stock-modal').style.display = 'none';
+  stockProductId = null;
+}
+
+async function saveStock() {
+  const qty = parseInt(document.getElementById('stock-qty').value);
+  const notes = document.getElementById('stock-notes').value.trim();
+  if (!qty || qty <= 0) { showToast('⚠️ Ingresa una cantidad válida'); return; }
+
+  const btn = document.getElementById('stock-save-btn');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    // Get current stock
+    const prod = await supabase(`products?id=eq.${stockProductId}&select=stock`);
+    const currentStock = prod[0]?.stock || 0;
+    const newStock = currentStock + qty;
+
+    // Update stock
+    await supabase(`products?id=eq.${stockProductId}`, { method: 'PATCH', body: JSON.stringify({ stock: newStock }) });
+
+    // Record movement
+    await supabase('inventory_movements', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify({ product_id: stockProductId, type: 'in', quantity: qty, notes: notes || 'Entrada de inventario' })
+    });
+
+    closeStockModal();
+    showToast(`✓ +${qty} unidades agregadas`);
+    await loadInventory();
+  } catch(e) {
+    showToast('❌ Error al guardar'); console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar →';
+  }
+}
+
+// ── Min stock modal ───────────────────────────────────────────
+let minProductId = null;
+
+function openMinModal(id, name, currentMin) {
+  minProductId = id;
+  document.getElementById('min-modal-title').textContent = name;
+  document.getElementById('min-qty').value = currentMin;
+  document.getElementById('min-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('min-qty').focus(), 100);
+}
+
+function closeMinModal() {
+  document.getElementById('min-modal').style.display = 'none';
+  minProductId = null;
+}
+
+async function saveMin() {
+  const qty = parseInt(document.getElementById('min-qty').value);
+  if (!qty || qty < 0) { showToast('⚠️ Ingresa un valor válido'); return; }
+  try {
+    await supabase(`products?id=eq.${minProductId}`, { method: 'PATCH', body: JSON.stringify({ stock_min: qty }) });
+    closeMinModal();
+    showToast('✓ Mínimo actualizado');
+    await loadInventory();
+  } catch(e) {
+    showToast('❌ Error al guardar'); console.error(e);
+  }
+}
+
 // ── Edit customer ─────────────────────────────────────────────
 let editingCustomerId = null;
 
@@ -1222,17 +1420,18 @@ async function updateCustomerLevel(id, level) {
 
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
-  if ((name === 'admin' || name === 'customers' || name === 'catalog') && !isAdmin) { showLoginModal(); return; }
+  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory') && !isAdmin) { showLoginModal(); return; }
   if (name === 'delivery' && !isDelivery && !isAdmin) { showLoginModal(); return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery') {
+  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery' || name === 'inventory') {
     document.getElementById('logout-btn').style.display = 'inline-block';
     if (name === 'admin') loadOrders();
     if (name === 'customers') loadCustomers();
     if (name === 'catalog') loadCatalog();
+    if (name === 'inventory') loadInventory();
     if (name === 'delivery') loadDeliveryOrders();
     if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
