@@ -158,9 +158,21 @@
         <div class="summary-row total"><span>Total</span><span id="order-total">$0.00</span></div>
       </div>
 
-      <div class="field-group" style="margin-top:1rem;">
-        <label>Notas adicionales</label>
-        <textarea id="notes" rows="2" placeholder="Instrucciones especiales, forma de entrega, etc."></textarea>
+      <div class="row2">
+        <div class="field-group" style="margin-top:1rem;">
+          <label>Forma de pago <span class="optional">(opcional)</span></label>
+          <select id="payment-method">
+            <option value="">— Sin especificar —</option>
+            <option value="Efectivo">Efectivo</option>
+            <option value="Tarjeta">Tarjeta</option>
+            <option value="Transferencia">Transferencia</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="field-group" style="margin-top:1rem;">
+          <label>Notas adicionales</label>
+          <textarea id="notes" rows="2" placeholder="Instrucciones especiales..."></textarea>
+        </div>
       </div>
 
       <button class="submit-btn" onclick="submitOrder()">Enviar orden →</button>
@@ -655,9 +667,21 @@
         <div class="summary-row total"><span>Total</span><span id="edit-order-total">$0.00</span></div>
       </div>
 
-      <div class="field-group" style="margin-top:1rem;">
-        <label>Notas</label>
-        <textarea id="edit-notes" rows="2"></textarea>
+      <div class="row2">
+        <div class="field-group" style="margin-top:1rem;">
+          <label>Forma de pago</label>
+          <select id="edit-payment-method">
+            <option value="">— Sin especificar —</option>
+            <option value="Efectivo">Efectivo</option>
+            <option value="Tarjeta">Tarjeta</option>
+            <option value="Transferencia">Transferencia</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="field-group" style="margin-top:1rem;">
+          <label>Notas</label>
+          <textarea id="edit-notes" rows="2"></textarea>
+        </div>
       </div>
 
       <button class="submit-btn" id="edit-save-btn" onclick="saveEditOrder()">Guardar cambios →</button>

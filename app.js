@@ -411,7 +411,9 @@ async function submitOrder() {
       shipping: hasShipping ? shippingAmt : null,
       tax_rate: hasTax ? taxRate : null,
       tax_amount: hasTax ? taxAmt : null,
-      total, status: 'Nueva'
+      total,
+      payment_method: document.getElementById('payment-method')?.value || null,
+      status: 'Nueva'
     });
     resetForm();
     showToast('✓ Orden enviada correctamente');
@@ -431,6 +433,7 @@ function resetForm() {
   document.getElementById('product-lines').innerHTML = '';
   document.getElementById('permit-note').textContent = '';
   document.getElementById('customer-search').value = '';
+  const pmEl = document.getElementById('payment-method'); if (pmEl) pmEl.value = '';
   document.getElementById('customer-suggestions').style.display = 'none';
   resetSteppedSelector();
   currentLevel = 'Salon';
@@ -505,7 +508,7 @@ function renderOrders(orders) {
         </select>
         </div>
       </div>
-      <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}</div>
+      <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}${o.payment_method ? ` · 💳 ${o.payment_method}` : ''}</div>
       <div class="order-meta">
         📍 ${o.address}
         ${o.permit ? ` · Permit: ${o.permit}` : ' · <span class="warn">Sin seller permit</span>'}
@@ -1361,6 +1364,7 @@ async function confirmCobrar() {
       address: posClient ? (posClient.address || '') : 'Bodega',
       email: posClient ? (posClient.email || '') : '',
       notes: `Venta en caja · Pago: ${payment}${discountNote}`,
+      payment_method: payment,
       lines: posCart,
       subtotal,
       shipping: null,
@@ -2300,7 +2304,7 @@ async function saveEditOrder() {
   try {
     await supabase(`orders?id=eq.${editingOrderId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ client, business, phone, permit, address, email, notes, lines, subtotal, shipping: hasShipping ? shippingAmt : null, tax_rate: hasTax ? taxRate : null, tax_amount: hasTax ? taxAmt : null, total })
+      body: JSON.stringify({ client, business, phone, permit, address, email, notes, lines, subtotal, shipping: hasShipping ? shippingAmt : null, tax_rate: hasTax ? taxRate : null, tax_amount: hasTax ? taxAmt : null, total, payment_method: document.getElementById('edit-payment-method')?.value || null })
     });
     closeEditModal();
     showToast('✓ Orden actualizada');
