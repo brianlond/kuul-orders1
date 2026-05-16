@@ -1564,25 +1564,6 @@ async function confirmPicking() {
   btn.textContent = 'Procesando...';
 
   try {
-    // Deduct stock for each product
-    for (const line of pickingOrder.lines) {
-      try {
-        const prod = PRODUCTS.find(p => p.barcode === line.barcode);
-        if (prod && prod.id) {
-          const current = await supabase(`products?id=eq.${prod.id}&select=id,stock`);
-          if (current && current[0]) {
-            const newStock = Math.max(0, (current[0].stock || 0) - line.qty);
-            await supabase(`products?id=eq.${prod.id}`, { method: 'PATCH', body: JSON.stringify({ stock: newStock }) });
-            await supabase('inventory_movements', {
-              method: 'POST',
-              headers: { 'Prefer': 'return=representation' },
-              body: JSON.stringify({ product_id: prod.id, type: 'out', quantity: line.qty, order_id: pickingOrder.id, notes: `Picking orden #${pickingOrder.id}` })
-            });
-          }
-        }
-      } catch(e) { console.error('Stock error:', e); }
-    }
-
     // Mark picking complete and update status
     const picking = {};
     pickingOrder.lines.forEach((l, idx) => { picking[idx] = true; });
