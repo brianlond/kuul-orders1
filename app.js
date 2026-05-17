@@ -2583,6 +2583,23 @@ window.addEventListener('load', async () => {
   if (!currentRole) showLoginModal();
 });
 
+
+function toggleSellerOrders(selId) {
+  const el = document.getElementById('seller-orders-' + selId);
+  if (!el) return;
+  const btn = el.previousElementSibling && el.previousElementSibling.querySelector('button[onclick]');
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    // Find the button and update text
+    const btns = document.querySelectorAll(`button[onclick="toggleSellerOrders('${selId}')"]`);
+    btns.forEach(b => b.textContent = '📋 Ocultar órdenes');
+  } else {
+    el.style.display = 'none';
+    const btns = document.querySelectorAll(`button[onclick="toggleSellerOrders('${selId}')"]`);
+    btns.forEach(b => b.textContent = '📋 Ver órdenes');
+  }
+}
+
 // ── SELLERS / COMMISSIONS ─────────────────────────────────────────────────
 const COMMISSION_RATE = 0.20;
 const WEEKLY_GOAL = 2500;
