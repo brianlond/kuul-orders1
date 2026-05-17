@@ -712,7 +712,7 @@
   </div>
 
   <!-- LOGIN MODAL -->
-  <div class="modal-overlay" id="login-modal" style="display:none; z-index:100; background:rgba(28,26,22,0.97); backdrop-filter:blur(8px);">
+  <div class="modal-overlay" id="login-modal" onclick="event.stopPropagation()" style="display:none; z-index:100; background:rgba(28,26,22,0.97); backdrop-filter:blur(8px);">
     <div class="modal">
       <div style="text-align:center; margin-bottom:8px;">
           <div style="font-family:var(--font-display); font-size:28px; font-weight:600; color:var(--gold); letter-spacing:0.05em;">LucyGlam</div>
@@ -728,7 +728,7 @@
       </div>
       <div class="login-error" id="login-error"></div>
       <button class="submit-btn" onclick="doLogin()">Entrar →</button>
-      <button class="cancel-btn" onclick="hideLoginModal()">Cancelar</button>
+      
     </div>
   </div>
 

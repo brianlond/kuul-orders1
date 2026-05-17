@@ -218,6 +218,7 @@ function showToast(msg, dur = 2800) {
 
 // ── Admin login ──────────────────────────────────────────────
 function showLoginModal() {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('login-modal').style.display = 'flex';
   document.getElementById('login-user').value = '';
   document.getElementById('login-pass').value = '';
@@ -226,6 +227,7 @@ function showLoginModal() {
 }
 
 function hideLoginModal() {
+  if (!currentRole) return; // Don't hide if not authenticated
   document.getElementById('login-modal').style.display = 'none';
 }
 
