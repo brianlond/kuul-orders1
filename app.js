@@ -2566,12 +2566,12 @@ const WEEKLY_BONUS = 125;
 
 function initSellersTab() {
   const weekInput = document.getElementById('sellers-week');
-  if (weekInput && !weekInput.value) {
-    const now = new Date();
-    const year = now.getFullYear();
-    const week = getWeekNumber(now);
-    weekInput.value = `${year}-W${String(week).padStart(2,'0')}`;
-  }
+  // Always set current week
+  const now = new Date();
+  const year = now.getFullYear();
+  const week = getWeekNumber(now);
+  const weekStr = `${year}-W${String(week).padStart(2,'0')}`;
+  if (weekInput) weekInput.value = weekStr;
   loadSellersReport();
 }
 
@@ -2619,7 +2619,11 @@ async function loadSellersReport() {
 
   container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Cargando...</div>';
 
-  const { start, end } = getWeekRange(weekInput.value);
+  const weekVal = weekInput.value || (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-W${String(getWeekNumber(now)).padStart(2,'0')}`;
+  })();
+  const { start, end } = getWeekRange(weekVal);
 
   try {
     const startStr = start.toISOString();
