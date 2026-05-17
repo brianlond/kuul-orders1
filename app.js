@@ -249,7 +249,81 @@ function doLogin() {
   }
 }
 
-function doLogout() {
+// ── GOOGLE AUTH ───────────────────────────────────────────────────────────
+let supabaseAuth = null;
+
+function getSupabaseAuth() {
+  if (!supabaseAuth) {
+    if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
+      supabaseAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+  }
+  return supabaseAuth;
+}
+
+// Admin emails — add yours here
+const ADMIN_EMAILS = [
+  'lucyglamshop@gmail.com',
+  'brianlond@gmail.com',
+  'brayfer97@gmail.com'
+];
+const DELIVERY_EMAILS = [];
+
+async function loginWithGoogle() {
+  const client = getSupabaseAuth();
+  if (!client) {
+    showToast('❌ Error inicializando autenticación');
+    return;
+  }
+  const { error } = await client.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin + window.location.pathname
+    }
+  });
+  if (error) showToast('❌ Error: ' + error.message);
+}
+
+async function checkGoogleSession() {
+  const client = getSupabaseAuth();
+  if (!client) return;
+  const { data: { session } } = await client.auth.getSession();
+  if (session && session.user) {
+    const email = session.user.email;
+    if (ADMIN_EMAILS.includes(email)) {
+      isAdmin = true;
+      isDelivery = false;
+      hideLoginModal();
+      showAdminView();
+      showToast(`✓ Bienvenida ${session.user.user_metadata.full_name || email}`);
+    } else if (DELIVERY_EMAILS.includes(email)) {
+      isDelivery = true;
+      isAdmin = false;
+      hideLoginModal();
+      showTab('delivery');
+      showToast(`✓ Bienvenido repartidor`);
+    } else {
+      // Not authorized
+      await client.auth.signOut();
+      document.getElementById('login-error').textContent = `${email} no tiene acceso autorizado.`;
+    }
+  }
+}
+
+async function doLogout() {
+  const client = getSupabaseAuth();
+  if (client) await client.auth.signOut();
+  isAdmin = false;
+  isDelivery = false;
+  showTab('vendedor');
+}
+
+
+async function doLogout() {
+  const client = getSupabaseAuth();
+  if (client) {
+    try { await client.auth.signOut(); } catch(e) {}
+  }
   isAdmin = false;
   isDelivery = false;
   document.getElementById('logout-btn').style.display = 'none';
@@ -2672,3 +2746,6 @@ async function loadSellersReport() {
     console.error(e);
   }
 }
+
+// Check Google session on page load
+window.addEventListener("load", () => { setTimeout(checkGoogleSession, 800); });
