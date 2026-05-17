@@ -2566,12 +2566,12 @@ const WEEKLY_BONUS = 125;
 
 function initSellersTab() {
   const weekInput = document.getElementById('sellers-week');
-  // Always set current week
+  if (!weekInput) return;
+  // Always force current week
   const now = new Date();
   const year = now.getFullYear();
   const week = getWeekNumber(now);
-  const weekStr = `${year}-W${String(week).padStart(2,'0')}`;
-  if (weekInput) weekInput.value = weekStr;
+  weekInput.value = `${year}-W${String(week).padStart(2,'0')}`;
   loadSellersReport();
 }
 
@@ -2596,7 +2596,7 @@ function getWeekRange(weekStr) {
 
 function sellersWeekPrev() {
   const input = document.getElementById('sellers-week');
-  if (!input || !input.value) return;
+  if (!input || !input.value) { initSellersTab(); return; }
   const { start } = getWeekRange(input.value);
   start.setDate(start.getDate() - 7);
   input.value = `${start.getFullYear()}-W${String(getWeekNumber(start)).padStart(2,'0')}`;
@@ -2605,7 +2605,7 @@ function sellersWeekPrev() {
 
 function sellersWeekNext() {
   const input = document.getElementById('sellers-week');
-  if (!input || !input.value) return;
+  if (!input || !input.value) { initSellersTab(); return; }
   const { start } = getWeekRange(input.value);
   start.setDate(start.getDate() + 7);
   input.value = `${start.getFullYear()}-W${String(getWeekNumber(start)).padStart(2,'0')}`;
@@ -2619,10 +2619,8 @@ async function loadSellersReport() {
 
   container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Cargando...</div>';
 
-  const weekVal = weekInput.value || (() => {
-    const now = new Date();
-    return `${now.getFullYear()}-W${String(getWeekNumber(now)).padStart(2,'0')}`;
-  })();
+  const weekVal = weekInput ? weekInput.value : null;
+  if (!weekVal) { initSellersTab(); return; }
   const { start, end } = getWeekRange(weekVal);
 
   try {
@@ -2644,7 +2642,7 @@ async function loadSellersReport() {
     });
 
     const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
-    const weekLabel = `${fmtDate(start)} – ${fmtDate(end)}`;
+    const weekLabel = `${fmtDate(start)} – ${fmtDate(end)} ${start.getFullYear()}`;
     const sortedSellers = Object.values(sellers).sort((a,b) => b.total - a.total);
     const totalWeek = sortedSellers.reduce((s, sel) => s + sel.total, 0);
 
