@@ -2551,10 +2551,25 @@ function printOrder(id) {
 </body>
 </html>`;
 
-  const win = window.open('', '_blank');
-  win.document.write(html);
-  win.document.close();
-  win.focus();
+  const overlay = document.getElementById('invoice-overlay');
+  const frame = document.getElementById('invoice-frame');
+  if (overlay && frame) {
+    frame.srcdoc = html;
+    overlay.style.display = 'flex';
+  } else {
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+  }
+}
+
+function closeInvoice() {
+  document.getElementById('invoice-overlay').style.display = 'none';
+  document.getElementById('invoice-frame').srcdoc = '';
+}
+
+function printInvoiceFrame() {
+  document.getElementById('invoice-frame').contentWindow.print();
 }
 
 window.addEventListener('load', async () => {
