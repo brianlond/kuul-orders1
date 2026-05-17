@@ -254,8 +254,14 @@ let supabaseAuth = null;
 
 function getSupabaseAuth() {
   if (!supabaseAuth) {
-    if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
-      supabaseAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Supabase v2 SDK exposes createClient on window.supabase
+    if (typeof window.supabase !== 'undefined') {
+      try {
+        const { createClient } = window.supabase;
+        supabaseAuth = createClient(SUPABASE_URL, SUPABASE_KEY);
+      } catch(e) {
+        console.error('Supabase init error:', e);
+      }
     }
   }
   return supabaseAuth;
