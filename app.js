@@ -308,26 +308,49 @@ async function loginWithGoogle() {
 async function checkGoogleSession() {
   const client = getSupabaseAuth();
   if (!client) return;
-  const { data: { session } } = await client.auth.getSession();
-  if (session && session.user) {
-    const email = session.user.email;
-    if (ADMIN_EMAILS.includes(email)) {
-      isAdmin = true;
-      isDelivery = false;
-      hideLoginModal();
-      showAdminView();
-      showToast(`✓ Bienvenida ${session.user.user_metadata.full_name || email}`);
-    } else if (DELIVERY_EMAILS.includes(email)) {
-      isDelivery = true;
-      isAdmin = false;
-      hideLoginModal();
-      showTab('delivery');
-      showToast(`✓ Bienvenido repartidor`);
-    } else {
-      // Not authorized
-      await client.auth.signOut();
-      document.getElementById('login-error').textContent = `${email} no tiene acceso autorizado.`;
+
+  // Handle OAuth callback — Supabase puts tokens in URL hash
+  if (window.location.hash && window.location.hash.includes('access_token')) {
+    try {
+      const { data, error } = await client.auth.getSession();
+      if (!error && data.session) {
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        handleAuthUser(data.session.user, client);
+        return;
+      }
+    } catch(e) { console.error(e); }
+  }
+
+  // Check existing session
+  try {
+    const { data: { session } } = await client.auth.getSession();
+    if (session && session.user) {
+      handleAuthUser(session.user, client);
     }
+  } catch(e) { console.error('Session check error:', e); }
+}
+
+async function handleAuthUser(user, client) {
+  const email = user.email;
+  const name = user.user_metadata?.full_name || email;
+  if (ADMIN_EMAILS.includes(email)) {
+    isAdmin = true;
+    isDelivery = false;
+    hideLoginModal();
+    showAdminView();
+    showToast(`✓ Bienvenida ${name}`);
+  } else if (DELIVERY_EMAILS.includes(email)) {
+    isDelivery = true;
+    isAdmin = false;
+    hideLoginModal();
+    showTab('delivery');
+    showToast(`✓ Bienvenido repartidor`);
+  } else {
+    await client.auth.signOut();
+    const errEl = document.getElementById('login-error');
+    if (errEl) errEl.textContent = `${email} no tiene acceso autorizado.`;
+    showLoginModal();
   }
 }
 
