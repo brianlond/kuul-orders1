@@ -2114,6 +2114,7 @@ function showTab(name) {
     if (name === 'catalog') loadCatalog();
     if (name === 'inventory') loadInventory();
     if (name === 'pos') initPOS();
+    if (name === 'sellers') initSellersTab();
     if (name === 'delivery') loadDeliveryOrders();
     if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
@@ -2557,3 +2558,152 @@ window.addEventListener('load', async () => {
   // If no session after check, show login
   if (!currentRole) showLoginModal();
 });
+
+// ── SELLERS / COMMISSIONS ─────────────────────────────────────────────────
+const COMMISSION_RATE = 0.20;
+const WEEKLY_GOAL = 2500;
+const WEEKLY_BONUS = 125;
+
+function initSellersTab() {
+  const weekInput = document.getElementById('sellers-week');
+  if (weekInput && !weekInput.value) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const week = getWeekNumber(now);
+    weekInput.value = `${year}-W${String(week).padStart(2,'0')}`;
+  }
+  loadSellersReport();
+}
+
+function getWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function getWeekRange(weekStr) {
+  const [year, w] = weekStr.split('-W');
+  const jan4 = new Date(Date.UTC(parseInt(year), 0, 4));
+  const weekStart = new Date(jan4);
+  weekStart.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1) + (parseInt(w) - 1) * 7);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  weekEnd.setUTCHours(23, 59, 59, 999);
+  return { start: weekStart, end: weekEnd };
+}
+
+function sellersWeekPrev() {
+  const input = document.getElementById('sellers-week');
+  if (!input || !input.value) return;
+  const { start } = getWeekRange(input.value);
+  start.setDate(start.getDate() - 7);
+  input.value = `${start.getFullYear()}-W${String(getWeekNumber(start)).padStart(2,'0')}`;
+  loadSellersReport();
+}
+
+function sellersWeekNext() {
+  const input = document.getElementById('sellers-week');
+  if (!input || !input.value) return;
+  const { start } = getWeekRange(input.value);
+  start.setDate(start.getDate() + 7);
+  input.value = `${start.getFullYear()}-W${String(getWeekNumber(start)).padStart(2,'0')}`;
+  loadSellersReport();
+}
+
+async function loadSellersReport() {
+  const container = document.getElementById('sellers-report');
+  const weekInput = document.getElementById('sellers-week');
+  if (!container || !weekInput || !weekInput.value) return;
+
+  container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Cargando...</div>';
+
+  const { start, end } = getWeekRange(weekInput.value);
+
+  try {
+    const startStr = start.toISOString();
+    const endStr = end.toISOString();
+    const orders = await supabase(`orders?created_at=gte.${startStr}&created_at=lte.${endStr}&select=*`);
+
+    if (!orders || orders.length === 0) {
+      container.innerHTML = `<div style="text-align:center; padding:60px; color:var(--text-muted);"><div style="font-size:40px; margin-bottom:12px;">📭</div><div style="font-size:16px;">Sin órdenes esta semana</div></div>`;
+      return;
+    }
+
+    const sellers = {};
+    orders.forEach(o => {
+      const seller = o.seller || 'Sin nombre';
+      if (!sellers[seller]) sellers[seller] = { name: seller, orders: [], total: 0 };
+      sellers[seller].orders.push(o);
+      sellers[seller].total += parseFloat(o.subtotal || 0);
+    });
+
+    const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
+    const weekLabel = `${fmtDate(start)} – ${fmtDate(end)}`;
+    const sortedSellers = Object.values(sellers).sort((a,b) => b.total - a.total);
+    const totalWeek = sortedSellers.reduce((s, sel) => s + sel.total, 0);
+
+    let html = `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px; display:flex; gap:24px; flex-wrap:wrap;">
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Semana</div><div style="font-size:16px; font-weight:600; color:var(--text);">${weekLabel}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Total vendido</div><div style="font-size:16px; font-weight:600; color:var(--gold);">$${totalWeek.toFixed(2)}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Órdenes</div><div style="font-size:16px; font-weight:600; color:var(--text);">${orders.length}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Vendedores</div><div style="font-size:16px; font-weight:600; color:var(--text);">${sortedSellers.length}</div></div>
+    </div>`;
+
+    sortedSellers.forEach(sel => {
+      const commission = sel.total * COMMISSION_RATE;
+      const progress = Math.min(100, (sel.total / WEEKLY_GOAL) * 100);
+      const hitGoal = sel.total >= WEEKLY_GOAL;
+      const bonus = hitGoal ? WEEKLY_BONUS : 0;
+      const totalPay = commission + bonus;
+      const remaining = Math.max(0, WEEKLY_GOAL - sel.total);
+
+      html += `<div style="background:${hitGoal ? 'var(--gold-pale)' : 'var(--surface)'}; border:1px solid ${hitGoal ? 'var(--gold-border)' : 'var(--border)'}; border-radius:var(--radius-lg); padding:20px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:40px; height:40px; background:var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px;">${sel.name.charAt(0).toUpperCase()}</div>
+            <div>
+              <div style="font-size:18px; font-weight:600; color:var(--text);">${sel.name}</div>
+              <div style="font-size:12px; color:var(--text-muted);">${sel.orders.length} orden${sel.orders.length !== 1 ? 'es' : ''}</div>
+            </div>
+          </div>
+          ${hitGoal ? '<div style="background:var(--gold); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;">🏆 META ALCANZADA</div>' : ''}
+        </div>
+        <div style="margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:12px; color:var(--text-muted);">Progreso hacia meta $${WEEKLY_GOAL.toLocaleString()}</span>
+            <span style="font-size:12px; font-weight:600; color:${hitGoal ? 'var(--gold)' : 'var(--text)'};">${progress.toFixed(0)}%</span>
+          </div>
+          <div style="background:var(--border); border-radius:99px; height:10px; overflow:hidden;">
+            <div style="height:100%; width:${progress}%; background:${hitGoal ? 'var(--gold)' : '#6b9e6b'}; border-radius:99px;"></div>
+          </div>
+          ${!hitGoal ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Faltan $${remaining.toFixed(2)} para la meta</div>` : ''}
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
+          <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px;">
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Ventas (subtotal)</div>
+            <div style="font-size:18px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${sel.total.toFixed(2)}</div>
+          </div>
+          <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px;">
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Comisión 20%</div>
+            <div style="font-size:18px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${commission.toFixed(2)}</div>
+          </div>
+          ${hitGoal ? `<div style="background:#fef9ee; border:1px solid var(--gold-border); border-radius:var(--radius); padding:10px 14px;">
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:4px;">Bono meta 🏆</div>
+            <div style="font-size:18px; font-weight:700; color:var(--gold); font-family:var(--font-display);">+$${bonus.toFixed(2)}</div>
+          </div>` : ''}
+          <div style="background:${hitGoal ? '#1c1a16' : 'var(--surface-2)'}; border:1px solid ${hitGoal ? 'var(--gold)' : 'var(--border)'}; border-radius:var(--radius); padding:10px 14px;">
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:${hitGoal ? 'var(--gold)' : 'var(--text-faint)'}; margin-bottom:4px;">Total a pagar</div>
+            <div style="font-size:18px; font-weight:700; color:${hitGoal ? 'var(--gold)' : 'var(--text)'}; font-family:var(--font-display);">$${totalPay.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>`;
+    });
+
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = '<div style="text-align:center; padding:40px; color:#dc2626;">❌ Error cargando reporte</div>';
+    console.error(e);
+  }
+}
