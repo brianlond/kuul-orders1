@@ -2701,6 +2701,23 @@ async function loadSellersReport() {
       const bonus = hitGoal ? WEEKLY_BONUS : 0;
       const totalPay = commission + bonus;
       const remaining = Math.max(0, WEEKLY_GOAL - sel.total);
+      const selId = sel.name.replace(/\s+/g, '_');
+
+      const ordersHTML = sel.orders
+        .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+        .map(o => {
+          const oDate = new Date(o.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px; background:var(--surface-2);">
+            <div>
+              <div style="font-size:13px; font-weight:600; color:var(--text);">${o.client} <span style="font-size:11px; color:var(--text-faint);">· ${o.business}</span></div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">#${String(o.id).padStart(5,'0')} · ${oDate}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:14px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${parseFloat(o.subtotal).toFixed(2)}</div>
+              <div style="font-size:10px; padding:2px 8px; border-radius:99px; background:var(--surface); border:1px solid var(--border); color:var(--text-muted); margin-top:2px; display:inline-block;">${o.status}</div>
+            </div>
+          </div>`;
+        }).join('');
 
       html += `<div style="background:${hitGoal ? 'var(--gold-pale)' : 'var(--surface)'}; border:1px solid ${hitGoal ? 'var(--gold-border)' : 'var(--border)'}; border-radius:var(--radius-lg); padding:20px; margin-bottom:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
@@ -2711,7 +2728,10 @@ async function loadSellersReport() {
               <div style="font-size:12px; color:var(--text-muted);">${sel.orders.length} orden${sel.orders.length !== 1 ? 'es' : ''}</div>
             </div>
           </div>
-          ${hitGoal ? '<div style="background:var(--gold); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;">🏆 META ALCANZADA</div>' : ''}
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            ${hitGoal ? '<div style="background:var(--gold); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;">🏆 META ALCANZADA</div>' : ''}
+            <button onclick="toggleSellerOrders('${selId}')" id="btn-${selId}" style="padding:6px 14px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:12px; font-family:var(--font-sans); color:var(--text-muted);">📋 Ver órdenes</button>
+          </div>
         </div>
         <div style="margin-bottom:16px;">
           <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
@@ -2741,9 +2761,12 @@ async function loadSellersReport() {
             <div style="font-size:18px; font-weight:700; color:${hitGoal ? 'var(--gold)' : 'var(--text)'}; font-family:var(--font-display);">$${totalPay.toFixed(2)}</div>
           </div>
         </div>
+        <div id="seller-orders-${selId}" style="display:none; margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--gold); margin-bottom:10px;">Órdenes de ${sel.name}</div>
+          ${ordersHTML}
+        </div>
       </div>`;
     });
-
     container.innerHTML = html;
   } catch(e) {
     container.innerHTML = '<div style="text-align:center; padding:40px; color:#dc2626;">❌ Error cargando reporte</div>';
