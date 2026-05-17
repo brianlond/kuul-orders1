@@ -2584,6 +2584,20 @@ window.addEventListener('load', async () => {
 });
 
 
+
+function toggleOrderDetail(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const arrow = el.previousElementSibling.querySelector('span:last-child');
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    if (arrow) arrow.textContent = '▾';
+  } else {
+    el.style.display = 'none';
+    if (arrow) arrow.textContent = '▸';
+  }
+}
+
 function toggleSellerOrders(selId) {
   const el = document.getElementById('seller-orders-' + selId);
   if (!el) return;
@@ -2707,14 +2721,45 @@ async function loadSellersReport() {
         .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
         .map(o => {
           const oDate = new Date(o.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
-          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px; background:var(--surface-2);">
-            <div>
-              <div style="font-size:13px; font-weight:600; color:var(--text);">${o.client} <span style="font-size:11px; color:var(--text-faint);">· ${o.business}</span></div>
-              <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">#${String(o.id).padStart(5,'0')} · ${oDate}</div>
+          const oCommission = parseFloat(o.subtotal) * COMMISSION_RATE;
+          const oId = 'order_detail_' + o.id;
+          const linesHTML = (o.lines || []).map(l => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px;">
+              <span style="color:var(--text);">${l.brand} [${l.code}] ${l.name} × ${l.qty}</span>
+              <span style="font-weight:600; color:var(--text);">$${parseFloat(l.subtotal).toFixed(2)}</span>
+            </div>`).join('');
+          return `<div style="border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--surface-2); overflow:hidden;">
+            <div onclick="toggleOrderDetail('${oId}')" style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; cursor:pointer;">
+              <div>
+                <div style="font-size:13px; font-weight:600; color:var(--text);">${o.client} <span style="font-size:11px; color:var(--text-faint);">· ${o.business}</span></div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">#${String(o.id).padStart(5,'0')} · ${oDate}</div>
+              </div>
+              <div style="text-align:right; display:flex; align-items:center; gap:10px;">
+                <div>
+                  <div style="font-size:14px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${parseFloat(o.subtotal).toFixed(2)}</div>
+                  <div style="font-size:10px; padding:2px 8px; border-radius:99px; background:var(--surface); border:1px solid var(--border); color:var(--text-muted); display:inline-block;">${o.status}</div>
+                </div>
+                <span style="font-size:16px; color:var(--text-faint);">▸</span>
+              </div>
             </div>
-            <div style="text-align:right;">
-              <div style="font-size:14px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${parseFloat(o.subtotal).toFixed(2)}</div>
-              <div style="font-size:10px; padding:2px 8px; border-radius:99px; background:var(--surface); border:1px solid var(--border); color:var(--text-muted); margin-top:2px; display:inline-block;">${o.status}</div>
+            <div id="${oId}" style="display:none; padding:12px; border-top:1px solid var(--border); background:var(--surface);">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos</div>
+              ${linesHTML}
+              <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px;">
+                  <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Subtotal</div>
+                  <div style="font-size:15px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${parseFloat(o.subtotal).toFixed(2)}</div>
+                </div>
+                <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px;">
+                  <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Total orden</div>
+                  <div style="font-size:15px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${parseFloat(o.total).toFixed(2)}</div>
+                </div>
+                <div style="background:#1c1a16; border:1px solid var(--gold); border-radius:var(--radius); padding:8px 12px;">
+                  <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold);">Comisión 20%</div>
+                  <div style="font-size:15px; font-weight:700; color:var(--gold); font-family:var(--font-display);">$${oCommission.toFixed(2)}</div>
+                </div>
+              </div>
+              ${o.notes ? `<div style="margin-top:10px; font-size:12px; color:var(--text-muted); font-style:italic;">📝 ${o.notes}</div>` : ''}
             </div>
           </div>`;
         }).join('');
