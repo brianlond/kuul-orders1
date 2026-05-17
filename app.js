@@ -2,11 +2,9 @@
 const SUPABASE_URL = 'https://qyejhtyryweesbsiwpxn.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5ZWpodHlyeXdlZXNic2l3cHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MTg3MDIsImV4cCI6MjA5NDM5NDcwMn0.fKedoQ-VhAq2NFRp0WA_Ldbomqy9M5jrVY9fWb0SaIc';
 
-// ── Admin credentials ────────────────────────────────────────
-const ADMIN_USER = 'mariapelos';
-const ADMIN_PASS = 'snaPPletapaTio1?';
-const DELIVERY_USER = 'Brianrepartidor';
-const DELIVERY_PASS = 'repartidor1';
+// ── Auth state ───────────────────────────────────────────────
+let currentUser = null;
+let currentRole = null;
 
 // ── Constants ────────────────────────────────────────────────
 const SHIPPING = 9.99;
@@ -231,152 +229,76 @@ function hideLoginModal() {
   document.getElementById('login-modal').style.display = 'none';
 }
 
-function doLogin() {
-  const user = document.getElementById('login-user').value.trim();
+async function doLogin() {
+  const email = document.getElementById('login-user').value.trim();
   const pass = document.getElementById('login-pass').value;
-  if (user === ADMIN_USER && pass === ADMIN_PASS) {
-    isAdmin = true;
-    isDelivery = false;
-    hideLoginModal();
-    showAdminView();
-  } else if (user === DELIVERY_USER && pass === DELIVERY_PASS) {
-    isDelivery = true;
-    isAdmin = false;
-    hideLoginModal();
-    showDeliveryView();
-  } else {
-    document.getElementById('login-error').textContent = 'Usuario o contraseña incorrectos';
-  }
-}
-
-// ── GOOGLE AUTH ───────────────────────────────────────────────────────────
-let supabaseAuth = null;
-
-function getSupabaseAuth() {
-  if (!supabaseAuth) {
-    try {
-      let createClient;
-      if (window.supabase && window.supabase.createClient) {
-        createClient = window.supabase.createClient;
-      } else if (typeof window.supabase === 'function') {
-        createClient = window.supabase;
-      } else if (window.supabaseJs) {
-        createClient = window.supabaseJs.createClient;
-      }
-      if (createClient) {
-        supabaseAuth = createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.log('Supabase client:', Object.keys(supabaseAuth));
-      }
-    } catch(e) {
-      console.error('Supabase init error:', e);
-    }
-  }
-  return supabaseAuth;
-}
-
-// Admin emails — add yours here
-const ADMIN_EMAILS = [
-  'lucyglamshop@gmail.com',
-  'brianlond@gmail.com',
-  'brayfer97@gmail.com'
-];
-const DELIVERY_EMAILS = [];
-
-async function loginWithGoogle() {
-  // Try loading SDK if not available
-  if (!getSupabaseAuth()) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    }).catch(() => {});
-    supabaseAuth = null; // reset to retry
-  }
-  const client = getSupabaseAuth();
-  if (!client) {
-    showToast('❌ Error inicializando autenticación');
-    console.log('window.supabase:', typeof window.supabase, Object.keys(window).filter(k => k.toLowerCase().includes('supa')));
-    return;
-  }
-  const { error } = await client.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: window.location.origin + window.location.pathname
-    }
-  });
-  if (error) showToast('❌ Error: ' + error.message);
-}
-
-async function checkGoogleSession() {
-  const client = getSupabaseAuth();
-  if (!client) return;
-
-  // Handle OAuth callback — Supabase puts tokens in URL hash
-  if (window.location.hash && window.location.hash.includes('access_token')) {
-    try {
-      const { data, error } = await client.auth.getSession();
-      if (!error && data.session) {
-        // Clean URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-        handleAuthUser(data.session.user, client);
-        return;
-      }
-    } catch(e) { console.error(e); }
-  }
-
-  // Check existing session
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!email || !pass) { errEl.textContent = 'Ingresa tu email y contraseña.'; return; }
+  const btn = document.querySelector('#login-modal .submit-btn');
+  btn.textContent = 'Entrando...'; btn.disabled = true;
   try {
-    const { data: { session } } = await client.auth.getSession();
-    if (session && session.user) {
-      handleAuthUser(session.user, client);
-    }
-  } catch(e) { console.error('Session check error:', e); }
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
+      body: JSON.stringify({ email, password: pass })
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = 'Email o contraseña incorrectos.'; return; }
+    localStorage.setItem('sb_token', data.access_token);
+    localStorage.setItem('sb_uid', data.user.id);
+    await loadProfileAndApply(data.access_token, data.user.id, errEl);
+  } catch(e) { errEl.textContent = 'Error de conexion.'; }
+  finally { btn.textContent = 'Entrar →'; btn.disabled = false; }
 }
 
-async function handleAuthUser(user, client) {
-  const email = user.email;
-  const name = user.user_metadata?.full_name || email;
-  if (ADMIN_EMAILS.includes(email)) {
-    isAdmin = true;
-    isDelivery = false;
-    hideLoginModal();
+async function loadProfileAndApply(token, uid, errEl) {
+  const profile = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}&select=*`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${token}` }
+  }).then(r => r.json());
+  if (!profile || !profile.length) {
+    if (errEl) errEl.textContent = 'Cuenta sin rol asignado. Contacta al admin.';
+    localStorage.removeItem('sb_token'); localStorage.removeItem('sb_uid'); return;
+  }
+  currentUser = profile[0]; currentRole = profile[0].role;
+  isAdmin = currentRole === 'admin';
+  isDelivery = currentRole === 'delivery';
+  hideLoginModal();
+  if (isAdmin) {
     showAdminView();
-    showToast(`✓ Bienvenida ${name}`);
-  } else if (DELIVERY_EMAILS.includes(email)) {
-    isDelivery = true;
-    isAdmin = false;
-    hideLoginModal();
+  } else if (isDelivery) {
+    document.querySelectorAll('.tab').forEach(t => { t.style.display = t.id === 'tab-delivery-btn' ? '' : 'none'; });
     showTab('delivery');
-    showToast(`✓ Bienvenido repartidor`);
-  } else {
-    await client.auth.signOut();
-    const errEl = document.getElementById('login-error');
-    if (errEl) errEl.textContent = `${email} no tiene acceso autorizado.`;
-    showLoginModal();
+  } else if (currentRole === 'seller') {
+    document.querySelectorAll('.tab').forEach(t => { t.style.display = ['tab-vendedor-btn','tab-pos-btn'].includes(t.id) ? '' : 'none'; });
+    showTab('vendedor');
   }
 }
 
-async function doLogout() {
-  const client = getSupabaseAuth();
-  if (client) await client.auth.signOut();
-  isAdmin = false;
-  isDelivery = false;
-  showTab('vendedor');
+async function checkSession() {
+  const token = localStorage.getItem('sb_token');
+  const uid = localStorage.getItem('sb_uid');
+  if (!token || !uid) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) { localStorage.removeItem('sb_token'); localStorage.removeItem('sb_uid'); return; }
+    await loadProfileAndApply(token, uid, null);
+  } catch(e) { console.error(e); }
 }
 
-
 async function doLogout() {
-  const client = getSupabaseAuth();
-  if (client) {
-    try { await client.auth.signOut(); } catch(e) {}
-  }
-  isAdmin = false;
-  isDelivery = false;
+  const token = localStorage.getItem('sb_token');
+  if (token) await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:'POST', headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token}`} }).catch(()=>{});
+  localStorage.removeItem('sb_token'); localStorage.removeItem('sb_uid');
+  currentUser = null; currentRole = null; isAdmin = false; isDelivery = false;
+  document.querySelectorAll('.tab').forEach(t => t.style.display = '');
   document.getElementById('logout-btn').style.display = 'none';
-  showTab('vendedor');
+  showLoginModal();
 }
+
+
 
 document.addEventListener('keydown', e => {
   if (document.getElementById('login-modal').style.display === 'flex' && e.key === 'Enter') doLogin();
@@ -2175,20 +2097,19 @@ async function updateCustomerLevel(id, level) {
 
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
-  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers') && !isAdmin) { showLoginModal(); return; }
+  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory') && !isAdmin) { showLoginModal(); return; }
   if (name === 'delivery' && !isDelivery && !isAdmin) { showLoginModal(); return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery' || name === 'inventory' || name === 'pos' || name === 'sellers') {
+  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery' || name === 'inventory' || name === 'pos') {
     document.getElementById('logout-btn').style.display = 'inline-block';
     if (name === 'admin') loadOrders();
     if (name === 'customers') loadCustomers();
     if (name === 'catalog') loadCatalog();
     if (name === 'inventory') loadInventory();
     if (name === 'pos') initPOS();
-    if (name === 'sellers') initSellersTab();
     if (name === 'delivery') loadDeliveryOrders();
     if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
   } else {
@@ -2621,179 +2542,10 @@ function printOrder(id) {
 </body>
 </html>`;
 
-  const overlay = document.getElementById('invoice-overlay');
-  const frame = document.getElementById('invoice-frame');
-  if (overlay && frame) {
-    frame.srcdoc = html;
-    overlay.style.display = 'flex';
-  } else {
-    const win = window.open('', '_blank');
-    win.document.write(html);
-    win.document.close();
-  }
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
 }
 
-function closeInvoice() {
-  document.getElementById('invoice-overlay').style.display = 'none';
-  document.getElementById('invoice-frame').srcdoc = '';
-}
-
-function printInvoiceFrame() {
-  document.getElementById('invoice-frame').contentWindow.print();
-}
-
-// ── SELLERS / COMMISSIONS ─────────────────────────────────────────────────
-const COMMISSION_RATE = 0.20;
-const WEEKLY_GOAL = 2500;
-const WEEKLY_BONUS = 125;
-
-function sellersWeekPrev() {
-  const input = document.getElementById('sellers-week');
-  if (!input.value) return;
-  const { start } = getWeekRange(input.value);
-  start.setDate(start.getDate() - 7);
-  const year = start.getFullYear();
-  const week = getWeekNumber(start);
-  input.value = `${year}-W${String(week).padStart(2,'0')}`;
-  loadSellersReport();
-}
-
-function sellersWeekNext() {
-  const input = document.getElementById('sellers-week');
-  if (!input.value) return;
-  const { start } = getWeekRange(input.value);
-  start.setDate(start.getDate() + 7);
-  const year = start.getFullYear();
-  const week = getWeekNumber(start);
-  input.value = `${year}-W${String(week).padStart(2,'0')}`;
-  loadSellersReport();
-}
-
-function initSellersTab() {
-  const weekInput = document.getElementById('sellers-week');
-  if (!weekInput.value) {
-    const now = new Date();
-    const year = now.getFullYear();
-    const week = getWeekNumber(now);
-    weekInput.value = `${year}-W${String(week).padStart(2,'0')}`;
-  }
-  loadSellersReport();
-}
-
-function getWeekNumber(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
-
-function getWeekRange(weekStr) {
-  const [year, w] = weekStr.split('-W');
-  const jan4 = new Date(Date.UTC(parseInt(year), 0, 4));
-  const weekStart = new Date(jan4);
-  weekStart.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1) + (parseInt(w) - 1) * 7);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
-  weekEnd.setUTCHours(23, 59, 59, 999);
-  return { start: weekStart, end: weekEnd };
-}
-
-async function loadSellersReport() {
-  const container = document.getElementById('sellers-report');
-  const weekInput = document.getElementById('sellers-week');
-  if (!weekInput || !weekInput.value) return;
-
-  container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Cargando...</div>';
-
-  const { start, end } = getWeekRange(weekInput.value);
-
-  try {
-    const startStr = start.toISOString();
-    const endStr = end.toISOString();
-    const orders = await supabase(`orders?created_at=gte.${startStr}&created_at=lte.${endStr}&select=*`);
-
-    if (!orders || orders.length === 0) {
-      container.innerHTML = `<div style="text-align:center; padding:60px; color:var(--text-muted);"><div style="font-size:40px; margin-bottom:12px;">📭</div><div style="font-size:16px;">Sin órdenes esta semana</div></div>`;
-      return;
-    }
-
-    const sellers = {};
-    orders.forEach(o => {
-      const seller = o.seller || 'Sin nombre';
-      if (!sellers[seller]) sellers[seller] = { name: seller, orders: [], total: 0 };
-      sellers[seller].orders.push(o);
-      sellers[seller].total += parseFloat(o.subtotal || 0);
-    });
-
-    const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
-    const weekLabel = `${fmtDate(start)} – ${fmtDate(end)}`;
-    const sortedSellers = Object.values(sellers).sort((a,b) => b.total - a.total);
-    const totalWeek = sortedSellers.reduce((s, sel) => s + sel.total, 0);
-
-    let html = `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px; display:flex; gap:24px; flex-wrap:wrap;">
-      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Semana</div><div style="font-size:16px; font-weight:600; color:var(--text);">${weekLabel}</div></div>
-      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Total vendido</div><div style="font-size:16px; font-weight:600; color:var(--gold);">$${totalWeek.toFixed(2)}</div></div>
-      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Órdenes</div><div style="font-size:16px; font-weight:600; color:var(--text);">${orders.length}</div></div>
-      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Vendedores</div><div style="font-size:16px; font-weight:600; color:var(--text);">${sortedSellers.length}</div></div>
-    </div>`;
-
-    sortedSellers.forEach(sel => {
-      const commission = sel.total * COMMISSION_RATE;
-      const progress = Math.min(100, (sel.total / WEEKLY_GOAL) * 100);
-      const hitGoal = sel.total >= WEEKLY_GOAL;
-      const bonus = hitGoal ? WEEKLY_BONUS : 0;
-      const totalPay = commission + bonus;
-      const remaining = Math.max(0, WEEKLY_GOAL - sel.total);
-
-      html += `<div style="background:${hitGoal ? 'var(--gold-pale)' : 'var(--surface)'}; border:1px solid ${hitGoal ? 'var(--gold-border)' : 'var(--border)'}; border-radius:var(--radius-lg); padding:20px; margin-bottom:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <div style="width:40px; height:40px; background:var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px;">${sel.name.charAt(0).toUpperCase()}</div>
-            <div>
-              <div style="font-size:18px; font-weight:600; color:var(--text);">${sel.name}</div>
-              <div style="font-size:12px; color:var(--text-muted);">${sel.orders.length} orden${sel.orders.length !== 1 ? 'es' : ''}</div>
-            </div>
-          </div>
-          ${hitGoal ? '<div style="background:var(--gold); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;">🏆 META ALCANZADA</div>' : ''}
-        </div>
-        <div style="margin-bottom:16px;">
-          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-            <span style="font-size:12px; color:var(--text-muted);">Progreso hacia meta $${WEEKLY_GOAL.toLocaleString()}</span>
-            <span style="font-size:12px; font-weight:600; color:${hitGoal ? 'var(--gold)' : 'var(--text)'};">${progress.toFixed(0)}%</span>
-          </div>
-          <div style="background:var(--border); border-radius:99px; height:10px; overflow:hidden;">
-            <div style="height:100%; width:${progress}%; background:${hitGoal ? 'var(--gold)' : '#6b9e6b'}; border-radius:99px;"></div>
-          </div>
-          ${!hitGoal ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Faltan $${remaining.toFixed(2)} para la meta</div>` : ''}
-        </div>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
-          <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px;">
-            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Ventas (subtotal)</div>
-            <div style="font-size:18px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${sel.total.toFixed(2)}</div>
-          </div>
-          <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px;">
-            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Comisión 20%</div>
-            <div style="font-size:18px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${commission.toFixed(2)}</div>
-          </div>
-          ${hitGoal ? `<div style="background:#fef9ee; border:1px solid var(--gold-border); border-radius:var(--radius); padding:10px 14px;">
-            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:4px;">Bono meta 🏆</div>
-            <div style="font-size:18px; font-weight:700; color:var(--gold); font-family:var(--font-display);">+$${bonus.toFixed(2)}</div>
-          </div>` : ''}
-          <div style="background:${hitGoal ? '#1c1a16' : 'var(--surface-2)'}; border:1px solid ${hitGoal ? 'var(--gold)' : 'var(--border)'}; border-radius:var(--radius); padding:10px 14px;">
-            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:${hitGoal ? 'var(--gold)' : 'var(--text-faint)'}; margin-bottom:4px;">Total a pagar</div>
-            <div style="font-size:18px; font-weight:700; color:${hitGoal ? 'var(--gold)' : 'var(--text)'}; font-family:var(--font-display);">$${totalPay.toFixed(2)}</div>
-          </div>
-        </div>
-      </div>`;
-    });
-
-    container.innerHTML = html;
-  } catch(e) {
-    container.innerHTML = '<div style="text-align:center; padding:40px; color:#dc2626;">❌ Error cargando reporte</div>';
-    console.error(e);
-  }
-}
-
-// Check Google session on page load
-window.addEventListener("load", () => { setTimeout(checkGoogleSession, 800); });
+window.addEventListener('load', () => { setTimeout(checkSession, 300); });
