@@ -2410,9 +2410,10 @@ function printOrder(id) {
 <head>
   <meta charset="UTF-8">
   <title>Invoice #${order.id} — LucyGlam Beauty</title>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' rel='stylesheet'>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; padding: 40px; max-width: 760px; margin: 0 auto; }
+    body { font-family: 'Inter', -apple-system, sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; padding: 40px; max-width: 760px; margin: 0 auto; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #b8952a; }
     .logo-wrap { width: 100px; height: 100px; background: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
