@@ -264,6 +264,7 @@ async function loadProfileAndApply(token, uid, errEl) {
   isAdmin = currentRole === 'admin';
   isDelivery = currentRole === 'delivery';
   hideLoginModal();
+  startInactivityWatcher();
   if (isAdmin) {
     showAdminView();
   } else if (isDelivery) {
@@ -289,6 +290,7 @@ async function checkSession() {
 }
 
 async function doLogout() {
+  stopInactivityWatcher();
   const token = localStorage.getItem('sb_token');
   if (token) await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:'POST', headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token}`} }).catch(()=>{});
   localStorage.removeItem('sb_token'); localStorage.removeItem('sb_uid');
@@ -2727,4 +2729,28 @@ async function loadSellersReport() {
     container.innerHTML = '<div style="text-align:center; padding:40px; color:#dc2626;">❌ Error cargando reporte</div>';
     console.error(e);
   }
+}
+
+// ── AUTO LOGOUT ───────────────────────────────────────────────
+const AUTO_LOGOUT_MS = 3 * 60 * 1000; // 3 minutos
+let inactivityTimer = null;
+
+function resetInactivityTimer() {
+  if (!currentRole) return;
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    showToast('⏱ Sesión cerrada por inactividad');
+    setTimeout(doLogout, 1500);
+  }, AUTO_LOGOUT_MS);
+}
+
+function startInactivityWatcher() {
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'].forEach(evt => {
+    document.addEventListener(evt, resetInactivityTimer, { passive: true });
+  });
+  resetInactivityTimer();
+}
+
+function stopInactivityWatcher() {
+  clearTimeout(inactivityTimer);
 }
