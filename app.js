@@ -254,14 +254,17 @@ let supabaseAuth = null;
 
 function getSupabaseAuth() {
   if (!supabaseAuth) {
-    // Supabase v2 SDK exposes createClient on window.supabase
-    if (typeof window.supabase !== 'undefined') {
-      try {
-        const { createClient } = window.supabase;
-        supabaseAuth = createClient(SUPABASE_URL, SUPABASE_KEY);
-      } catch(e) {
-        console.error('Supabase init error:', e);
+    try {
+      // Try different ways the SDK might be available
+      if (typeof supabaseJs !== 'undefined') {
+        supabaseAuth = supabaseJs.createClient(SUPABASE_URL, SUPABASE_KEY);
+      } else if (window.supabase && window.supabase.createClient) {
+        supabaseAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      } else if (window.Supabase && window.Supabase.createClient) {
+        supabaseAuth = window.Supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       }
+    } catch(e) {
+      console.error('Supabase init error:', e);
     }
   }
   return supabaseAuth;
@@ -276,9 +279,21 @@ const ADMIN_EMAILS = [
 const DELIVERY_EMAILS = [];
 
 async function loginWithGoogle() {
+  // Try loading SDK if not available
+  if (!getSupabaseAuth()) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    }).catch(() => {});
+    supabaseAuth = null; // reset to retry
+  }
   const client = getSupabaseAuth();
   if (!client) {
     showToast('❌ Error inicializando autenticación');
+    console.log('window.supabase:', typeof window.supabase, Object.keys(window).filter(k => k.toLowerCase().includes('supa')));
     return;
   }
   const { error } = await client.auth.signInWithOAuth({
