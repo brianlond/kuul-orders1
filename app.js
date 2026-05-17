@@ -2097,8 +2097,12 @@ async function updateCustomerLevel(id, level) {
 
 // ── Tab switching ────────────────────────────────────────────
 function showTab(name) {
-  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory') && !isAdmin) { showLoginModal(); return; }
-  if (name === 'delivery' && !isDelivery && !isAdmin) { showLoginModal(); return; }
+  // All tabs require login
+  if (!currentRole) { showLoginModal(); return; }
+  // Role-based access
+  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers') && !isAdmin) { return; }
+  if (name === 'delivery' && !isDelivery && !isAdmin) { return; }
+  if (name === 'pos' && currentRole === 'delivery') { return; }
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
@@ -2548,4 +2552,8 @@ function printOrder(id) {
   win.focus();
 }
 
-window.addEventListener('load', () => { setTimeout(checkSession, 300); });
+window.addEventListener('load', async () => {
+  await checkSession();
+  // If no session after check, show login
+  if (!currentRole) showLoginModal();
+});
