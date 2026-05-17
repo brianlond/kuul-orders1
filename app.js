@@ -293,8 +293,12 @@ async function doLogout() {
   if (token) await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:'POST', headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token}`} }).catch(()=>{});
   localStorage.removeItem('sb_token'); localStorage.removeItem('sb_uid');
   currentUser = null; currentRole = null; isAdmin = false; isDelivery = false;
-  document.querySelectorAll('.tab').forEach(t => t.style.display = '');
+  // Hide all sections
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); t.style.display = ''; });
   document.getElementById('logout-btn').style.display = 'none';
+  // Clear sensitive data from view
+  document.getElementById('orders-list') && (document.getElementById('orders-list').innerHTML = '');
   showLoginModal();
 }
 
