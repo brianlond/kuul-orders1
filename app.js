@@ -2111,23 +2111,24 @@ function showTab(name) {
   if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers') && !isAdmin) { return; }
   if (name === 'delivery' && !isDelivery && !isAdmin) { return; }
   if (name === 'pos' && currentRole === 'delivery') { return; }
+
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('tab-' + name + '-btn').classList.add('active');
-  if (name === 'admin' || name === 'customers' || name === 'catalog' || name === 'delivery' || name === 'inventory' || name === 'pos') {
-    document.getElementById('logout-btn').style.display = 'inline-block';
-    if (name === 'admin') loadOrders();
-    if (name === 'customers') loadCustomers();
-    if (name === 'catalog') loadCatalog();
-    if (name === 'inventory') loadInventory();
-    if (name === 'pos') initPOS();
-    if (name === 'sellers') initSellersTab();
-    if (name === 'delivery') loadDeliveryOrders();
-    if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
-  } else {
-    document.getElementById('logout-btn').style.display = 'none';
-  }
+
+  // Always show logout when logged in
+  document.getElementById('logout-btn').style.display = 'inline-block';
+
+  // Tab-specific init
+  if (name === 'admin') loadOrders();
+  if (name === 'customers') loadCustomers();
+  if (name === 'catalog') loadCatalog();
+  if (name === 'inventory') loadInventory();
+  if (name === 'pos') initPOS();
+  if (name === 'sellers') initSellersTab();
+  if (name === 'delivery') loadDeliveryOrders();
+  if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
 }
 
 // ── Init — load products from Supabase then boot the form ────
