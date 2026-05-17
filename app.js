@@ -2843,3 +2843,26 @@ function startInactivityWatcher() {
 function stopInactivityWatcher() {
   clearTimeout(inactivityTimer);
 }
+
+// ── TAB BAR DRAG SCROLL (desktop) ─────────────────────────────
+function initTabDragScroll() {
+  const tabs = document.querySelector('.tabs');
+  if (!tabs) return;
+  let isDown = false, startX, scrollLeft;
+  tabs.addEventListener('mousedown', e => {
+    isDown = true;
+    startX = e.pageX - tabs.offsetLeft;
+    scrollLeft = tabs.scrollLeft;
+    tabs.style.userSelect = 'none';
+  });
+  tabs.addEventListener('mouseleave', () => { isDown = false; });
+  tabs.addEventListener('mouseup', () => { isDown = false; tabs.style.userSelect = ''; });
+  tabs.addEventListener('mousemove', e => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - tabs.offsetLeft;
+    tabs.scrollLeft = scrollLeft - (x - startX);
+  });
+}
+
+window.addEventListener('load', () => { setTimeout(initTabDragScroll, 500); });
