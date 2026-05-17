@@ -255,16 +255,18 @@ let supabaseAuth = null;
 function getSupabaseAuth() {
   if (!supabaseAuth) {
     try {
-      // Supabase v2 UMD build exposes createClient directly as window.supabase
-      if (typeof window.supabase === 'function') {
-        // It IS createClient directly
-        supabaseAuth = window.supabase(SUPABASE_URL, SUPABASE_KEY);
-      } else if (window.supabase && window.supabase.createClient) {
-        supabaseAuth = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-      } else if (window.supabaseJs && window.supabaseJs.createClient) {
-        supabaseAuth = window.supabaseJs.createClient(SUPABASE_URL, SUPABASE_KEY);
+      let createClient;
+      if (window.supabase && window.supabase.createClient) {
+        createClient = window.supabase.createClient;
+      } else if (typeof window.supabase === 'function') {
+        createClient = window.supabase;
+      } else if (window.supabaseJs) {
+        createClient = window.supabaseJs.createClient;
       }
-      if (supabaseAuth) console.log('Supabase auth initialized');
+      if (createClient) {
+        supabaseAuth = createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.log('Supabase client:', Object.keys(supabaseAuth));
+      }
     } catch(e) {
       console.error('Supabase init error:', e);
     }
