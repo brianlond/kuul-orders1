@@ -538,7 +538,7 @@
       
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <span style="font-size:13px; font-weight:600;" id="picking-progress">0 / 0 productos</span>
-        <button onclick="savePicking()" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit; font-size:12px;">💾 Guardar progreso</button>
+        <button onclick="printPackingSlip()" style="font-size:12px; padding:5px 12px; border:1px solid var(--gold-border); border-radius:var(--radius); background:var(--gold-pale); color:var(--gold); cursor:pointer; font-family:inherit; font-weight:600;">🖨️ Imprimir</button>
       </div>
 
       <div style="background:var(--bg); border:2px dashed var(--border-strong); border-radius:var(--radius); padding:12px 14px; margin-bottom:16px;">
@@ -550,9 +550,11 @@
 
       <div id="picking-lines"></div>
 
-      <button class="submit-btn" id="picking-confirm-btn" onclick="confirmPicking()" style="margin-top:16px; opacity:0.5;" disabled>
-        ✅ Confirmar picking completo
-      </button>
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button class="submit-btn" id="picking-confirm-btn" onclick="confirmPicking()" style="flex:1; margin:0; opacity:0.5;" disabled>
+          ✅ Confirmar — orden lista
+        </button>
+      </div>
       <button class="cancel-btn" onclick="closePicking()">Cerrar</button>
     </div>
   </div>

@@ -1707,18 +1707,16 @@ function showPickingScanFeedback(msg, type) {
 }
 
 function togglePick(idx) {
-  // Manual override — admin can tap to toggle
   const item = document.getElementById(`pick-item-${idx}`);
+  if (!item) return;
   const checkbox = item.querySelector('.picking-checkbox');
   const isPicked = item.classList.contains('picked');
   if (isPicked) {
     item.classList.remove('picked');
-    checkbox.classList.remove('checked');
-    checkbox.textContent = '';
+    if (checkbox) { checkbox.classList.remove('checked'); checkbox.textContent = ''; }
   } else {
     item.classList.add('picked');
-    checkbox.classList.add('checked');
-    checkbox.textContent = '✓';
+    if (checkbox) { checkbox.classList.add('checked'); checkbox.textContent = '✓'; }
   }
   updatePickingProgress();
 }
@@ -1788,6 +1786,74 @@ async function confirmPicking() {
   } finally {
     btn.disabled = false;
     btn.textContent = '✅ Confirmar picking completo';
+  }
+}
+
+
+function printPackingSlip() {
+  if (!pickingOrder) return;
+  const o = pickingOrder;
+  const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Empaque #${String(o.id).padStart(5,'0')}</title>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter', sans-serif; font-size:13px; max-width:480px; margin:20px auto; padding:20px; color:#111; }
+    .header { display:flex; justify-content:space-between; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid #b8952a; }
+    .title { font-size:20px; font-weight:700; color:#b8952a; }
+    .subtitle { font-size:12px; color:#999; margin-top:2px; }
+    .client-box { background:#faf9f7; border:1px solid #e8d5a3; border-radius:8px; padding:12px; margin-bottom:16px; }
+    .label { font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:#b0a898; margin-bottom:2px; }
+    .value { font-size:14px; font-weight:600; margin-bottom:6px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .products-title { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#b8952a; font-weight:700; margin-bottom:8px; }
+    .product-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #ede9e0; border-radius:6px; margin-bottom:6px; }
+    .qty-box { width:32px; height:32px; background:#f5edda; border:1px solid #e8d5a3; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#b8952a; flex-shrink:0; }
+    .check-box { width:20px; height:20px; border:1.5px solid #ccc; border-radius:4px; margin-left:auto; flex-shrink:0; }
+    .prod-name { font-size:13px; font-weight:500; }
+    .prod-code { font-size:10px; color:#b0a898; font-family:monospace; }
+    .footer { margin-top:16px; padding-top:12px; border-top:1px solid #eee; display:flex; justify-content:space-between; font-size:11px; color:#aaa; }
+    .print-btn { position:fixed; bottom:20px; right:20px; background:#b8952a; color:#fff; border:none; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
+    @media print { .print-btn { display:none; } }
+  </style></head><body>
+  <div class="header">
+    <div><div class="title">Hoja de Empaque</div><div class="subtitle">Orden #${String(o.id).padStart(5,'0')} · ${date}</div></div>
+    <div style="text-align:right; font-size:11px; color:#aaa;">LucyGlam Beauty</div>
+  </div>
+  <div class="client-box">
+    <div class="grid">
+      <div><div class="label">Cliente</div><div class="value">${o.client}</div></div>
+      <div><div class="label">Negocio</div><div class="value">${o.business}</div></div>
+    </div>
+    <div><div class="label">Teléfono</div><div class="value">${o.phone}</div></div>
+    <div><div class="label">Dirección</div><div class="value">${o.address}</div></div>
+  </div>
+  <div class="products-title">${o.lines.reduce((s,l) => s+l.qty, 0)} unidades · ${o.lines.length} referencia${o.lines.length!==1?'s':''}</div>
+  ${o.lines.map(l => `
+    <div class="product-row">
+      <div class="qty-box">${l.qty}</div>
+      <div style="flex:1;">
+        <div class="prod-name">${l.brand} [${l.code}] ${l.name}</div>
+        <div class="prod-code">${l.barcode}</div>
+      </div>
+      <div class="check-box"></div>
+    </div>`).join('')}
+  ${o.notes ? `<div style="margin-top:12px; padding:10px; background:#fef9ee; border-left:3px solid #b8952a; font-style:italic; font-size:12px; color:#666;">📝 ${o.notes}</div>` : ''}
+  <div class="footer"><span>Vendedor: ${o.seller}</span><span>Total: $${parseFloat(o.total).toFixed(2)}</span></div>
+  <button class="print-btn" onclick="window.print()">🖨️ Imprimir</button>
+  </body></html>`;
+
+  const overlay = document.getElementById('invoice-overlay');
+  const frame = document.getElementById('invoice-frame');
+  if (overlay && frame) {
+    frame.srcdoc = html;
+    overlay.style.display = 'flex';
+  } else {
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
   }
 }
 
