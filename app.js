@@ -1024,7 +1024,7 @@ function calcWholesaleDiscount() {
   const salon = parseFloat(document.getElementById('pm-price').value) || 0;
   const ws = parseFloat(document.getElementById('pm-price-wholesale').value) || 0;
   if (salon > 0 && ws > 0) {
-    const disc = Math.round((1 - ws / salon) * 100);
+    const disc = ((1 - ws / salon) * 100).toFixed(2);
     document.getElementById('pm-discount-wholesale').value = disc;
   }
 }
@@ -1050,8 +1050,8 @@ function editProduct(id) {
   document.getElementById('pm-price').value = p.price || '';
   document.getElementById('pm-price-retail').value = p.price_retail || '';
   document.getElementById('pm-discount-wholesale').value = p.discount_wholesale || '';
-  const wsPrice = p.price && p.discount_wholesale ? (p.price * (1 - p.discount_wholesale / 100)).toFixed(2) : '';
-  document.getElementById('pm-price-wholesale').value = wsPrice;
+  const wsPrice = p.price && p.discount_wholesale ? (p.price * (1 - p.discount_wholesale / 100)).toFixed(4) : '';
+  document.getElementById('pm-price-wholesale').value = wsPrice ? parseFloat(wsPrice) : '';
   document.getElementById('pm-active').checked = p.active !== false;
   document.getElementById('product-modal').style.display = 'flex';
 }
@@ -1125,7 +1125,12 @@ async function saveProduct() {
     name, price,
     price_retail: parseFloat(document.getElementById('pm-price-retail').value) || null,
     discount_salon: parseFloat(document.getElementById('pm-discount-salon').value) || null,
-    discount_wholesale: parseFloat(document.getElementById('pm-discount-wholesale').value) || null,
+    discount_wholesale: (() => {
+      const ws = parseFloat(document.getElementById('pm-price-wholesale').value);
+      const salon = parseFloat(document.getElementById('pm-price').value);
+      if (ws && salon) return parseFloat(((1 - ws / salon) * 100).toFixed(4));
+      return parseFloat(document.getElementById('pm-discount-wholesale').value) || null;
+    })(),
     active: document.getElementById('pm-active').value === 'true'
   };
 
