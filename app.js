@@ -920,10 +920,31 @@ window.loadCatalog = async function loadCatalog() {
     }
     allProds.sort((a,b) => a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name));
     window._catalogProducts = allProds;
-    const products = catalogFilter === 'all' ? allProds : allProds.filter(p => p.brand === catalogFilter);
-    renderCatalogBrandFilter(allProds);
+    window._catalogBrand = '';
+    window._catalogCat = '';
+
+    // Brand chips
+    const brands = [...new Set(allProds.map(p => p.brand))].sort();
+    const cats = [...new Set(allProds.map(p => p.category))].sort();
+
+    const brandChipsEl = document.getElementById('catalog-brand-chips');
+    const catChipsEl = document.getElementById('catalog-cat-chips');
+    const brandFilterEl = document.getElementById('catalog-brand-filter');
+
+    if (brandChipsEl) brandChipsEl.innerHTML = brands.map(b =>
+      `<button class="catalog-brand-chip filter-chip" data-brand="${b}" onclick="setCatalogBrand('${b}')">${b}</button>`
+    ).join('');
+
+    if (brandFilterEl) brandFilterEl.innerHTML = brands.map(b =>
+      `<button class="catalog-brand-chip filter-chip" data-brand="${b}" onclick="setCatalogBrand('${b}')">${b}</button>`
+    ).join('');
+
+    if (catChipsEl) catChipsEl.innerHTML = cats.map(c =>
+      `<button class="catalog-cat-chip filter-chip" data-cat="${c}" onclick="setCatalogCat('${c}')">${c}</button>`
+    ).join('');
+
     populateDataLists(allProds);
-    renderCatalog(products);
+    renderCatalog(allProds);
   } catch(e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando catálogo</div>`;
     console.error(e);
@@ -979,13 +1000,22 @@ function renderCatalog(allProducts) {
     return;
   }
 
-  list.innerHTML = filtered.map(p => {
+  // Select all header
+  const selectAllRow = `<div style="display:flex; align-items:center; gap:10px; padding:6px 0; margin-bottom:4px; border-bottom:1px solid var(--border);">
+    <input type="checkbox" id="catalog-select-all" onchange="toggleSelectAll(this.checked)" style="width:16px; height:16px; accent-color:var(--gold); flex-shrink:0; cursor:pointer;">
+    <span style="font-size:12px; color:var(--text-muted);">Seleccionar todos (${filtered.length})</span>
+  </div>`;
+
+  list.innerHTML = selectAllRow + filtered.map(p => {
     const wsPrice = p.price * (1 - (p.discount_wholesale || 0) / 100);
     return `<div class="catalog-item" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
       <input type="checkbox" class="catalog-check" data-id="${p.id}" onchange="updateBulkBar()" style="width:16px; height:16px; accent-color:var(--gold); flex-shrink:0; cursor:pointer;">
       <div style="flex:1; min-width:160px;">
-        <div style="font-size:13px; font-weight:600; color:var(--text);">${p.name}</div>
-        <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${p.color_code ? '['+p.color_code+'] · ' : ''}${p.barcode} · <span style="color:var(--text-muted);">${p.brand}</span></div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          ${p.color_code ? `<span style="font-size:15px; font-weight:700; color:var(--gold); min-width:36px;">[${p.color_code}]</span>` : ''}
+          <span style="font-size:13px; font-weight:600; color:var(--text);">${p.name}</span>
+        </div>
+        <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${p.barcode} · <span style="color:var(--text-muted);">${p.brand}</span></div>
       </div>
       <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; flex-shrink:0;">
         <span style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;">Salon <strong>$${p.price.toFixed(2)}</strong></span>
@@ -1001,9 +1031,8 @@ function renderCatalog(allProducts) {
 function setCatalogBrand(brand) {
   window._catalogBrand = window._catalogBrand === brand ? '' : brand;
   document.querySelectorAll('.catalog-brand-chip').forEach(c => {
-    c.style.background = c.dataset.brand === window._catalogBrand ? 'var(--gold)' : '';
-    c.style.color = c.dataset.brand === window._catalogBrand ? '#fff' : '';
-    c.style.borderColor = c.dataset.brand === window._catalogBrand ? 'var(--gold)' : '';
+    const active = c.dataset.brand === window._catalogBrand;
+    c.classList.toggle('active', active);
   });
   renderCatalog(window._catalogProducts || []);
 }
@@ -1011,9 +1040,8 @@ function setCatalogBrand(brand) {
 function setCatalogCat(cat) {
   window._catalogCat = window._catalogCat === cat ? '' : cat;
   document.querySelectorAll('.catalog-cat-chip').forEach(c => {
-    c.style.background = c.dataset.cat === window._catalogCat ? 'var(--gold)' : '';
-    c.style.color = c.dataset.cat === window._catalogCat ? '#fff' : '';
-    c.style.borderColor = c.dataset.cat === window._catalogCat ? 'var(--gold)' : '';
+    const active = c.dataset.cat === window._catalogCat;
+    c.classList.toggle('active', active);
   });
   renderCatalog(window._catalogProducts || []);
 }
@@ -2976,6 +3004,12 @@ function initTabDragScroll() {
 window.addEventListener('load', () => { setTimeout(initTabDragScroll, 500); });
 
 // ── BULK EDIT ─────────────────────────────────────────────────
+
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.catalog-check').forEach(c => c.checked = checked);
+  updateBulkBar();
+}
+
 function updateBulkBar() {
   const checked = document.querySelectorAll('.catalog-check:checked');
   const bar = document.getElementById('catalog-bulk-bar');
