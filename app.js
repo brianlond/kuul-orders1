@@ -1008,7 +1008,7 @@ function renderCatalog(allProducts) {
 
   list.innerHTML = selectAllRow + filtered.map(p => {
     const wsPrice = p.price * (1 - (p.discount_wholesale || 0) / 100);
-    return `<div class="catalog-item" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    return `<div class="catalog-item" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); margin-bottom:6px;">
       <input type="checkbox" class="catalog-check" data-id="${p.id}" onchange="updateBulkBar()" style="width:16px; height:16px; accent-color:var(--gold); flex-shrink:0; cursor:pointer;">
       <div style="flex:1; min-width:160px;">
         <div style="display:flex; align-items:center; gap:8px;">
