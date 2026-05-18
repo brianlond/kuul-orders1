@@ -944,9 +944,11 @@ function populateDataLists(products) {
 function renderCatalog(allProducts) {
   const list = document.getElementById('catalog-list');
   const countLabel = document.getElementById('catalog-count-label');
+  if (!allProducts || !list) return;
+
   const searchVal = (document.getElementById('catalog-search') ? document.getElementById('catalog-search').value : '').toLowerCase();
-  const brandFilter = document.getElementById('catalog-brand-filter') ? document.getElementById('catalog-brand-filter').value : '';
-  const catFilter = document.getElementById('catalog-cat-filter') ? document.getElementById('catalog-cat-filter').value : '';
+  const brandFilter = window._catalogBrand || '';
+  const catFilter = window._catalogCat || '';
 
   let filtered = allProducts;
   if (brandFilter) filtered = filtered.filter(p => p.brand === brandFilter);
@@ -954,56 +956,52 @@ function renderCatalog(allProducts) {
   if (searchVal) filtered = filtered.filter(p =>
     (p.name || '').toLowerCase().includes(searchVal) ||
     (p.color_code || '').toLowerCase().includes(searchVal) ||
-    (p.barcode || '').toLowerCase().includes(searchVal) ||
-    (p.brand || '').toLowerCase().includes(searchVal)
+    (p.barcode || '').toLowerCase().includes(searchVal)
   );
 
   if (countLabel) countLabel.textContent = `${filtered.length} productos`;
 
-  // Group by brand then category
-  const groups = {};
-  filtered.forEach(p => {
-    const key = `${p.brand}||${p.category}`;
-    if (!groups[key]) groups[key] = { brand: p.brand, category: p.category, products: [] };
-    groups[key].products.push(p);
-  });
-
   if (!filtered.length) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div>Sin productos</div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div>Sin resultados</div>';
     return;
   }
 
-  list.innerHTML = Object.values(groups).sort((a,b) => a.brand.localeCompare(b.brand) || a.category.localeCompare(b.category)).map(group => `
-    <div style="margin-bottom:24px;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid var(--gold-border);">
-        <span style="font-size:14px; font-weight:700; color:var(--gold);">${group.brand}</span>
-        <span style="font-size:12px; color:var(--text-faint); background:var(--gold-pale); padding:2px 8px; border-radius:99px;">${group.category}</span>
-        <span style="font-size:12px; color:var(--text-faint); margin-left:auto;">${group.products.length} productos</span>
+  list.innerHTML = filtered.map(p => {
+    const wsPrice = p.price * (1 - (p.discount_wholesale || 0) / 100);
+    return `<div class="catalog-item" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:160px;">
+        <div style="font-size:13px; font-weight:600; color:var(--text);">${p.name}</div>
+        <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${p.color_code ? '['+p.color_code+'] · ' : ''}${p.barcode} · <span style="color:var(--text-muted);">${p.brand}</span></div>
       </div>
-      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:10px;">
-        ${group.products.map(p => {
-          const wsPrice = p.price * (1 - (p.discount_wholesale || 0) / 100);
-          return `<div class="catalog-item" style="position:relative;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
-              <div style="flex:1; min-width:0;">
-                <div style="font-size:13px; font-weight:600; color:var(--text); line-height:1.3;">${p.name}</div>
-                <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${p.color_code ? '['+p.color_code+'] · ' : ''}${p.barcode}</div>
-              </div>
-              <div style="display:flex; gap:4px; flex-shrink:0; margin-left:8px;">
-                <button onclick="editProduct(${p.id})" style="font-size:11px; padding:3px 8px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted);">✏️</button>
-                <button onclick="toggleProduct(${p.id}, ${!p.active})" style="font-size:11px; padding:3px 8px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:${p.active ? '#16a34a' : '#dc2626'};">${p.active ? '✓' : '✗'}</button>
-              </div>
-            </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <div style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;"><span style="color:var(--text-faint);">Salon</span> <strong>$${p.price.toFixed(2)}</strong></div>
-              <div style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;"><span style="color:var(--text-faint);">Retail</span> <strong>$${(p.price_retail||0).toFixed(2)}</strong></div>
-              <div style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;"><span style="color:var(--text-faint);">WS</span> <strong>$${wsPrice.toFixed(2)}</strong></div>
-            </div>
-          </div>`;
-        }).join('')}
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; flex-shrink:0;">
+        <span style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;">Salon <strong>$${p.price.toFixed(2)}</strong></span>
+        <span style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;">Retail <strong>$${(p.price_retail||0).toFixed(2)}</strong></span>
+        <span style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;">WS <strong>$${wsPrice.toFixed(2)}</strong></span>
+        <button onclick="editProduct(${p.id})" style="font-size:11px; padding:3px 8px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted);">✏️</button>
+        <button onclick="toggleProduct(${p.id}, ${!p.active})" style="font-size:11px; padding:3px 8px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:${p.active ? '#16a34a' : '#dc2626'};">${p.active ? '✓' : '✗'}</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+}
+
+function setCatalogBrand(brand) {
+  window._catalogBrand = window._catalogBrand === brand ? '' : brand;
+  document.querySelectorAll('.catalog-brand-chip').forEach(c => {
+    c.style.background = c.dataset.brand === window._catalogBrand ? 'var(--gold)' : '';
+    c.style.color = c.dataset.brand === window._catalogBrand ? '#fff' : '';
+    c.style.borderColor = c.dataset.brand === window._catalogBrand ? 'var(--gold)' : '';
+  });
+  renderCatalog(window._catalogProducts || []);
+}
+
+function setCatalogCat(cat) {
+  window._catalogCat = window._catalogCat === cat ? '' : cat;
+  document.querySelectorAll('.catalog-cat-chip').forEach(c => {
+    c.style.background = c.dataset.cat === window._catalogCat ? 'var(--gold)' : '';
+    c.style.color = c.dataset.cat === window._catalogCat ? '#fff' : '';
+    c.style.borderColor = c.dataset.cat === window._catalogCat ? 'var(--gold)' : '';
+  });
+  renderCatalog(window._catalogProducts || []);
 }
 
 

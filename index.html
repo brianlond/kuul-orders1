@@ -233,14 +233,14 @@
             <button class="submit-btn" style="width:auto; margin:0; padding:8px 16px; font-size:13px;" onclick="openAddProduct()">+ Nuevo producto</button>
           </div>
         </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <input type="text" id="catalog-search" placeholder="🔍 Buscar por nombre, código o barcode..." oninput="renderCatalog(window._catalogProducts || [])" style="flex:1; min-width:200px; padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface);">
-          <select id="catalog-brand-filter" onchange="renderCatalog(window._catalogProducts || [])" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface);">
-            <option value="">Todas las marcas</option>
-          </select>
-          <select id="catalog-cat-filter" onchange="renderCatalog(window._catalogProducts || [])" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface);">
-            <option value="">Todas las categorías</option>
-          </select>
+        <input type="text" id="catalog-search" placeholder="🔍 Buscar por nombre, código o barcode..." oninput="renderCatalog(window._catalogProducts || [])" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface); box-sizing:border-box;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+          <span style="font-size:11px; color:var(--text-faint); flex-shrink:0;">Marca:</span>
+          <div id="catalog-brand-chips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+          <span style="font-size:11px; color:var(--text-faint); flex-shrink:0;">Categoría:</span>
+          <div id="catalog-cat-chips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
         </div>
       </div>
       <div class="filter-bar" id="catalog-brand-filter"></div>
