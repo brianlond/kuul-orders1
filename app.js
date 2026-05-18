@@ -269,6 +269,19 @@ async function loadProfileAndApply(token, uid, errEl) {
   isDelivery = currentRole === 'delivery';
   hideLoginModal();
   startInactivityWatcher();
+
+  // Auto-fill seller name
+  const sellerInput = document.getElementById('seller-name');
+  if (sellerInput && profile[0].name) {
+    sellerInput.value = profile[0].name;
+    if (currentRole === 'seller') {
+      sellerInput.readOnly = true;
+      sellerInput.style.background = 'var(--surface-2)';
+      sellerInput.style.color = 'var(--text-muted)';
+      sellerInput.style.cursor = 'default';
+    }
+  }
+
   if (isAdmin) {
     showAdminView();
   } else if (isDelivery) {
