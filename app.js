@@ -1649,7 +1649,7 @@ async function openPicking(id) {
   const linesHTML = pickingOrder.lines.map((l, idx) => {
     const checked = savedPicking[idx] || false;
     return `
-    <div class="picking-item ${checked ? 'picked' : ''}" id="pick-item-${idx}">
+    <div class="picking-item ${checked ? 'picked' : ''}" id="pick-item-${idx}" onclick="togglePick(${idx})" style="cursor:pointer;">
       <div class="picking-checkbox ${checked ? 'checked' : ''}">
         ${checked ? '✓' : ''}
       </div>
