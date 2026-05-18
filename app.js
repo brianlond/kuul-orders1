@@ -1018,6 +1018,23 @@ function setCatalogCat(cat) {
 }
 
 
+function editProduct(id) {
+  const p = (window._catalogProducts || []).find(p => p.id === id);
+  if (!p) return;
+  editingProductId = id;
+  document.getElementById('product-modal-title').textContent = 'Editar producto';
+  document.getElementById('pm-brand').value = p.brand || '';
+  document.getElementById('pm-category').value = p.category || '';
+  document.getElementById('pm-code').value = p.color_code || '';
+  document.getElementById('pm-barcode').value = p.barcode || '';
+  document.getElementById('pm-name').value = p.name || '';
+  document.getElementById('pm-price').value = p.price || '';
+  document.getElementById('pm-price-retail').value = p.price_retail || '';
+  document.getElementById('pm-discount-wholesale').value = p.discount_wholesale || '';
+  document.getElementById('pm-active').checked = p.active !== false;
+  document.getElementById('product-modal').style.display = 'flex';
+}
+
 function openAddProduct() {
   editingProductId = null;
   document.getElementById('product-modal-title').textContent = 'Nuevo producto';
