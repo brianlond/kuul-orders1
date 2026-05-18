@@ -1807,14 +1807,18 @@ function printPackingSlip() {
     .value { font-size:14px; font-weight:600; margin-bottom:6px; }
     .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
     .products-title { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#b8952a; font-weight:700; margin-bottom:8px; }
-    .product-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #ede9e0; border-radius:6px; margin-bottom:6px; }
+    .product-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #ede9e0; border-radius:6px; margin-bottom:6px; page-break-inside:avoid; break-inside:avoid; }
     .qty-box { width:32px; height:32px; background:#f5edda; border:1px solid #e8d5a3; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#b8952a; flex-shrink:0; }
     .check-box { width:20px; height:20px; border:1.5px solid #ccc; border-radius:4px; margin-left:auto; flex-shrink:0; }
     .prod-name { font-size:13px; font-weight:500; }
     .prod-code { font-size:10px; color:#b0a898; font-family:monospace; }
     .footer { margin-top:16px; padding-top:12px; border-top:1px solid #eee; display:flex; justify-content:space-between; font-size:11px; color:#aaa; }
     .print-btn { position:fixed; bottom:20px; right:20px; background:#b8952a; color:#fff; border:none; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
-    @media print { .print-btn { display:none; } }
+    @media print { 
+      .print-btn { display:none; }
+      .product-row { page-break-inside:avoid; break-inside:avoid; }
+      .client-box { page-break-inside:avoid; break-inside:avoid; }
+    }
   </style></head><body>
   <div class="header">
     <div><div class="title">Hoja de Empaque</div><div class="subtitle">Orden #${String(o.id).padStart(5,'0')} · ${date}</div></div>
