@@ -981,7 +981,8 @@ function renderCatalog(allProducts) {
 
   list.innerHTML = filtered.map(p => {
     const wsPrice = p.price * (1 - (p.discount_wholesale || 0) / 100);
-    return `<div class="catalog-item" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+    return `<div class="catalog-item" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <input type="checkbox" class="catalog-check" data-id="${p.id}" onchange="updateBulkBar()" style="width:16px; height:16px; accent-color:var(--gold); flex-shrink:0; cursor:pointer;">
       <div style="flex:1; min-width:160px;">
         <div style="font-size:13px; font-weight:600; color:var(--text);">${p.name}</div>
         <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${p.color_code ? '['+p.color_code+'] · ' : ''}${p.barcode} · <span style="color:var(--text-muted);">${p.brand}</span></div>
@@ -1018,6 +1019,24 @@ function setCatalogCat(cat) {
 }
 
 
+
+function calcWholesaleDiscount() {
+  const salon = parseFloat(document.getElementById('pm-price').value) || 0;
+  const ws = parseFloat(document.getElementById('pm-price-wholesale').value) || 0;
+  if (salon > 0 && ws > 0) {
+    const disc = Math.round((1 - ws / salon) * 100);
+    document.getElementById('pm-discount-wholesale').value = disc;
+  }
+}
+
+function calcWholesalePrice() {
+  const salon = parseFloat(document.getElementById('pm-price').value) || 0;
+  const disc = parseFloat(document.getElementById('pm-discount-wholesale').value) || 0;
+  if (salon > 0) {
+    document.getElementById('pm-price-wholesale').value = (salon * (1 - disc / 100)).toFixed(2);
+  }
+}
+
 function editProduct(id) {
   const p = (window._catalogProducts || []).find(p => p.id === id);
   if (!p) return;
@@ -1031,6 +1050,8 @@ function editProduct(id) {
   document.getElementById('pm-price').value = p.price || '';
   document.getElementById('pm-price-retail').value = p.price_retail || '';
   document.getElementById('pm-discount-wholesale').value = p.discount_wholesale || '';
+  const wsPrice = p.price && p.discount_wholesale ? (p.price * (1 - p.discount_wholesale / 100)).toFixed(2) : '';
+  document.getElementById('pm-price-wholesale').value = wsPrice;
   document.getElementById('pm-active').checked = p.active !== false;
   document.getElementById('product-modal').style.display = 'flex';
 }
@@ -2948,3 +2969,70 @@ function initTabDragScroll() {
 }
 
 window.addEventListener('load', () => { setTimeout(initTabDragScroll, 500); });
+
+// ── BULK EDIT ─────────────────────────────────────────────────
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.catalog-check:checked');
+  const bar = document.getElementById('catalog-bulk-bar');
+  const countEl = document.getElementById('bulk-count');
+  if (checked.length > 0) {
+    bar.style.display = 'flex';
+    countEl.textContent = `${checked.length} seleccionado${checked.length !== 1 ? 's' : ''}`;
+    // Populate category options
+    const cats = [...new Set((window._catalogProducts||[]).map(p => p.category))].sort();
+    const catSel = document.getElementById('bulk-category');
+    catSel.innerHTML = '<option value="">— Cambiar categoría —</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+async function applyBulkEdit() {
+  const checked = [...document.querySelectorAll('.catalog-check:checked')];
+  if (!checked.length) return;
+
+  const category = document.getElementById('bulk-category').value;
+  const price = parseFloat(document.getElementById('bulk-price').value) || null;
+  const priceRetail = parseFloat(document.getElementById('bulk-price-retail').value) || null;
+  const priceWs = parseFloat(document.getElementById('bulk-price-wholesale').value) || null;
+
+  if (!category && !price && !priceRetail && !priceWs) {
+    showToast('⚠️ Ingresa al menos un valor para aplicar');
+    return;
+  }
+
+  const btn = document.querySelector('#catalog-bulk-bar button');
+  btn.textContent = 'Aplicando...'; btn.disabled = true;
+
+  let success = 0;
+  for (const cb of checked) {
+    const id = cb.dataset.id;
+    const prod = (window._catalogProducts || []).find(p => String(p.id) === String(id));
+    if (!prod) continue;
+
+    const update = {};
+    if (category) update.category = category;
+    if (price) update.price = price;
+    if (priceRetail) update.price_retail = priceRetail;
+    if (priceWs && price) update.discount_wholesale = Math.round((1 - priceWs / price) * 100);
+    else if (priceWs && prod.price) update.discount_wholesale = Math.round((1 - priceWs / prod.price) * 100);
+
+    try {
+      await supabase(`products?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(update) });
+      success++;
+    } catch(e) { console.error(e); }
+  }
+
+  showToast(`✓ ${success} productos actualizados`);
+  clearBulkSelection();
+  loadCatalog();
+}
+
+function clearBulkSelection() {
+  document.querySelectorAll('.catalog-check').forEach(c => c.checked = false);
+  document.getElementById('catalog-bulk-bar').style.display = 'none';
+  document.getElementById('bulk-price').value = '';
+  document.getElementById('bulk-price-retail').value = '';
+  document.getElementById('bulk-price-wholesale').value = '';
+  document.getElementById('bulk-category').value = '';
+}
