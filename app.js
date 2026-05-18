@@ -552,22 +552,48 @@ function renderOrders(orders) {
     ).join('');
     return `
     <div class="order-card">
-      <div class="order-header">
-        <div>
-          <div class="order-name">${o.client}</div>
-          <div class="order-business">${o.business}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:22px; font-weight:700; color:var(--gold); letter-spacing:0.02em; flex-shrink:0;">#${String(o.id).padStart(5,'0')}</span>
+          <div>
+            <div class="order-name">${o.client}</div>
+            <div class="order-business">${o.business}</div>
+          </div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-        <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Imprimir orden">🖨️</button>
-        <button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Editar orden">✏️</button>
-        ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;" title="Hacer picking">📦 Picking</button>` : ''}
-        <button onclick="duplicateOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;" title="Duplicar orden">📋 Duplicar</button>
-        <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)">
+        <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)" style="flex-shrink:0;">
           ${statusOptions}
         </select>
-        </div>
       </div>
-      <div class="order-meta">🕐 ${date} · 👤 ${o.seller} · 📞 ${o.phone}${o.payment_method ? ` · 💳 ${o.payment_method}` : ''}</div>
+      <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; margin-bottom:10px; display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:13px;">👤</span>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Vendedor</div>
+            <div style="font-size:13px; font-weight:600; color:var(--text);">${o.seller}</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:13px;">🕐</span>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Fecha</div>
+            <div style="font-size:13px; font-weight:600; color:var(--text);">${date}</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:13px;">📞</span>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Teléfono</div>
+            <div style="font-size:13px; font-weight:600; color:var(--text);">${o.phone}</div>
+          </div>
+        </div>
+        ${o.payment_method ? `<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">💳</span><div><div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Pago</div><div style="font-size:13px; font-weight:600; color:var(--text);">${o.payment_method}</div></div></div>` : ''}
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+        <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;">🖨️</button>
+        ${o.status === 'Nueva' ? `<button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;">✏️</button>` : ''}
+        ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;">📦 Empaque</button>` : ''}
+        <button onclick="duplicateOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;">📋 Duplicar</button>
+      </div>
       <div class="order-meta">
         📍 ${o.address}
         ${o.permit ? ` · Permit: ${o.permit}` : ' · <span class="warn">Sin seller permit</span>'}
@@ -874,7 +900,7 @@ window.loadCatalog = async function loadCatalog() {
   if (!list) return;
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
   try {
-    const allProds = await supabase('products?select=*');
+    const allProds = await supabase('products?select=*&order=brand,category,name');
     if (!allProds || allProds.length === 0) {
       list.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div>No hay productos</div>`;
       return;
@@ -916,44 +942,70 @@ function populateDataLists(products) {
 }
 
 function renderCatalog(allProducts) {
-  const filtered = allProducts;
   const list = document.getElementById('catalog-list');
   const countLabel = document.getElementById('catalog-count-label');
-  countLabel.textContent = filtered.length + ' producto' + (filtered.length !== 1 ? 's' : '');
+  const searchVal = (document.getElementById('catalog-search') ? document.getElementById('catalog-search').value : '').toLowerCase();
+  const brandFilter = document.getElementById('catalog-brand-filter') ? document.getElementById('catalog-brand-filter').value : '';
+  const catFilter = document.getElementById('catalog-cat-filter') ? document.getElementById('catalog-cat-filter').value : '';
 
-  if (filtered.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div>No hay productos</div>`;
+  let filtered = allProducts;
+  if (brandFilter) filtered = filtered.filter(p => p.brand === brandFilter);
+  if (catFilter) filtered = filtered.filter(p => p.category === catFilter);
+  if (searchVal) filtered = filtered.filter(p =>
+    (p.name || '').toLowerCase().includes(searchVal) ||
+    (p.color_code || '').toLowerCase().includes(searchVal) ||
+    (p.barcode || '').toLowerCase().includes(searchVal) ||
+    (p.brand || '').toLowerCase().includes(searchVal)
+  );
+
+  if (countLabel) countLabel.textContent = `${filtered.length} productos`;
+
+  // Group by brand then category
+  const groups = {};
+  filtered.forEach(p => {
+    const key = `${p.brand}||${p.category}`;
+    if (!groups[key]) groups[key] = { brand: p.brand, category: p.category, products: [] };
+    groups[key].products.push(p);
+  });
+
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div>Sin productos</div>';
     return;
   }
 
-  list.innerHTML = filtered.map(p => {
-    const code = p.color_code || '—';
-    const retail = p.price_retail ? `$${parseFloat(p.price_retail).toFixed(2)}` : '—';
-    const salon = p.price ? `$${parseFloat(p.price).toFixed(2)}` : '—';
-    const wholesale = (p.price && p.discount_wholesale) ? `$${(parseFloat(p.price) * (1 - parseFloat(p.discount_wholesale)/100)).toFixed(2)}` : '—';
-    return `
-    <div class="order-card" style="${!p.active ? 'opacity:0.5;' : ''}">
-      <div class="order-header">
-        <div>
-          <div class="order-name" style="font-size:14px;">${p.brand} [${code}] ${p.name}</div>
-          <div class="order-business">${p.category}</div>
-        </div>
-        <span class="status-badge ${p.active ? 'badge-lista' : 'badge-entregada'}">${p.active ? 'Activo' : 'Inactivo'}</span>
+  list.innerHTML = Object.values(groups).sort((a,b) => a.brand.localeCompare(b.brand) || a.category.localeCompare(b.category)).map(group => `
+    <div style="margin-bottom:24px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid var(--gold-border);">
+        <span style="font-size:14px; font-weight:700; color:var(--gold);">${group.brand}</span>
+        <span style="font-size:12px; color:var(--text-faint); background:var(--gold-pale); padding:2px 8px; border-radius:99px;">${group.category}</span>
+        <span style="font-size:12px; color:var(--text-faint); margin-left:auto;">${group.products.length} productos</span>
       </div>
-      <div class="order-meta" style="font-size:11px; font-family:monospace; margin-bottom:6px;">📊 ${p.barcode}</div>
-      <div style="display:flex; gap:12px; font-size:12px; color:var(--text-muted); margin-bottom:8px; flex-wrap:wrap;">
-        <span>Retail: <strong style="color:var(--text);">${retail}</strong></span>
-        <span>Salon: <strong style="color:var(--text);">${salon}</strong></span>
-        <span>Wholesale: <strong style="color:var(--text);">${wholesale}</strong></span>
-      </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button onclick="openEditProduct(${p.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">✏️ Editar</button>
-        <button onclick="toggleProduct(${p.id}, ${!p.active})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">${p.active ? '⏸ Desactivar' : '▶️ Activar'}</button>
-        <button onclick="deleteProduct(${p.id}, '${p.name.replace(/'/g, "\'")}')" class="contact-btn" style="border:1px solid var(--danger-bg); color:var(--danger); background:var(--danger-bg); cursor:pointer; font-family:inherit;">🗑 Eliminar</button>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:10px;">
+        ${group.products.map(p => {
+          const wsPrice = p.price * (1 - (p.discount_wholesale || 0) / 100);
+          return `<div class="catalog-item" style="position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:13px; font-weight:600; color:var(--text); line-height:1.3;">${p.name}</div>
+                <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${p.color_code ? '['+p.color_code+'] · ' : ''}${p.barcode}</div>
+              </div>
+              <div style="display:flex; gap:4px; flex-shrink:0; margin-left:8px;">
+                <button onclick="editProduct(${p.id})" style="font-size:11px; padding:3px 8px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted);">✏️</button>
+                <button onclick="toggleProduct(${p.id}, ${!p.active})" style="font-size:11px; padding:3px 8px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:${p.active ? '#16a34a' : '#dc2626'};">${p.active ? '✓' : '✗'}</button>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <div style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;"><span style="color:var(--text-faint);">Salon</span> <strong>$${p.price.toFixed(2)}</strong></div>
+              <div style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;"><span style="color:var(--text-faint);">Retail</span> <strong>$${(p.price_retail||0).toFixed(2)}</strong></div>
+              <div style="font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; padding:3px 8px;"><span style="color:var(--text-faint);">WS</span> <strong>$${wsPrice.toFixed(2)}</strong></div>
+            </div>
+          </div>`;
+        }).join('')}
       </div>
     </div>
-  `}).join('');
+  `).join('');
 }
+
 
 function openAddProduct() {
   editingProductId = null;
