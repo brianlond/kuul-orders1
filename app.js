@@ -2691,7 +2691,7 @@ function printOrder(id) {
   <div class="invoice-meta">
     <div>
       <div class="invoice-title">INVOICE</div>
-      <div class="status-badge">${order.status}</div>
+      <div class="status-badge">${order.status === 'Nueva' ? 'New' : order.status === 'En proceso' ? 'In Progress' : order.status === 'Lista' ? 'Ready' : order.status === 'Entregada' ? 'Delivered' : order.status}</div>
     </div>
     <div class="invoice-details">
       <div><strong>Invoice #</strong> ${String(order.id).padStart(5, '0')}</div>
@@ -2702,7 +2702,7 @@ function printOrder(id) {
 
   <div class="parties">
     <div class="party-box">
-      <div class="party-label">Facturar a</div>
+      <div class="party-label">Bill To</div>
       <div class="party-name">${order.client}</div>
       <div class="party-detail">
         ${order.business}<br>
@@ -2712,14 +2712,15 @@ function printOrder(id) {
       </div>
       ${order.permit
         ? `<div class="permit-tag">Seller Permit: ${order.permit}</div>`
-        : `<div class="no-permit">⚠ Sin seller permit</div>`}
+        : `<div class="no-permit">⚠ No seller permit</div>`}
     </div>
     <div class="party-box">
-      <div class="party-label">De</div>
+      <div class="party-label">From</div>
       <div class="party-name">LucyGlam Beauty</div>
       <div class="party-detail">
         (818) 669-4493<br>
-        lucyglamshop@gmail.com
+        lucyglamshop@gmail.com<br>
+        <strong>Zelle:</strong> Lucyglamshop@gmail.com
       </div>
     </div>
   </div>
@@ -2727,8 +2728,8 @@ function printOrder(id) {
   <table>
     <thead>
       <tr>
-        <th>Producto</th>
-        <th>Cant.</th>
+        <th>Product</th>
+        <th>Qty.</th>
         <th>Unit price</th>
         <th>Total</th>
       </tr>
@@ -2752,13 +2753,17 @@ function printOrder(id) {
       ${order.notes ? `<div class="notes-label">Notes</div><div class="notes-text">${order.notes}</div>` : ''}
     </div>
     <div class="signature-box">
-      <div class="signature-label">Firma del cliente</div>
+      <div class="signature-label">Customer Signature</div>
       <div class="signature-line"></div>
       <div class="signature-name">${order.client}</div>
     </div>
   </div>
 
-  <div class="footer">Gracias por su preferencia — LucyGlam Beauty</div>
+  <div class="footer">
+    <div>Thank you for your preference — LucyGlam Beauty</div>
+    <div style="margin-top:6px; font-size:10px; color:#888;">For returns or claims, please contact us at (818) 669-4493 within 15 days of delivery.</div>
+    <div style="margin-top:4px; font-size:10px; color:#888;">💳 Zelle payments: Lucyglamshop@gmail.com</div>
+  </div>
 
   <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 
