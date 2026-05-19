@@ -321,19 +321,3 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .brand-chip.active { border-color: var(--gold); background: var(--gold-pale); box-shadow: var(--shadow-sm); }
 .brand-chip.active span { color: var(--gold); }
 
-/* Google Translate Widget */
-#google_translate_element { font-size: 12px; }
-#google_translate_element .goog-te-gadget { font-family: var(--font-sans) !important; }
-#google_translate_element select { 
-  padding: 4px 8px; 
-  border: 1px solid var(--border); 
-  border-radius: var(--radius); 
-  background: var(--surface); 
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  cursor: pointer;
-}
-.goog-te-banner-frame { position: fixed !important; bottom: 0 !important; top: auto !important; height: 40px !important; z-index: 9999; }
-body { top: 0 !important; }
-.skiptranslate { position: fixed !important; bottom: 0 !important; top: auto !important; }
