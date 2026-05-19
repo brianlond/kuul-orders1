@@ -1821,6 +1821,15 @@ function printPackingSlip() {
       .product-row { page-break-inside:avoid; break-inside:avoid; }
       .client-box { page-break-inside:avoid; break-inside:avoid; }
     }
+    @page {
+      margin-bottom: 32px;
+      @bottom-center {
+        content: "LucyGlam Beauty · Orden #${String(o.id).padStart(5,'0')} · ${date}";
+        font-family: 'Inter', sans-serif;
+        font-size: 9px;
+        color: #aaa;
+      }
+    }
   </style></head><body>
   <div class="header">
     <div><div class="title">Hoja de Empaque</div><div class="subtitle">Orden #${String(o.id).padStart(5,'0')} · ${date}</div></div>
@@ -2670,6 +2679,15 @@ function printOrder(id) {
     @media print {
       body { padding: 20px; }
       .print-btn { display: none; }
+    }
+    @page {
+      margin-bottom: 36px;
+      @bottom-center {
+        content: "LucyGlam Beauty · Invoice #${String(order.id).padStart(5,'0')} · ${date}";
+        font-family: 'Inter', sans-serif;
+        font-size: 9px;
+        color: #aaa;
+      }
     }
   </style>
 </head>
