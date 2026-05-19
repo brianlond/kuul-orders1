@@ -334,5 +334,6 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   font-size: 12px;
   cursor: pointer;
 }
-.goog-te-banner-frame { display: none !important; }
+.goog-te-banner-frame { position: fixed !important; bottom: 0 !important; top: auto !important; height: 40px !important; z-index: 9999; }
 body { top: 0 !important; }
+.skiptranslate { position: fixed !important; bottom: 0 !important; top: auto !important; }
