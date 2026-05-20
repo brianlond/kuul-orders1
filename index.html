@@ -236,7 +236,7 @@
         <input type="text" id="catalog-search" placeholder="🔍 Buscar por nombre, código o barcode..." oninput="renderCatalog(window._catalogProducts || [])" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface); box-sizing:border-box;">
         <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
           <span style="font-size:11px; color:var(--text-faint); flex-shrink:0;">Marca:</span>
-          <div id="catalog-brand-chips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+          <div id="catalog-brand-chips" style="display:flex; gap:6px; flex-wrap:wrap; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none; padding-bottom:4px;"></div>
         </div>
         <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
           <span style="font-size:11px; color:var(--text-faint); flex-shrink:0;">Categoría:</span>

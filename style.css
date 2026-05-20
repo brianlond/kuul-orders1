@@ -137,6 +137,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .step-row:last-child { margin-bottom: 0; }
 .step-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 10px; }
 .step-options { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 600px) { .step-options { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding-bottom: 6px; scrollbar-width: none; } .step-options::-webkit-scrollbar { display: none; } .step-options .step-chip, .step-options .brand-chip { scroll-snap-align: start; flex-shrink: 0; } }
 .step-chip { padding: 7px 14px; border: 1px solid var(--gold-border); border-radius: 99px; background: var(--surface); color: var(--text-muted); font-size: 13px; font-family: var(--font-sans); cursor: pointer; transition: all 0.15s; }
 .step-chip:hover { border-color: var(--gold); color: var(--gold); }
 .step-chip.active { background: var(--gold); color: #fff; border-color: var(--gold); }
@@ -203,7 +204,9 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .pos-wrap { display: grid; grid-template-columns: 1fr 300px; height: calc(100vh - 148px); min-height: 500px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-md); }
 .pos-left { display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; background: var(--surface); }
 .pos-search-bar { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); }
-.pos-brand-chips { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.pos-brand-chips { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.pos-brand-chips::-webkit-scrollbar { display: none; }
+.pos-brand-chips .brand-chip { scroll-snap-align: start; flex-shrink: 0; }
 .pos-category-chips { display: flex; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--gold-pale); }
 .pos-products { flex: 1; overflow-y: auto; padding: 10px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; align-content: start; background: var(--bg); }
 .pos-product-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; cursor: pointer; transition: all 0.12s; background: var(--surface); position: relative; user-select: none; box-shadow: var(--shadow-sm); }
