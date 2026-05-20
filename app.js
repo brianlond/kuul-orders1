@@ -1650,14 +1650,24 @@ async function openPicking(id) {
   
   const linesHTML = pickingOrder.lines.map((l, idx) => {
     const checked = savedPicking[idx] || false;
+    const adjustedQty = savedPicking[`qty_${idx}`] !== undefined ? savedPicking[`qty_${idx}`] : l.qty;
+    const isAdjusted = adjustedQty < l.qty;
     return `
-    <div class="picking-item ${checked ? 'picked' : ''}" id="pick-item-${idx}" onclick="togglePick(${idx})" style="cursor:pointer;">
-      <div class="picking-checkbox ${checked ? 'checked' : ''}">
+    <div class="picking-item ${checked ? 'picked' : ''}" id="pick-item-${idx}" style="cursor:pointer;">
+      <div class="picking-checkbox ${checked ? 'checked' : ''}" onclick="togglePick(${idx})">
         ${checked ? '✓' : ''}
       </div>
-      <div class="picking-info">
+      <div class="picking-info" onclick="togglePickExpand(${idx})" style="flex:1;">
         <div class="picking-product">${l.brand} [${l.code}] ${l.name}</div>
-        <div class="picking-qty">Cantidad: <strong>${l.qty}</strong> &nbsp;·&nbsp; <span style="font-family:monospace; font-size:11px; color:var(--text-faint);">${l.barcode}</span></div>
+        <div class="picking-qty">Quantity: <strong id="pick-qty-label-${idx}">${adjustedQty}</strong>${isAdjusted ? ` <span style="color:#d97706; font-size:10px;">(ordered: ${l.qty})</span>` : ''} &nbsp;·&nbsp; <span style="font-family:monospace; font-size:11px; color:var(--text-faint);">${l.barcode}</span></div>
+      </div>
+    </div>
+    <div id="pick-expand-${idx}" style="display:none; padding:8px 12px 12px 52px; background:#fffbeb; border-bottom:1px solid var(--border);">
+      <div style="font-size:12px; color:#666; margin-bottom:6px;">Adjust dispatched quantity:</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="number" id="pick-qty-input-${idx}" value="${adjustedQty}" min="0" max="${l.qty}" style="width:70px; padding:4px 8px; border:1px solid var(--border); border-radius:6px; font-size:14px; font-weight:600;" oninput="updatePickQty(${idx}, ${l.qty})">
+        <span style="font-size:12px; color:#888;">of ${l.qty} ordered</span>
+        <button onclick="applyPickQty(${idx}, ${l.qty})" style="padding:4px 12px; background:var(--gold); color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-weight:600;">Apply</button>
       </div>
     </div>
   `}).join('');
@@ -1723,6 +1733,62 @@ function togglePick(idx) {
   updatePickingProgress();
 }
 
+function togglePickExpand(idx) {
+  const expand = document.getElementById(`pick-expand-${idx}`);
+  if (!expand) return;
+  const isOpen = expand.style.display !== 'none';
+  // Close all others
+  pickingOrder.lines.forEach((_, i) => {
+    const el = document.getElementById(`pick-expand-${i}`);
+    if (el) el.style.display = 'none';
+  });
+  if (!isOpen) {
+    expand.style.display = 'block';
+    const input = document.getElementById(`pick-qty-input-${idx}`);
+    if (input) setTimeout(() => input.focus(), 100);
+  }
+}
+
+function updatePickQty(idx, maxQty) {
+  const input = document.getElementById(`pick-qty-input-${idx}`);
+  if (!input) return;
+  let val = parseInt(input.value) || 0;
+  if (val > maxQty) { val = maxQty; input.value = maxQty; }
+  if (val < 0) { val = 0; input.value = 0; }
+}
+
+function applyPickQty(idx, originalQty) {
+  const input = document.getElementById(`pick-qty-input-${idx}`);
+  const label = document.getElementById(`pick-qty-label-${idx}`);
+  if (!input || !label) return;
+  const qty = parseInt(input.value) || 0;
+
+  // Update label
+  label.textContent = qty;
+
+  // Show/hide adjusted warning
+  const qtyDiv = label.parentElement;
+  const existing = qtyDiv.querySelector('.adjusted-warning');
+  if (existing) existing.remove();
+  if (qty < originalQty) {
+    const warning = document.createElement('span');
+    warning.className = 'adjusted-warning';
+    warning.style.cssText = 'color:#d97706; font-size:10px; margin-left:4px;';
+    warning.textContent = `(ordered: ${originalQty})`;
+    label.after(warning);
+  }
+
+  // Save adjusted qty to picking state
+  if (!pickingOrder._adjustedQtys) pickingOrder._adjustedQtys = {};
+  pickingOrder._adjustedQtys[idx] = qty;
+
+  // Close expand
+  const expand = document.getElementById(`pick-expand-${idx}`);
+  if (expand) expand.style.display = 'none';
+
+  showToast(`✓ Quantity updated to ${qty}`);
+}
+
 function updatePickingProgress() {
   const total = pickingOrder.lines.length;
   const picked = document.querySelectorAll('.picking-item.picked').length;
@@ -1752,31 +1818,42 @@ async function confirmPicking() {
   btn.textContent = 'Procesando...';
 
   try {
-    // Deduct stock for each product
-    for (const line of pickingOrder.lines) {
+    // Deduct stock for each product using adjusted qty if applicable
+    const adjustedQtys = pickingOrder._adjustedQtys || {};
+    const updatedLines = pickingOrder.lines.map((line, idx) => {
+      const dispatchedQty = adjustedQtys[idx] !== undefined ? adjustedQtys[idx] : line.qty;
+      return { ...line, dispatched_qty: dispatchedQty };
+    });
+
+    for (let idx = 0; idx < updatedLines.length; idx++) {
+      const line = updatedLines[idx];
+      const dispatchedQty = line.dispatched_qty;
       try {
         const prod = PRODUCTS.find(p => p.barcode === line.barcode);
         if (prod && prod.id) {
           const current = await supabase(`products?id=eq.${prod.id}&select=id,stock`);
           if (current && current[0]) {
-            const newStock = Math.max(0, (current[0].stock || 0) - line.qty);
+            const newStock = Math.max(0, (current[0].stock || 0) - dispatchedQty);
             await supabase(`products?id=eq.${prod.id}`, { method: 'PATCH', body: JSON.stringify({ stock: newStock }) });
             await supabase('inventory_movements', {
               method: 'POST',
               headers: { 'Prefer': 'return=representation' },
-              body: JSON.stringify({ product_id: prod.id, type: 'out', quantity: line.qty, order_id: pickingOrder.id, notes: `Picking orden #${pickingOrder.id}` })
+              body: JSON.stringify({ product_id: prod.id, type: 'out', quantity: dispatchedQty, order_id: pickingOrder.id, notes: `Picking order #${pickingOrder.id}${dispatchedQty < line.qty ? ` (adjusted: ${dispatchedQty} of ${line.qty} ordered)` : ''}` })
             });
           }
         }
       } catch(e) { console.error('Stock error:', e); }
     }
 
-    // Mark picking complete and update status
+    // Mark picking complete and update status, save adjusted lines
     const picking = {};
     pickingOrder.lines.forEach((l, idx) => { picking[idx] = true; });
+    // Save adjusted qty info per line index
+    Object.keys(adjustedQtys).forEach(idx => { picking[`qty_${idx}`] = adjustedQtys[idx]; });
+
     await supabase(`orders?id=eq.${pickingOrder.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'Lista', picking })
+      body: JSON.stringify({ status: 'Lista', picking, lines: updatedLines })
     });
 
     closePicking();
@@ -2613,14 +2690,19 @@ function printOrder(id) {
     hour: '2-digit', minute: '2-digit'
   });
 
-  const linesHTML = order.lines.map(l => `
+  const linesHTML = order.lines.map(l => {
+    const isAdjusted = l.dispatched_qty !== undefined && l.dispatched_qty < l.qty;
+    return `
     <tr>
-      <td>${l.brand} [${l.code}] ${l.name}</td>
-      <td style="text-align:center;">${l.qty}</td>
+      <td>
+        ${l.brand} [${l.code}] ${l.name}
+        ${isAdjusted ? `<div style="font-size:10px; color:#d97706; margin-top:2px;">⚠ Quantity adjusted: ${l.qty} ordered, ${l.dispatched_qty} dispatched</div>` : ''}
+      </td>
+      <td style="text-align:center;">${isAdjusted ? l.dispatched_qty : l.qty}</td>
       <td style="text-align:right;">$${parseFloat(l.price).toFixed(2)}</td>
-      <td style="text-align:right;">$${parseFloat(l.subtotal).toFixed(2)}</td>
+      <td style="text-align:right;">$${(parseFloat(l.price) * (isAdjusted ? l.dispatched_qty : l.qty)).toFixed(2)}</td>
     </tr>
-  `).join('');
+  `}).join('');
 
   const html = `<!DOCTYPE html>
 <html lang="es">
