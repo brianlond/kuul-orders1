@@ -184,6 +184,18 @@ function onPermitChange() {
 }
 
 // ── Recalculate totals ───────────────────────────────────────
+function getActivePreferredDiscount() {
+  const phone = getVal('phone');
+  if (!phone || !allCustomers) return 0;
+  const c = allCustomers.find(x => x.phone === phone);
+  if (!c || !c.is_preferred || !c.preferred_discount) return 0;
+  if (c.preferred_until) {
+    const until = new Date(c.preferred_until); until.setHours(23,59,59);
+    if (new Date() > until) return 0;
+  }
+  return parseFloat(c.preferred_discount) || 0;
+}
+
 function recalcTotal() {
   let subtotal = 0;
   document.querySelectorAll('#product-lines .product-row').forEach(row => {
@@ -199,13 +211,19 @@ function recalcTotal() {
   const taxRate = parseFloat(document.getElementById('tax-rate').value) || 0;
   const shippingAmt = hasShipping ? SHIPPING : 0;
   const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
-  const total = subtotal + shippingAmt + taxAmt;
+  const preferredDiscount = getActivePreferredDiscount();
+  const total = Math.max(0, subtotal + shippingAmt + taxAmt - preferredDiscount);
 
   document.getElementById('sum-products').textContent = '$' + subtotal.toFixed(2);
   document.getElementById('sum-shipping-row').style.display = hasShipping ? 'flex' : 'none';
   document.getElementById('sum-tax-row').style.display = hasTax ? 'flex' : 'none';
   document.getElementById('sum-tax-label').textContent = 'Tax (' + taxRate.toFixed(2) + '%)';
   document.getElementById('sum-tax-amount').textContent = '$' + taxAmt.toFixed(2);
+  const prefRow = document.getElementById('sum-preferred-row');
+  if (prefRow) {
+    prefRow.style.display = preferredDiscount > 0 ? 'flex' : 'none';
+    document.getElementById('sum-preferred-amount').textContent = '-$' + preferredDiscount.toFixed(2);
+  }
   document.getElementById('order-total').textContent = '$' + total.toFixed(2);
   document.getElementById('tax-rate-row').style.display = hasTax ? 'block' : 'none';
 }
@@ -471,7 +489,8 @@ async function submitOrder() {
   const taxRate     = parseFloat(document.getElementById('tax-rate').value) || 0;
   const shippingAmt = hasShipping ? SHIPPING : 0;
   const taxAmt      = hasTax ? subtotal * (taxRate / 100) : 0;
-  const total       = subtotal + shippingAmt + taxAmt;
+  const preferredDiscount = getActivePreferredDiscount();
+  const total       = Math.max(0, subtotal + shippingAmt + taxAmt - preferredDiscount);
 
   const btn = document.querySelector('.submit-btn');
   btn.disabled = true;
@@ -485,6 +504,7 @@ async function submitOrder() {
       shipping: hasShipping ? shippingAmt : null,
       tax_rate: hasTax ? taxRate : null,
       tax_amount: hasTax ? taxAmt : null,
+      preferred_discount: preferredDiscount > 0 ? preferredDiscount : null,
       total,
       payment_method: document.getElementById('payment-method')?.value || null,
       status: 'Nueva'
@@ -2152,6 +2172,18 @@ function openEditCustomer(id) {
   document.getElementById('ec-address').value = c.address || '';
   document.getElementById('ec-email').value = c.email || '';
   document.getElementById('ec-level').value = c.level || 'Salon';
+
+  // Preferred customer fields
+  const prefCheck = document.getElementById('ec-preferred');
+  prefCheck.checked = c.is_preferred || false;
+  document.getElementById('ec-preferred-discount').value = c.preferred_discount || '';
+  document.getElementById('ec-preferred-until').value = c.preferred_until || '';
+  document.getElementById('ec-preferred-note').value = c.preferred_note || '';
+  document.getElementById('ec-preferred-fields').style.display = c.is_preferred ? 'block' : 'none';
+  prefCheck.onchange = () => {
+    document.getElementById('ec-preferred-fields').style.display = prefCheck.checked ? 'block' : 'none';
+  };
+
   document.getElementById('edit-customer-modal').style.display = 'flex';
 }
 
@@ -2166,6 +2198,7 @@ async function saveEditCustomer() {
   btn.disabled = true;
   btn.textContent = 'Guardando...';
   try {
+    const isPreferred = document.getElementById('ec-preferred').checked;
     await supabase(`customers?id=eq.${editingCustomerId}`, {
       method: 'PATCH',
       body: JSON.stringify({
@@ -2175,7 +2208,11 @@ async function saveEditCustomer() {
         permit: document.getElementById('ec-permit').value.trim(),
         address: document.getElementById('ec-address').value.trim(),
         email: document.getElementById('ec-email').value.trim(),
-        level: document.getElementById('ec-level').value
+        level: document.getElementById('ec-level').value,
+        is_preferred: isPreferred,
+        preferred_discount: isPreferred ? (parseFloat(document.getElementById('ec-preferred-discount').value) || 0) : 0,
+        preferred_until: isPreferred ? (document.getElementById('ec-preferred-until').value || null) : null,
+        preferred_note: isPreferred ? document.getElementById('ec-preferred-note').value.trim() : null
       })
     });
     closeEditCustomer();
@@ -2348,17 +2385,36 @@ function renderCustomers(customers) {
     const levelColors = { Retail: 'badge-nueva', Salon: 'badge-lista', Wholesale: 'badge-proceso' };
     const levelColor = levelColors[c.level] || 'badge-nueva';
     const levelOptions = LEVELS.map(l => `<option value="${l}" ${c.level === l ? 'selected' : ''}>${l}</option>`).join('');
+
+    // Preferred customer logic
+    const isPreferred = c.is_preferred;
+    const prefUntil = c.preferred_until ? new Date(c.preferred_until) : null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const prefActive = isPreferred && prefUntil && prefUntil >= today;
+    const prefExpired = isPreferred && prefUntil && prefUntil < today;
+    const prefUntilStr = prefUntil ? prefUntil.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '';
+
     return `
-    <div class="order-card">
+    <div class="order-card" style="${isPreferred ? 'border-left: 3px solid var(--gold);' : ''}">
       <div class="order-header">
         <div>
-          <div class="order-name">${c.name}</div>
+          <div class="order-name">${c.name} ${isPreferred ? '<span style="font-size:12px; color:var(--gold);">⭐ Preferred</span>' : ''}</div>
           <div class="order-business">${c.business}</div>
         </div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <select class="status-select ${levelColor}" onchange="updateCustomerLevel(${c.id}, this.value)">${levelOptions}</select>
         </div>
       </div>
+      ${prefActive ? `
+      <div style="background:var(--gold-pale); border:1px solid var(--gold-border); border-radius:6px; padding:8px 12px; margin-bottom:6px; font-size:12px;">
+        💰 Special discount: <strong>$${parseFloat(c.preferred_discount).toFixed(2)}</strong> per order
+        · Valid until: <strong>${prefUntilStr}</strong>
+        ${c.preferred_note ? `<div style="color:var(--text-muted); margin-top:2px;">📝 ${c.preferred_note}</div>` : ''}
+      </div>` : ''}
+      ${prefExpired ? `
+      <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:6px; padding:8px 12px; margin-bottom:6px; font-size:12px; color:#92400e;">
+        ⏰ Special pricing expired on ${prefUntilStr} — still a Preferred Customer
+      </div>` : ''}
       <div class="order-meta">
         📞 ${c.phone}
         ${c.email ? ` · ✉️ ${c.email}` : ''}
@@ -2844,9 +2900,17 @@ function printOrder(id) {
       <tr><td class="muted">Subtotal</td><td>$${parseFloat(order.subtotal).toFixed(2)}</td></tr>
       ${order.shipping ? `<tr><td class="muted">Shipping</td><td>$${parseFloat(order.shipping).toFixed(2)}</td></tr>` : ''}
       ${order.tax_rate ? `<tr><td class="muted">Tax (${parseFloat(order.tax_rate).toFixed(2)}%)</td><td>$${parseFloat(order.tax_amount).toFixed(2)}</td></tr>` : ''}
+      ${order.preferred_discount ? `<tr><td class="muted" style="color:#16a34a;">Special discount</td><td style="color:#16a34a;">-$${parseFloat(order.preferred_discount).toFixed(2)}</td></tr>` : ''}
       <tr class="total-row"><td>TOTAL</td><td>$${parseFloat(order.total).toFixed(2)}</td></tr>
     </table>
   </div>
+
+  ${order.preferred_discount ? `
+  <div style="margin: 16px 0; padding: 12px 16px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; font-size:11px; color:#166534; line-height:1.6;">
+    As a valued early customer, you are receiving a special discount on this order. 
+    This pricing will be available until ${(() => { const c = allCustomers ? allCustomers.find(x => x.name === order.client) : null; return c && c.preferred_until ? new Date(c.preferred_until).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' }) : 'a limited time'; })()}.
+    We truly appreciate your loyalty and continued support. 🌟
+  </div>` : ''}
 
   <div class="bottom-section">
     <div class="notes-box">

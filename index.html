@@ -158,6 +158,7 @@
         <div class="summary-row"><span>Subtotal productos</span><span id="sum-products">$0.00</span></div>
         <div class="summary-row" id="sum-shipping-row"><span>Envío</span><span>$9.99</span></div>
         <div class="summary-row" id="sum-tax-row" style="display:none;"><span id="sum-tax-label">Tax (10.25%)</span><span id="sum-tax-amount">$0.00</span></div>
+        <div class="summary-row" id="sum-preferred-row" style="display:none; color:#16a34a;"><span>⭐ Preferred discount</span><span id="sum-preferred-amount">-$0.00</span></div>
         <div class="summary-row total"><span>Total</span><span id="order-total">$0.00</span></div>
       </div>
 
@@ -631,6 +632,31 @@
           <option value="Wholesale">Wholesale</option>
         </select>
       </div>
+
+      <!-- PREFERRED CUSTOMER -->
+      <div style="border:1px solid var(--gold-border); border-radius:var(--radius); padding:14px 16px; background:var(--gold-pale); margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <input type="checkbox" id="ec-preferred" style="width:18px; height:18px; accent-color:var(--gold); cursor:pointer;">
+          <label for="ec-preferred" style="font-weight:600; font-size:14px; cursor:pointer; color:var(--gold);">⭐ Preferred Customer</label>
+        </div>
+        <div id="ec-preferred-fields" style="display:none;">
+          <div class="row2">
+            <div class="field-group">
+              <label>Special discount ($)</label>
+              <input type="number" id="ec-preferred-discount" min="0" step="0.01" placeholder="0.00">
+            </div>
+            <div class="field-group">
+              <label>Pricing valid until</label>
+              <input type="date" id="ec-preferred-until">
+            </div>
+          </div>
+          <div class="field-group">
+            <label>Internal note <span class="optional">(only visible to admin)</span></label>
+            <input type="text" id="ec-preferred-note" placeholder="e.g. 10% on Kuul, $1 off ING">
+          </div>
+        </div>
+      </div>
+
       <button class="submit-btn" id="ec-save-btn" onclick="saveEditCustomer()">Guardar cambios →</button>
       <button class="cancel-btn" onclick="closeEditCustomer()">Cancelar</button>
     </div>
