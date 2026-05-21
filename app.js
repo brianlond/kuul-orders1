@@ -184,18 +184,6 @@ function onPermitChange() {
 }
 
 // ── Recalculate totals ───────────────────────────────────────
-function getActivePreferredDiscount() {
-  const phone = getVal('phone');
-  if (!phone || !allCustomers) return 0;
-  const c = allCustomers.find(x => x.phone === phone);
-  if (!c || !c.is_preferred || !c.preferred_discount) return 0;
-  if (c.preferred_until) {
-    const until = new Date(c.preferred_until); until.setHours(23,59,59);
-    if (new Date() > until) return 0;
-  }
-  return parseFloat(c.preferred_discount) || 0;
-}
-
 function recalcTotal() {
   let subtotal = 0;
   document.querySelectorAll('#product-lines .product-row').forEach(row => {
@@ -211,18 +199,25 @@ function recalcTotal() {
   const taxRate = parseFloat(document.getElementById('tax-rate').value) || 0;
   const shippingAmt = hasShipping ? SHIPPING : 0;
   const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
-  const preferredDiscount = getActivePreferredDiscount();
-  const total = Math.max(0, subtotal + shippingAmt + taxAmt - preferredDiscount);
+
+  // Manual discount
+  const discountType = document.getElementById('discount-type')?.value || 'pct';
+  const discountVal = parseFloat(document.getElementById('discount-val')?.value) || 0;
+  const discountAmt = discountType === 'pct' ? subtotal * (discountVal / 100) : Math.min(discountVal, subtotal);
+  const discountReason = document.getElementById('discount-reason')?.value.trim() || '';
+
+  const total = Math.max(0, subtotal + shippingAmt + taxAmt - discountAmt);
 
   document.getElementById('sum-products').textContent = '$' + subtotal.toFixed(2);
   document.getElementById('sum-shipping-row').style.display = hasShipping ? 'flex' : 'none';
   document.getElementById('sum-tax-row').style.display = hasTax ? 'flex' : 'none';
   document.getElementById('sum-tax-label').textContent = 'Tax (' + taxRate.toFixed(2) + '%)';
   document.getElementById('sum-tax-amount').textContent = '$' + taxAmt.toFixed(2);
-  const prefRow = document.getElementById('sum-preferred-row');
-  if (prefRow) {
-    prefRow.style.display = preferredDiscount > 0 ? 'flex' : 'none';
-    document.getElementById('sum-preferred-amount').textContent = '-$' + preferredDiscount.toFixed(2);
+  const discRow = document.getElementById('sum-discount-row');
+  if (discRow) {
+    discRow.style.display = discountAmt > 0 ? 'flex' : 'none';
+    document.getElementById('sum-discount-label').textContent = discountReason ? `Discount (${discountReason})` : 'Discount';
+    document.getElementById('sum-discount-amount').textContent = '-$' + discountAmt.toFixed(2);
   }
   document.getElementById('order-total').textContent = '$' + total.toFixed(2);
   document.getElementById('tax-rate-row').style.display = hasTax ? 'block' : 'none';
@@ -489,8 +484,11 @@ async function submitOrder() {
   const taxRate     = parseFloat(document.getElementById('tax-rate').value) || 0;
   const shippingAmt = hasShipping ? SHIPPING : 0;
   const taxAmt      = hasTax ? subtotal * (taxRate / 100) : 0;
-  const preferredDiscount = getActivePreferredDiscount();
-  const total       = Math.max(0, subtotal + shippingAmt + taxAmt - preferredDiscount);
+  const discountType   = document.getElementById('discount-type')?.value || 'pct';
+  const discountVal    = parseFloat(document.getElementById('discount-val')?.value) || 0;
+  const discountAmt    = discountType === 'pct' ? subtotal * (discountVal / 100) : Math.min(discountVal, subtotal);
+  const discountReason = document.getElementById('discount-reason')?.value.trim() || null;
+  const total       = Math.max(0, subtotal + shippingAmt + taxAmt - discountAmt);
 
   const btn = document.querySelector('.submit-btn');
   btn.disabled = true;
@@ -504,7 +502,8 @@ async function submitOrder() {
       shipping: hasShipping ? shippingAmt : null,
       tax_rate: hasTax ? taxRate : null,
       tax_amount: hasTax ? taxAmt : null,
-      preferred_discount: preferredDiscount > 0 ? preferredDiscount : null,
+      preferred_discount: discountAmt > 0 ? discountAmt : null,
+      discount_reason: discountReason,
       total,
       payment_method: document.getElementById('payment-method')?.value || null,
       status: 'Nueva'
@@ -2898,18 +2897,17 @@ function printOrder(id) {
   <div class="totals-section">
     <table class="totals-table">
       <tr><td class="muted">Subtotal</td><td>$${parseFloat(order.subtotal).toFixed(2)}</td></tr>
+      ${order.preferred_discount ? `<tr><td class="muted" style="color:#16a34a;">Discount${order.discount_reason ? ` — ${order.discount_reason}` : ''}</td><td style="color:#16a34a;">-$${parseFloat(order.preferred_discount).toFixed(2)}</td></tr>` : ''}
       ${order.shipping ? `<tr><td class="muted">Shipping</td><td>$${parseFloat(order.shipping).toFixed(2)}</td></tr>` : ''}
       ${order.tax_rate ? `<tr><td class="muted">Tax (${parseFloat(order.tax_rate).toFixed(2)}%)</td><td>$${parseFloat(order.tax_amount).toFixed(2)}</td></tr>` : ''}
-      ${order.preferred_discount ? `<tr><td class="muted" style="color:#16a34a;">Special discount</td><td style="color:#16a34a;">-$${parseFloat(order.preferred_discount).toFixed(2)}</td></tr>` : ''}
       <tr class="total-row"><td>TOTAL</td><td>$${parseFloat(order.total).toFixed(2)}</td></tr>
     </table>
   </div>
 
-  ${order.preferred_discount ? `
+  ${order.preferred_discount && order.discount_reason && order.discount_reason.toLowerCase().includes('preferred') ? `
   <div style="margin: 16px 0; padding: 12px 16px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; font-size:11px; color:#166534; line-height:1.6;">
-    As a valued early customer, you are receiving a special discount on this order. 
-    This pricing will be available until ${(() => { const c = allCustomers ? allCustomers.find(x => x.name === order.client) : null; return c && c.preferred_until ? new Date(c.preferred_until).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' }) : 'a limited time'; })()}.
-    We truly appreciate your loyalty and continued support. 🌟
+    As a valued early customer, you are receiving a special discount on this order.
+    This pricing will be available for a limited time. We truly appreciate your loyalty and continued support. 🌟
   </div>` : ''}
 
   <div class="bottom-section">
