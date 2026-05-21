@@ -3234,27 +3234,37 @@ function stopInactivityWatcher() {
 }
 
 // ── TAB BAR DRAG SCROLL (desktop) ─────────────────────────────
-function initTabDragScroll() {
-  const tabs = document.querySelector('.tabs');
-  if (!tabs) return;
+function initDragScroll(el) {
+  if (!el) return;
   let isDown = false, startX, scrollLeft;
-  tabs.addEventListener('mousedown', e => {
+  el.style.cursor = 'grab';
+  el.addEventListener('mousedown', e => {
     isDown = true;
-    startX = e.pageX - tabs.offsetLeft;
-    scrollLeft = tabs.scrollLeft;
-    tabs.style.userSelect = 'none';
+    startX = e.pageX - el.offsetLeft;
+    scrollLeft = el.scrollLeft;
+    el.style.userSelect = 'none';
+    el.style.cursor = 'grabbing';
   });
-  tabs.addEventListener('mouseleave', () => { isDown = false; });
-  tabs.addEventListener('mouseup', () => { isDown = false; tabs.style.userSelect = ''; });
-  tabs.addEventListener('mousemove', e => {
+  el.addEventListener('mouseleave', () => { isDown = false; el.style.cursor = 'grab'; });
+  el.addEventListener('mouseup', () => { isDown = false; el.style.userSelect = ''; el.style.cursor = 'grab'; });
+  el.addEventListener('mousemove', e => {
     if (!isDown) return;
     e.preventDefault();
-    const x = e.pageX - tabs.offsetLeft;
-    tabs.scrollLeft = scrollLeft - (x - startX);
+    const x = e.pageX - el.offsetLeft;
+    el.scrollLeft = scrollLeft - (x - startX);
   });
 }
 
-window.addEventListener('load', () => { setTimeout(initTabDragScroll, 500); });
+function initTabDragScroll() {
+  initDragScroll(document.querySelector('.tabs'));
+}
+
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    initTabDragScroll();
+    initDragScroll(document.getElementById('pos-brand-chips-wrap'));
+  }, 500);
+});
 
 // ── BULK EDIT ─────────────────────────────────────────────────
 
