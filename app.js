@@ -960,9 +960,8 @@ window.loadCatalog = async function loadCatalog() {
       `<button class="catalog-brand-chip filter-chip" data-brand="${b}" onclick="setCatalogBrand('${b}')">${b}</button>`
     ).join('');
 
-    if (catChipsEl) catChipsEl.innerHTML = cats.map(c =>
-      `<button class="catalog-cat-chip filter-chip" data-cat="${c}" onclick="setCatalogCat('${c}')">${c}</button>`
-    ).join('');
+    // Category chips hidden until a brand is selected
+    if (catChipsEl) catChipsEl.innerHTML = '';
 
     populateDataLists(allProds);
     renderCatalog(allProds);
@@ -1051,11 +1050,26 @@ function renderCatalog(allProducts) {
 
 function setCatalogBrand(brand) {
   window._catalogBrand = window._catalogBrand === brand ? '' : brand;
+  window._catalogCat = ''; // reset category when switching brand
+
   document.querySelectorAll('.catalog-brand-chip').forEach(c => {
-    const active = c.dataset.brand === window._catalogBrand;
-    c.classList.toggle('active', active);
+    c.classList.toggle('active', c.dataset.brand === window._catalogBrand);
   });
-  renderCatalog(window._catalogProducts || []);
+
+  const products = window._catalogProducts || [];
+  const catChipsEl = document.getElementById('catalog-cat-chips');
+  if (catChipsEl) {
+    if (window._catalogBrand) {
+      const cats = [...new Set(products.filter(p => p.brand === window._catalogBrand).map(p => p.category))].sort();
+      catChipsEl.innerHTML = cats.map(c =>
+        `<button class="catalog-cat-chip filter-chip" data-cat="${c}" onclick="setCatalogCat('${c}')">${c}</button>`
+      ).join('');
+    } else {
+      catChipsEl.innerHTML = '';
+    }
+  }
+
+  renderCatalog(products);
 }
 
 function setCatalogCat(cat) {

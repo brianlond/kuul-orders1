@@ -136,8 +136,9 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .step-row { margin-bottom: 16px; }
 .step-row:last-child { margin-bottom: 0; }
 .step-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 10px; }
-.step-options { display: flex; flex-wrap: wrap; gap: 8px; }
-@media (max-width: 600px) { .step-options { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding-bottom: 6px; scrollbar-width: none; } .step-options::-webkit-scrollbar { display: none; } .step-options .step-chip, .step-options .brand-chip { scroll-snap-align: start; flex-shrink: 0; } }
+.step-options { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding-bottom: 6px; scrollbar-width: none; }
+.step-options::-webkit-scrollbar { display: none; }
+.step-options .step-chip, .step-options .brand-chip { scroll-snap-align: start; flex-shrink: 0; }
 .step-chip { padding: 7px 14px; border: 1px solid var(--gold-border); border-radius: 99px; background: var(--surface); color: var(--text-muted); font-size: 13px; font-family: var(--font-sans); cursor: pointer; transition: all 0.15s; }
 .step-chip:hover { border-color: var(--gold); color: var(--gold); }
 .step-chip.active { background: var(--gold); color: #fff; border-color: var(--gold); }
