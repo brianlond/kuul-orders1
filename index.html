@@ -279,7 +279,10 @@
     <div id="tab-delivery" class="section">
       <div class="admin-bar">
         <span id="delivery-count-label" class="order-count">0 órdenes listas</span>
-        <button class="clear-btn" onclick="loadDeliveryOrders()">🔄 Actualizar</button>
+        <div style="display:flex; gap:8px;">
+          <button class="clear-btn" onclick="loadDeliveryOrders()">🔄 Actualizar</button>
+          <button id="route-btn" onclick="openFullRoute()" style="display:none; padding:6px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🗺️ Ver ruta completa</button>
+        </div>
       </div>
       <div id="delivery-list">
         <div class="empty-state"><div class="empty-icon">🚚</div>No hay órdenes para entregar</div>

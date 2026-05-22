@@ -1,4 +1,6 @@
 // ── Supabase config ─────────────────────────────────────────
+
+const WAREHOUSE_ADDRESS = '6864 Cantaloupe Ave, Van Nuys, CA 91405';
 const SUPABASE_URL = 'https://qyejhtyryweesbsiwpxn.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5ZWpodHlyeXdlZXNic2l3cHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MTg3MDIsImV4cCI6MjA5NDM5NDcwMn0.fKedoQ-VhAq2NFRp0WA_Ldbomqy9M5jrVY9fWb0SaIc';
 
@@ -387,14 +389,23 @@ function renderDeliveryOrders(orders) {
     return;
   }
 
-  list.innerHTML = orders.map(o => {
+  // Store orders for route function
+  window._deliveryOrders = orders;
+  const routeBtn = document.getElementById('route-btn');
+  if (routeBtn) routeBtn.style.display = orders.length > 0 ? 'inline-block' : 'none';
+
+  list.innerHTML = orders.map((o, stopNum) => {
     const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.address)}&travelmode=driving`;
     return `
-    <div class="order-card">
+    <div class="order-card" style="border-left: 3px solid var(--gold);">
       <div class="order-header">
-        <div>
-          <div class="order-name">${o.client}</div>
-          <div class="order-business">${o.business}</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="background:var(--gold); color:#fff; font-weight:700; font-size:13px; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">${stopNum + 1}</div>
+          <div>
+            <div class="order-name">${o.client}</div>
+            <div class="order-business">${o.business}</div>
+          </div>
         </div>
         <span class="status-badge badge-lista">Lista</span>
       </div>
@@ -404,7 +415,7 @@ function renderDeliveryOrders(orders) {
       <div class="order-products" style="margin-top:8px;">
         ${o.lines.map(l => `
           <div class="order-product-line">
-            <span>${l.brand} [${l.code}] ${l.name} × ${l.qty}</span>
+            <span>${l.brand} [${l.code}] ${l.name} × ${l.dispatched_qty || l.qty}</span>
             <span>$${parseFloat(l.subtotal).toFixed(2)}</span>
           </div>
         `).join('')}
@@ -416,11 +427,21 @@ function renderDeliveryOrders(orders) {
         </div>
       </div>
       <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
-        <button onclick="printOrder(${o.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">🖨️ Imprimir invoice</button>
-        <button onclick="markDelivered(${o.id})" class="submit-btn" style="flex:1; margin:0; padding:8px 16px; font-size:13px;">✅ Marcar como entregada</button>
+        <a href="${mapsUrl}" target="_blank" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:8px 12px; background:#4285F4; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; text-decoration:none;">📍 Cómo llegar</a>
+        <button onclick="printOrder(${o.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">🖨️ Invoice</button>
+        <button onclick="markDelivered(${o.id})" class="submit-btn" style="flex:1; margin:0; padding:8px 16px; font-size:13px;">✅ Entregada</button>
       </div>
     </div>
   `}).join('');
+}
+
+function openFullRoute() {
+  const orders = window._deliveryOrders || [];
+  if (orders.length === 0) return;
+  const stops = orders.map(o => encodeURIComponent(o.address)).join('/');
+  const origin = encodeURIComponent(WAREHOUSE_ADDRESS);
+  const url = `https://www.google.com/maps/dir/${origin}/${stops}`;
+  window.open(url, '_blank');
 }
 
 async function markDelivered(id) {
