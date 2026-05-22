@@ -310,7 +310,7 @@ async function loadProfileAndApply(token, uid, errEl) {
     document.querySelectorAll('.tab').forEach(t => { t.style.display = t.id === 'tab-delivery-btn' ? '' : 'none'; });
     showTab('delivery');
   } else if (currentRole === 'seller') {
-    document.querySelectorAll('.tab').forEach(t => { t.style.display = ['tab-vendedor-btn','tab-pos-btn'].includes(t.id) ? '' : 'none'; });
+    document.querySelectorAll('.tab').forEach(t => { t.style.display = ['tab-vendedor-btn','tab-pos-btn','tab-miprogreso-btn'].includes(t.id) ? '' : 'none'; });
     showTab('vendedor');
   }
 }
