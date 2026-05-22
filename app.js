@@ -3355,11 +3355,14 @@ async function loadMiProgreso() {
   container.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>';
 
   const { start, end } = getWeekRange(weekInput.value);
-  const sellerEmail = currentUser?.email;
-  if (!sellerEmail) return;
+  const sellerName = currentUser?.name;
+  if (!sellerName) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div>No se encontró tu nombre de vendedor. Contacta al admin.</div>';
+    return;
+  }
 
   try {
-    const orders = await supabase(`orders?created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}&seller=eq.${encodeURIComponent(sellerEmail)}&select=*&order=created_at.desc`);
+    const orders = await supabase(`orders?created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}&seller=eq.${encodeURIComponent(sellerName)}&select=*&order=created_at.desc`);
 
     const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
     const weekLabel = `${fmtDate(start)} – ${fmtDate(end)} ${start.getFullYear()}`;
