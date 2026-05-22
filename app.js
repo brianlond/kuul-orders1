@@ -1678,6 +1678,15 @@ async function openPicking(id) {
 
   // Init picking state from saved or fresh
   const savedPicking = pickingOrder.picking || {};
+
+  // Restore adjusted qtys from saved picking into memory
+  pickingOrder._adjustedQtys = {};
+  Object.keys(savedPicking).forEach(key => {
+    if (key.startsWith('qty_')) {
+      const idx = parseInt(key.replace('qty_', ''));
+      pickingOrder._adjustedQtys[idx] = savedPicking[key];
+    }
+  });
   
   document.getElementById('picking-order-title').textContent = `Picking — ${pickingOrder.client}`;
   document.getElementById('picking-business').textContent = pickingOrder.business;
@@ -1832,17 +1841,33 @@ function updatePickingProgress() {
 }
 
 async function savePicking() {
+  if (!pickingOrder) return;
   const picking = {};
+
   pickingOrder.lines.forEach((l, idx) => {
-    picking[idx] = document.getElementById(`pick-item-${idx}`)?.classList.contains('picked') || false;
+    const el = document.getElementById(`pick-item-${idx}`);
+    picking[String(idx)] = el ? el.classList.contains('picked') : false;
   });
-  // Also save adjusted qtys
+
+  // Save adjusted qtys
   const adjustedQtys = pickingOrder._adjustedQtys || {};
-  Object.keys(adjustedQtys).forEach(idx => { picking[`qty_${idx}`] = adjustedQtys[idx]; });
+  Object.keys(adjustedQtys).forEach(idx => {
+    picking[`qty_${idx}`] = adjustedQtys[idx];
+  });
+
+  // Update local reference so reopening the modal shows saved state
+  pickingOrder.picking = picking;
+
   try {
-    await supabase(`orders?id=eq.${pickingOrder.id}`, { method: 'PATCH', body: JSON.stringify({ picking }) });
+    await supabase(`orders?id=eq.${pickingOrder.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ picking })
+    });
     showToast('💾 Progreso guardado');
-  } catch(e) { showToast('❌ Error al guardar'); }
+  } catch(e) {
+    console.error('savePicking error:', e);
+    showToast('❌ Error al guardar');
+  }
 }
 
 async function confirmPicking() {
