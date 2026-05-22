@@ -3357,7 +3357,7 @@ async function loadMiProgreso() {
   const { start, end } = getWeekRange(weekInput.value);
   const sellerName = currentUser?.name;
   if (!sellerName) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div>No se encontró tu nombre de vendedor. Contacta al admin.</div>';
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div>No se encontró tu nombre. Contacta al admin.</div>';
     return;
   }
 
@@ -3366,69 +3366,117 @@ async function loadMiProgreso() {
 
     const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
     const weekLabel = `${fmtDate(start)} – ${fmtDate(end)} ${start.getFullYear()}`;
-
     const total = (orders || []).reduce((s, o) => s + parseFloat(o.subtotal || 0), 0);
     const commission = total * COMMISSION_RATE;
     const hitGoal = total >= WEEKLY_GOAL;
     const bonus = hitGoal ? WEEKLY_BONUS : 0;
+    const totalPay = commission + bonus;
     const remaining = Math.max(0, WEEKLY_GOAL - total);
     const progress = Math.min(100, (total / WEEKLY_GOAL) * 100);
+    const selId = sellerName.replace(/\s+/g, '_');
 
+    // Build orders HTML (same style as Vendedores tab)
+    const ordersHTML = (orders || []).map(o => {
+      const oDate = new Date(o.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+      const oCommission = parseFloat(o.subtotal) * COMMISSION_RATE;
+      const oId = 'mp_order_' + o.id;
+      const linesHTML = (o.lines || []).map(l => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px;">
+          <span style="color:var(--text);">${l.brand} [${l.code}] ${l.name} × ${l.qty}</span>
+          <span style="font-weight:600; color:var(--text);">$${parseFloat(l.subtotal).toFixed(2)}</span>
+        </div>`).join('');
+      return `<div style="border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--surface-2); overflow:hidden;">
+        <div onclick="toggleOrderDetail('${oId}')" style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; cursor:pointer;">
+          <div>
+            <div style="font-size:13px; font-weight:600; color:var(--text);">${o.client} <span style="font-size:11px; color:var(--text-faint);">· ${o.business}</span></div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">#${String(o.id).padStart(5,'0')} · ${oDate}</div>
+          </div>
+          <div style="text-align:right; display:flex; align-items:center; gap:10px;">
+            <div>
+              <div style="font-size:14px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${parseFloat(o.subtotal).toFixed(2)}</div>
+              <div style="font-size:10px; padding:2px 8px; border-radius:99px; background:var(--surface); border:1px solid var(--border); color:var(--text-muted); display:inline-block;">${o.status}</div>
+            </div>
+            <span style="font-size:16px; color:var(--text-faint);">▸</span>
+          </div>
+        </div>
+        <div id="${oId}" style="display:none; padding:12px; border-top:1px solid var(--border); background:var(--surface);">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos</div>
+          ${linesHTML}
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px;">
+              <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Subtotal</div>
+              <div style="font-size:15px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${parseFloat(o.subtotal).toFixed(2)}</div>
+            </div>
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px;">
+              <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Total orden</div>
+              <div style="font-size:15px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${parseFloat(o.total).toFixed(2)}</div>
+            </div>
+            <div style="background:#1c1a16; border:1px solid var(--gold); border-radius:var(--radius); padding:8px 12px;">
+              <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold);">Comisión 20%</div>
+              <div style="font-size:15px; font-weight:700; color:var(--gold); font-family:var(--font-display);">$${oCommission.toFixed(2)}</div>
+            </div>
+          </div>
+          <div style="margin-top:10px; display:flex; gap:8px;">
+            <button onclick="printOrder(${o.id})" style="flex:1; padding:8px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; font-size:12px; font-family:inherit; color:var(--text-muted);">🖨️ Imprimir invoice</button>
+          </div>
+          ${o.notes ? `<div style="margin-top:10px; font-size:12px; color:var(--text-muted); font-style:italic;">📝 ${o.notes}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    // Summary header (same as Vendedores)
     let html = `
-    <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px;">
-      <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Semana</div>
-      <div style="font-size:16px; font-weight:600; color:var(--text); margin-bottom:16px;">${weekLabel}</div>
-      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px;">
-        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px;">
-          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Ventas</div>
-          <div style="font-size:20px; font-weight:700; color:var(--gold);">$${total.toFixed(2)}</div>
-        </div>
-        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px;">
-          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Comisión 20%</div>
-          <div style="font-size:20px; font-weight:700; color:var(--text);">$${commission.toFixed(2)}</div>
-        </div>
-        <div style="background:${hitGoal ? '#052e16' : 'var(--surface)'}; border:1px solid ${hitGoal ? 'var(--gold)' : 'var(--border)'}; border-radius:var(--radius); padding:12px;">
-          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:${hitGoal ? 'var(--gold)' : 'var(--text-faint)'};">Bono meta</div>
-          <div style="font-size:20px; font-weight:700; color:${hitGoal ? 'var(--gold)' : 'var(--text-muted)'};">${hitGoal ? '+$'+WEEKLY_BONUS.toFixed(2) : '$0.00'}</div>
-        </div>
-      </div>
-      <div style="margin-bottom:6px; display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted);">
-        <span>Meta semanal: $${WEEKLY_GOAL.toFixed(0)}</span>
-        <span>${hitGoal ? '🏆 ¡Meta alcanzada!' : `Faltan $${remaining.toFixed(2)}`}</span>
-      </div>
-      <div style="background:var(--border); border-radius:99px; height:8px;">
-        <div style="background:${hitGoal ? 'var(--gold)' : '#4ade80'}; width:${progress}%; height:8px; border-radius:99px; transition:width 0.5s;"></div>
-      </div>
+    <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px; display:flex; gap:24px; flex-wrap:wrap;">
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Semana</div><div style="font-size:16px; font-weight:600; color:var(--text);">${weekLabel}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Total vendido</div><div style="font-size:16px; font-weight:600; color:var(--gold);">$${total.toFixed(2)}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Órdenes</div><div style="font-size:16px; font-weight:600; color:var(--text);">${(orders||[]).length}</div></div>
     </div>
 
-    <div style="font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:10px;">${(orders||[]).length} orden${(orders||[]).length !== 1 ? 'es' : ''} esta semana</div>`;
-
-    if (!orders || orders.length === 0) {
-      html += `<div class="empty-state"><div class="empty-icon">📭</div>Sin órdenes esta semana</div>`;
-    } else {
-      html += orders.map(o => {
-        const oDate = new Date(o.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
-        return `
-        <div class="order-card">
-          <div class="order-header">
-            <div>
-              <div class="order-name">${o.client}</div>
-              <div class="order-business">${o.business} · #${String(o.id).padStart(5,'0')}</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-size:16px; font-weight:700; color:var(--gold);">$${parseFloat(o.total).toFixed(2)}</div>
-              <div class="status-badge ${statusClass(o.status)}" style="margin-top:4px;">${o.status}</div>
-            </div>
+    <div style="background:${hitGoal ? 'var(--gold-pale)' : 'var(--surface)'}; border:1px solid ${hitGoal ? 'var(--gold-border)' : 'var(--border)'}; border-radius:var(--radius-lg); padding:20px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:40px; height:40px; background:var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px;">${sellerName.charAt(0).toUpperCase()}</div>
+          <div>
+            <div style="font-size:18px; font-weight:600; color:var(--text);">${sellerName}</div>
+            <div style="font-size:12px; color:var(--text-muted);">${(orders||[]).length} orden${(orders||[]).length !== 1 ? 'es' : ''}</div>
           </div>
-          <div class="order-meta">📍 ${o.address || '—'}</div>
-          <div class="order-meta">🕐 ${oDate}</div>
-          <div class="order-meta" style="color:#4ade80;">💰 Comisión: $${(parseFloat(o.subtotal) * COMMISSION_RATE).toFixed(2)}</div>
-          <div style="margin-top:10px;">
-            <button onclick="printOrder(${o.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit; width:100%; padding:8px;">🖨️ Imprimir invoice</button>
-          </div>
-        </div>`;
-      }).join('');
-    }
+        </div>
+        ${hitGoal ? '<div style="background:var(--gold); color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;">🏆 META ALCANZADA</div>' : ''}
+      </div>
+      <div style="margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span style="font-size:12px; color:var(--text-muted);">Progreso hacia meta $${WEEKLY_GOAL.toLocaleString()}</span>
+          <span style="font-size:12px; font-weight:600; color:${hitGoal ? 'var(--gold)' : 'var(--text)'};">${progress.toFixed(0)}%</span>
+        </div>
+        <div style="background:var(--border); border-radius:99px; height:10px; overflow:hidden;">
+          <div style="height:100%; width:${progress}%; background:${hitGoal ? 'var(--gold)' : '#6b9e6b'}; border-radius:99px;"></div>
+        </div>
+        ${!hitGoal ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Faltan $${remaining.toFixed(2)} para la meta</div>` : ''}
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Ventas (subtotal)</div>
+          <div style="font-size:18px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${total.toFixed(2)}</div>
+        </div>
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Comisión 20%</div>
+          <div style="font-size:18px; font-weight:700; color:var(--text); font-family:var(--font-display);">$${commission.toFixed(2)}</div>
+        </div>
+        ${hitGoal ? `<div style="background:#fef9ee; border:1px solid var(--gold-border); border-radius:var(--radius); padding:10px 14px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:4px;">Bono meta 🏆</div>
+          <div style="font-size:18px; font-weight:700; color:var(--gold); font-family:var(--font-display);">+$${bonus.toFixed(2)}</div>
+        </div>` : ''}
+        <div style="background:${hitGoal ? '#1c1a16' : 'var(--surface-2)'}; border:1px solid ${hitGoal ? 'var(--gold)' : 'var(--border)'}; border-radius:var(--radius); padding:10px 14px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:${hitGoal ? 'var(--gold)' : 'var(--text-faint)'}; margin-bottom:4px;">Total a pagar</div>
+          <div style="font-size:18px; font-weight:700; color:${hitGoal ? 'var(--gold)' : 'var(--text)'}; font-family:var(--font-display);">$${totalPay.toFixed(2)}</div>
+        </div>
+      </div>
+      ${orders && orders.length > 0 ? `
+      <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--gold); margin-bottom:10px;">Mis órdenes</div>
+        ${ordersHTML}
+      </div>` : `<div class="empty-state" style="margin-top:16px;"><div class="empty-icon">📭</div>Sin órdenes esta semana</div>`}
+    </div>`;
 
     container.innerHTML = html;
   } catch(e) {
