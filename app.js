@@ -1832,14 +1832,16 @@ function updatePickingProgress() {
 }
 
 async function savePicking() {
-  // Save partial progress
   const picking = {};
   pickingOrder.lines.forEach((l, idx) => {
-    picking[idx] = document.getElementById(`pick-item-${idx}`).classList.contains('picked');
+    picking[idx] = document.getElementById(`pick-item-${idx}`)?.classList.contains('picked') || false;
   });
+  // Also save adjusted qtys
+  const adjustedQtys = pickingOrder._adjustedQtys || {};
+  Object.keys(adjustedQtys).forEach(idx => { picking[`qty_${idx}`] = adjustedQtys[idx]; });
   try {
     await supabase(`orders?id=eq.${pickingOrder.id}`, { method: 'PATCH', body: JSON.stringify({ picking }) });
-    showToast('✓ Progreso guardado');
+    showToast('💾 Progreso guardado');
   } catch(e) { showToast('❌ Error al guardar'); }
 }
 

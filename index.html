@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>LucyGlam Orders</title>
+  <title>Kuul Orders</title>
   <link rel="stylesheet" href="style.css">
   </head>
 <body>
@@ -569,7 +569,12 @@
           ✅ Confirmar — orden lista
         </button>
       </div>
-      <button class="cancel-btn" onclick="closePicking()">Cerrar</button>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button onclick="savePicking()" style="flex:1; padding:12px; background:none; border:1px solid var(--gold); color:var(--gold); border-radius:var(--radius); font-size:14px; font-weight:600; cursor:pointer; font-family:inherit;">
+          💾 Guardar progreso
+        </button>
+        <button class="cancel-btn" onclick="closePicking()" style="flex:1; margin:0;">Cerrar</button>
+      </div>
     </div>
   </div>
 
