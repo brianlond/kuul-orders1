@@ -25,6 +25,9 @@
       <button class="tab active" id="tab-vendedor-btn" onclick="showTab('vendedor')">
         ➕ Nueva orden
       </button>
+      <button class="tab" id="tab-miprogreso-btn" onclick="showTab('miprogreso')" style="display:none;">
+        📈 Mi progreso
+      </button>
       <button class="tab" id="tab-admin-btn" onclick="showTab('admin')">
         🔒 Admin <span id="badge-count" class="badge-count" style="display:none;"></span>
       </button>
@@ -314,6 +317,21 @@
     </div>
 
     <!-- SELLERS -->
+    <!-- MI PROGRESO (seller view) -->
+    <div id="tab-miprogreso" class="section">
+      <div class="admin-bar">
+        <span class="order-count">📈 Mi progreso semanal</span>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button class="clear-btn" onclick="miProgresoWeekPrev()">◀</button>
+          <input type="week" id="miprogreso-week" onchange="loadMiProgreso()" style="font-size:13px; padding:4px 8px; border:1px solid var(--border); border-radius:6px;">
+          <button class="clear-btn" onclick="miProgresoWeekNext()">▶</button>
+        </div>
+      </div>
+      <div id="miprogreso-container" style="padding:16px;">
+        <div class="empty-state"><div class="empty-icon">📈</div>Cargando...</div>
+      </div>
+    </div>
+
     <div id="tab-sellers" class="section">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
         <div>

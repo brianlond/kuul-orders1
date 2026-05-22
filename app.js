@@ -300,6 +300,10 @@ async function loadProfileAndApply(token, uid, errEl) {
     }
   }
 
+  // Show Mi Progreso tab for sellers
+  const miProgresoBtn = document.getElementById('tab-miprogreso-btn');
+  if (miProgresoBtn) miProgresoBtn.style.display = currentRole === 'seller' ? '' : 'none';
+
   if (isAdmin) {
     showAdminView();
   } else if (isDelivery) {
@@ -2521,6 +2525,7 @@ function showTab(name) {
   if (!currentRole) { showLoginModal(); return; }
   // Role-based access
   if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers') && !isAdmin) { return; }
+  if (name === 'miprogreso' && currentRole !== 'seller') { return; }
   if (name === 'delivery' && !isDelivery && !isAdmin) { return; }
   if (name === 'pos' && currentRole === 'delivery') { return; }
 
@@ -2539,6 +2544,7 @@ function showTab(name) {
   if (name === 'inventory') loadInventory();
   if (name === 'pos') initPOS();
   if (name === 'sellers') initSellersTab();
+  if (name === 'miprogreso') initMiProgreso();
   if (name === 'delivery') loadDeliveryOrders();
   if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
 }
@@ -3302,6 +3308,130 @@ function initDragScroll(el) {
     const x = e.pageX - el.offsetLeft;
     el.scrollLeft = scrollLeft - (x - startX);
   });
+}
+
+// ── MI PROGRESO (seller view) ────────────────────────────────
+function initMiProgreso() {
+  const input = document.getElementById('miprogreso-week');
+  if (!input) return;
+  if (!input.value) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const w = getISOWeek(now);
+    input.value = `${y}-W${String(w).padStart(2,'0')}`;
+  }
+  loadMiProgreso();
+}
+
+function miProgresoWeekPrev() {
+  const input = document.getElementById('miprogreso-week');
+  if (!input || !input.value) return;
+  const [y, w] = input.value.split('-W').map(Number);
+  const d = new Date(y, 0, 1 + (w - 1) * 7);
+  d.setDate(d.getDate() - 7);
+  const newW = getISOWeek(d);
+  const newY = d.getFullYear();
+  input.value = `${newY}-W${String(newW).padStart(2,'0')}`;
+  loadMiProgreso();
+}
+
+function miProgresoWeekNext() {
+  const input = document.getElementById('miprogreso-week');
+  if (!input || !input.value) return;
+  const [y, w] = input.value.split('-W').map(Number);
+  const d = new Date(y, 0, 1 + (w - 1) * 7);
+  d.setDate(d.getDate() + 7);
+  const newW = getISOWeek(d);
+  const newY = d.getFullYear();
+  input.value = `${newY}-W${String(newW).padStart(2,'0')}`;
+  loadMiProgreso();
+}
+
+async function loadMiProgreso() {
+  const container = document.getElementById('miprogreso-container');
+  const weekInput = document.getElementById('miprogreso-week');
+  if (!container || !weekInput || !weekInput.value) return;
+
+  container.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>';
+
+  const { start, end } = getWeekRange(weekInput.value);
+  const sellerEmail = currentUser?.email;
+  if (!sellerEmail) return;
+
+  try {
+    const orders = await supabase(`orders?created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}&seller=eq.${encodeURIComponent(sellerEmail)}&select=*&order=created_at.desc`);
+
+    const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
+    const weekLabel = `${fmtDate(start)} – ${fmtDate(end)} ${start.getFullYear()}`;
+
+    const total = (orders || []).reduce((s, o) => s + parseFloat(o.subtotal || 0), 0);
+    const commission = total * COMMISSION_RATE;
+    const hitGoal = total >= WEEKLY_GOAL;
+    const bonus = hitGoal ? WEEKLY_BONUS : 0;
+    const remaining = Math.max(0, WEEKLY_GOAL - total);
+    const progress = Math.min(100, (total / WEEKLY_GOAL) * 100);
+
+    let html = `
+    <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px;">
+      <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Semana</div>
+      <div style="font-size:16px; font-weight:600; color:var(--text); margin-bottom:16px;">${weekLabel}</div>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px;">
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Ventas</div>
+          <div style="font-size:20px; font-weight:700; color:var(--gold);">$${total.toFixed(2)}</div>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Comisión 20%</div>
+          <div style="font-size:20px; font-weight:700; color:var(--text);">$${commission.toFixed(2)}</div>
+        </div>
+        <div style="background:${hitGoal ? '#052e16' : 'var(--surface)'}; border:1px solid ${hitGoal ? 'var(--gold)' : 'var(--border)'}; border-radius:var(--radius); padding:12px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:${hitGoal ? 'var(--gold)' : 'var(--text-faint)'};">Bono meta</div>
+          <div style="font-size:20px; font-weight:700; color:${hitGoal ? 'var(--gold)' : 'var(--text-muted)'};">${hitGoal ? '+$'+WEEKLY_BONUS.toFixed(2) : '$0.00'}</div>
+        </div>
+      </div>
+      <div style="margin-bottom:6px; display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted);">
+        <span>Meta semanal: $${WEEKLY_GOAL.toFixed(0)}</span>
+        <span>${hitGoal ? '🏆 ¡Meta alcanzada!' : `Faltan $${remaining.toFixed(2)}`}</span>
+      </div>
+      <div style="background:var(--border); border-radius:99px; height:8px;">
+        <div style="background:${hitGoal ? 'var(--gold)' : '#4ade80'}; width:${progress}%; height:8px; border-radius:99px; transition:width 0.5s;"></div>
+      </div>
+    </div>
+
+    <div style="font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:10px;">${(orders||[]).length} orden${(orders||[]).length !== 1 ? 'es' : ''} esta semana</div>`;
+
+    if (!orders || orders.length === 0) {
+      html += `<div class="empty-state"><div class="empty-icon">📭</div>Sin órdenes esta semana</div>`;
+    } else {
+      html += orders.map(o => {
+        const oDate = new Date(o.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+        return `
+        <div class="order-card">
+          <div class="order-header">
+            <div>
+              <div class="order-name">${o.client}</div>
+              <div class="order-business">${o.business} · #${String(o.id).padStart(5,'0')}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:16px; font-weight:700; color:var(--gold);">$${parseFloat(o.total).toFixed(2)}</div>
+              <div class="status-badge ${statusClass(o.status)}" style="margin-top:4px;">${o.status}</div>
+            </div>
+          </div>
+          <div class="order-meta">📍 ${o.address || '—'}</div>
+          <div class="order-meta">🕐 ${oDate}</div>
+          <div class="order-meta" style="color:#4ade80;">💰 Comisión: $${(parseFloat(o.subtotal) * COMMISSION_RATE).toFixed(2)}</div>
+          <div style="margin-top:10px;">
+            <button onclick="printOrder(${o.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit; width:100%; padding:8px;">🖨️ Imprimir invoice</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    container.innerHTML = html;
+  } catch(e) {
+    console.error(e);
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Error cargando datos</div>';
+  }
 }
 
 function initTabDragScroll() {
