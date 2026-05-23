@@ -2675,12 +2675,10 @@ function openEditModal(id) {
   const editCustomer = (allCustomers || []).find(c => c.phone === order.phone);
   const editLevel = order.level || editCustomer?.level || 'Salon';
   window._editOrderLevel = editLevel;
-  const levelIndicator = document.getElementById('edit-level-indicator');
-  if (levelIndicator) {
-    const colors = { Retail: '#16a34a', Salon: 'var(--gold)', Wholesale: '#2563eb' };
-    levelIndicator.textContent = 'Nivel: ' + editLevel;
-    levelIndicator.style.color = colors[editLevel] || 'var(--text-muted)';
-  }
+  // Set level selector and badge
+  const editLvlSel = document.getElementById('edit-level-select');
+  if (editLvlSel) editLvlSel.value = editLevel;
+  setEditLevel(editLevel);
 
   const lines = document.getElementById('edit-product-lines');
   lines.innerHTML = '';
@@ -2694,6 +2692,29 @@ function openEditModal(id) {
 function closeEditModal() {
   document.getElementById('edit-modal').style.display = 'none';
   editingOrderId = null;
+}
+
+function setEditLevel(level) {
+  window._editOrderLevel = level;
+  const badge = document.getElementById('edit-level-badge');
+  const colors = { Retail: 'badge-nueva', Salon: 'badge-lista', Wholesale: 'badge-proceso' };
+  if (badge) {
+    badge.textContent = level;
+    badge.className = 'level-badge ' + (colors[level] || '');
+  }
+  // Rebuild all product lines with new pricing
+  const lines = document.getElementById('edit-product-lines');
+  if (lines) {
+    const rows = lines.querySelectorAll('.product-row');
+    rows.forEach(row => {
+      const sel = row.querySelector('select');
+      if (sel) {
+        const currentBarcode = sel.value;
+        sel.innerHTML = buildOptions(currentBarcode, level);
+      }
+    });
+  }
+  recalcEditTotal();
 }
 
 function addEditLine(barcode = '', qty = 1, level = null) {
@@ -2785,8 +2806,14 @@ async function saveEditOrder() {
       const product = PRODUCTS.find(p => p.barcode === sel.value);
       const q = parseInt(qty.value) || 0;
       if (product && q > 0) {
-        const lineSubtotal = parseFloat(product.price) * q;
-        lines.push({ barcode: product.barcode, brand: product.brand, code: product.color_code || '—', name: product.name, price: parseFloat(product.price), qty: q, subtotal: lineSubtotal });
+        const lvl = window._editOrderLevel || 'Salon';
+        const retail = parseFloat(product.price_retail) || parseFloat(product.price);
+        const salon = parseFloat(product.price);
+        const wDisc = parseFloat(product.discount_wholesale) || 0;
+        const wholesale = Math.round(salon * (1 - wDisc / 100) * 100) / 100;
+        const linePrice = lvl === 'Retail' ? retail : lvl === 'Wholesale' ? wholesale : salon;
+        const lineSubtotal = linePrice * q;
+        lines.push({ barcode: product.barcode, brand: product.brand, code: product.color_code || '—', name: product.name, price: linePrice, qty: q, subtotal: lineSubtotal });
         subtotal += lineSubtotal;
       }
     }
@@ -2808,7 +2835,7 @@ async function saveEditOrder() {
   try {
     await supabase(`orders?id=eq.${editingOrderId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ client, business, phone, permit, address, email, notes, lines, subtotal, shipping: hasShipping ? shippingAmt : null, tax_rate: hasTax ? taxRate : null, tax_amount: hasTax ? taxAmt : null, total, payment_method: document.getElementById('edit-payment-method')?.value || null })
+      body: JSON.stringify({ client, business, phone, permit, address, email, notes, lines, subtotal, shipping: hasShipping ? shippingAmt : null, tax_rate: hasTax ? taxRate : null, tax_amount: hasTax ? taxAmt : null, total, level: window._editOrderLevel || 'Salon', payment_method: document.getElementById('edit-payment-method')?.value || null })
     });
     closeEditModal();
     showToast('✓ Orden actualizada');
