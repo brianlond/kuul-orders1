@@ -323,7 +323,8 @@
         <span class="order-count">📈 Mi progreso semanal</span>
         <div style="display:flex; gap:6px; align-items:center;">
           <button class="clear-btn" onclick="miProgresoWeekPrev()">◀</button>
-          <input type="week" id="miprogreso-week" onchange="loadMiProgreso()" style="font-size:13px; padding:4px 8px; border:1px solid var(--border); border-radius:6px;">
+          <span id="miprogreso-week-label" style="font-size:13px; padding:4px 12px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); min-width:140px; text-align:center;">—</span>
+          <input type="hidden" id="miprogreso-week">
           <button class="clear-btn" onclick="miProgresoWeekNext()">▶</button>
         </div>
       </div>
@@ -340,8 +341,9 @@
         </div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <label style="font-size:13px; color:var(--text-muted);">Semana:</label>
-          <input type="week" id="sellers-week" onchange="loadSellersReport()" style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:var(--font-sans); background:var(--surface); color:var(--text);">
           <button onclick="sellersWeekPrev()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">◀</button>
+          <span id="sellers-week-label" style="font-size:13px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); min-width:160px; text-align:center; display:inline-block;">—</span>
+          <input type="hidden" id="sellers-week">
           <button onclick="sellersWeekNext()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">▶</button>
           <button onclick="loadSellersReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
         </div>

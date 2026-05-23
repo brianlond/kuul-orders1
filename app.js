@@ -3084,13 +3084,10 @@ const WEEKLY_GOAL = 2500;
 const WEEKLY_BONUS = 125;
 
 function initSellersTab() {
-  const weekInput = document.getElementById('sellers-week');
-  if (!weekInput) return;
-  // Always force current week
-  const now = new Date();
-  const year = now.getFullYear();
-  const week = getWeekNumber(now);
-  weekInput.value = `${year}-W${String(week).padStart(2,'0')}`;
+  const input = document.getElementById('sellers-week');
+  if (!input) return;
+  const { year, week } = currentWeekValue();
+  setWeekValue('sellers-week', 'sellers-week-label', year, week);
   loadSellersReport();
 }
 
@@ -3118,7 +3115,7 @@ function sellersWeekPrev() {
   if (!input || !input.value) { initSellersTab(); return; }
   const { start } = getWeekRange(input.value);
   start.setDate(start.getDate() - 7);
-  input.value = `${start.getFullYear()}-W${String(getWeekNumber(start)).padStart(2,'0')}`;
+  setWeekValue('sellers-week', 'sellers-week-label', start.getFullYear(), getWeekNumber(start));
   loadSellersReport();
 }
 
@@ -3127,7 +3124,7 @@ function sellersWeekNext() {
   if (!input || !input.value) { initSellersTab(); return; }
   const { start } = getWeekRange(input.value);
   start.setDate(start.getDate() + 7);
-  input.value = `${start.getFullYear()}-W${String(getWeekNumber(start)).padStart(2,'0')}`;
+  setWeekValue('sellers-week', 'sellers-week-label', start.getFullYear(), getWeekNumber(start));
   loadSellersReport();
 }
 
@@ -3330,46 +3327,65 @@ function initDragScroll(el) {
 }
 
 // ── MI PROGRESO (seller view) ────────────────────────────────
+function setWeekValue(inputId, labelId, year, week) {
+  const val = `${year}-W${String(week).padStart(2,'0')}`;
+  const input = document.getElementById(inputId);
+  const label = document.getElementById(labelId);
+  if (input) input.value = val;
+  if (label) {
+    const { start, end } = getWeekRange(val);
+    const fmt = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
+    label.textContent = `${fmt(start)} – ${fmt(end)} ${year}`;
+  }
+  return val;
+}
+
+function currentWeekValue() {
+  const now = new Date();
+  const w = getWeekNumber(now);
+  const y = now.getFullYear();
+  return { year: y, week: w };
+}
+
 function initMiProgreso() {
   const input = document.getElementById('miprogreso-week');
   if (!input) return;
   if (!input.value) {
-    const now = new Date();
-    const y = now.getFullYear();
-    const w = getISOWeek(now);
-    input.value = `${y}-W${String(w).padStart(2,'0')}`;
+    const { year, week } = currentWeekValue();
+    setWeekValue('miprogreso-week', 'miprogreso-week-label', year, week);
+  } else {
+    // Update label if value already set
+    const [y, w] = input.value.split('-W').map(Number);
+    setWeekValue('miprogreso-week', 'miprogreso-week-label', y, w);
   }
   loadMiProgreso();
 }
 
 function miProgresoWeekPrev() {
   const input = document.getElementById('miprogreso-week');
-  if (!input || !input.value) return;
-  const [y, w] = input.value.split('-W').map(Number);
-  const d = new Date(y, 0, 1 + (w - 1) * 7);
-  d.setDate(d.getDate() - 7);
-  const newW = getISOWeek(d);
-  const newY = d.getFullYear();
-  input.value = `${newY}-W${String(newW).padStart(2,'0')}`;
+  if (!input || !input.value) { initMiProgreso(); return; }
+  const { start } = getWeekRange(input.value);
+  start.setDate(start.getDate() - 7);
+  setWeekValue('miprogreso-week', 'miprogreso-week-label', start.getFullYear(), getWeekNumber(start));
   loadMiProgreso();
 }
 
 function miProgresoWeekNext() {
   const input = document.getElementById('miprogreso-week');
-  if (!input || !input.value) return;
-  const [y, w] = input.value.split('-W').map(Number);
-  const d = new Date(y, 0, 1 + (w - 1) * 7);
-  d.setDate(d.getDate() + 7);
-  const newW = getISOWeek(d);
-  const newY = d.getFullYear();
-  input.value = `${newY}-W${String(newW).padStart(2,'0')}`;
+  if (!input || !input.value) { initMiProgreso(); return; }
+  const { start } = getWeekRange(input.value);
+  start.setDate(start.getDate() + 7);
+  setWeekValue('miprogreso-week', 'miprogreso-week-label', start.getFullYear(), getWeekNumber(start));
   loadMiProgreso();
 }
 
 async function loadMiProgreso() {
   const container = document.getElementById('miprogreso-container');
   const weekInput = document.getElementById('miprogreso-week');
-  if (!container || !weekInput || !weekInput.value) return;
+  if (!container || !weekInput || !weekInput.value) { initMiProgreso(); return; }
+  // Ensure label is always in sync
+  const [_y, _w] = weekInput.value.split('-W').map(Number);
+  setWeekValue('miprogreso-week', 'miprogreso-week-label', _y, _w);
 
   container.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>';
 
