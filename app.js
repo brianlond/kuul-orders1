@@ -2671,16 +2671,30 @@ async function openEditModal(id) {
   document.getElementById('edit-tax-toggle').checked = !!order.tax_rate;
   document.getElementById('edit-tax-rate').value = order.tax_rate || 10.25;
 
-  // Get level from order first, then customer cache, then DB
+  // Get level from order first, then match customer by phone or name
   let editLevel = order.level || null;
   if (!editLevel) {
-    let editCustomer = (allCustomers || []).find(c => c.phone === order.phone);
+    const normalizePhone = p => (p || '').replace(/[^0-9]/g, '');
+    const orderPhone = normalizePhone(order.phone);
+    const orderName  = (order.client || '').trim().toLowerCase();
+
+    // Try cache first
+    let editCustomer = (allCustomers || []).find(c =>
+      (orderPhone && normalizePhone(c.phone) === orderPhone) ||
+      (orderName  && (c.name || '').trim().toLowerCase() === orderName)
+    );
+
+    // Fallback: fetch from DB and match by phone digits or name
     if (!editCustomer) {
       try {
-        const res = await supabase(`customers?phone=eq.${encodeURIComponent(order.phone)}&select=level`);
-        editCustomer = res && res[0] ? res[0] : null;
+        const res = await supabase(`customers?select=name,phone,level`);
+        editCustomer = (res || []).find(c =>
+          (orderPhone && normalizePhone(c.phone) === orderPhone) ||
+          (orderName  && (c.name || '').trim().toLowerCase() === orderName)
+        );
       } catch(e) {}
     }
+
     editLevel = editCustomer?.level || 'Salon';
   }
   window._editOrderLevel = editLevel;
