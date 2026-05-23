@@ -212,9 +212,17 @@
         <button class="filter-chip" onclick="filterOrders('Lista', this)">Lista</button>
         <button class="filter-chip" onclick="filterOrders('Entregada', this)">Entregada</button>
       </div>
+      <div id="test-mode-banner" style="display:none;" class="test-mode-banner">
+        🧪 MODO PRUEBA ACTIVO — Las órdenes se guardarán como prueba
+        <button onclick="toggleTestMode()" style="margin-left:auto; padding:4px 12px; background:#d97706; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit;">Desactivar</button>
+        <button onclick="clearTestOrders()" style="padding:4px 12px; background:none; border:1px solid #d97706; color:#92400e; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit;">🗑 Borrar pruebas</button>
+      </div>
       <div class="admin-bar">
         <span id="order-count-label" class="order-count">0 órdenes</span>
-        <button class="clear-btn" onclick="clearOrders()">🗑 Limpiar todo</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="test-mode-btn" onclick="toggleTestMode()" class="clear-btn" style="color:#d97706; border-color:#d97706;">🧪 Modo prueba</button>
+          <button class="clear-btn" onclick="clearOrders()">🗑 Limpiar todo</button>
+        </div>
       </div>
       <div id="orders-list">
         <div class="empty-state">

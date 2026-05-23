@@ -84,6 +84,9 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .badge-proceso { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-bg); }
 .badge-lista { background: var(--success-bg); color: var(--success); border-color: var(--success-bg); }
 .badge-entregada { background: #f3f4f6; color: #6b7280; border-color: #f3f4f6; }
+.badge-cancelada { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+.badge-test { background: #fef3c7; color: #d97706; border-color: #fde68a; }
+.test-mode-banner { background: #fef3c7; border: 2px dashed #d97706; border-radius: var(--radius); padding: 8px 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: #92400e; margin-bottom: 12px; }
 
 .order-products { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
 .order-product-line { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; }
