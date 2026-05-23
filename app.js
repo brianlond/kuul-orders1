@@ -537,6 +537,7 @@ async function submitOrder() {
       preferred_discount: discountAmt > 0 ? discountAmt : null,
       discount_reason: discountReason,
       total,
+      level: currentLevel || 'Salon',
       payment_method: document.getElementById('payment-method')?.value || null,
       status: 'Nueva'
     });
@@ -2670,10 +2671,16 @@ function openEditModal(id) {
   document.getElementById('edit-tax-toggle').checked = !!order.tax_rate;
   document.getElementById('edit-tax-rate').value = order.tax_rate || 10.25;
 
-  // Get customer level for correct pricing
-  const editCustomer = allCustomers.find(c => c.phone === order.phone);
-  const editLevel = editCustomer?.level || order.level || 'Salon';
+  // Get level from order first, fallback to customer lookup
+  const editCustomer = (allCustomers || []).find(c => c.phone === order.phone);
+  const editLevel = order.level || editCustomer?.level || 'Salon';
   window._editOrderLevel = editLevel;
+  const levelIndicator = document.getElementById('edit-level-indicator');
+  if (levelIndicator) {
+    const colors = { Retail: '#16a34a', Salon: 'var(--gold)', Wholesale: '#2563eb' };
+    levelIndicator.textContent = 'Nivel: ' + editLevel;
+    levelIndicator.style.color = colors[editLevel] || 'var(--text-muted)';
+  }
 
   const lines = document.getElementById('edit-product-lines');
   lines.innerHTML = '';
