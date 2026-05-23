@@ -130,10 +130,16 @@ async function dbDeleteAll() {
 }
 
 // ── Build product options ────────────────────────────────────
-function buildOptions(selected) {
+function buildOptions(selected, level) {
+  const lvl = level || currentLevel || 'Salon';
   return PRODUCTS.map(p => {
     const code = p.color_code ? `[${p.color_code}] ` : '';
-    return `<option value="${p.barcode}" ${p.barcode === selected ? 'selected' : ''} data-price="${p.price}">${p.brand} ${code}${p.name} — $${parseFloat(p.price).toFixed(2)}</option>`;
+    const retail = parseFloat(p.price_retail) || parseFloat(p.price);
+    const salon  = parseFloat(p.price);
+    const wholesaleDiscount = parseFloat(p.discount_wholesale) || 0;
+    const wholesale = Math.round(salon * (1 - wholesaleDiscount / 100) * 100) / 100;
+    const price = lvl === 'Retail' ? retail : lvl === 'Wholesale' ? wholesale : salon;
+    return `<option value="${p.barcode}" ${p.barcode === selected ? 'selected' : ''} data-price="${price}">${p.brand} ${code}${p.name} — $${price.toFixed(2)}</option>`;
   }).join('');
 }
 
@@ -2664,9 +2670,14 @@ function openEditModal(id) {
   document.getElementById('edit-tax-toggle').checked = !!order.tax_rate;
   document.getElementById('edit-tax-rate').value = order.tax_rate || 10.25;
 
+  // Get customer level for correct pricing
+  const editCustomer = allCustomers.find(c => c.phone === order.phone);
+  const editLevel = editCustomer?.level || order.level || 'Salon';
+  window._editOrderLevel = editLevel;
+
   const lines = document.getElementById('edit-product-lines');
   lines.innerHTML = '';
-  order.lines.forEach(l => addEditLine(l.barcode, l.qty));
+  order.lines.forEach(l => addEditLine(l.barcode, l.qty, editLevel));
 
   onEditPermitChange();
   recalcEditTotal();
@@ -2678,7 +2689,8 @@ function closeEditModal() {
   editingOrderId = null;
 }
 
-function addEditLine(barcode = '', qty = 1) {
+function addEditLine(barcode = '', qty = 1, level = null) {
+  const lvl = level || window._editOrderLevel || currentLevel || 'Salon';
   editLineCount++;
   const id = editLineCount;
   const container = document.getElementById('edit-product-lines');
@@ -2686,7 +2698,7 @@ function addEditLine(barcode = '', qty = 1) {
   div.className = 'product-row';
   div.id = 'edit-line-' + id;
   div.innerHTML = `
-    <select id="edit-sel-${id}" onchange="recalcEditTotal()">${buildOptions(barcode)}</select>
+    <select id="edit-sel-${id}" onchange="recalcEditTotal()">${buildOptions(barcode, lvl)}</select>
     <input type="number" id="edit-qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcEditTotal()">
     <button class="remove-btn" onclick="removeEditLine(${id})" aria-label="Eliminar">×</button>
   `;
