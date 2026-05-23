@@ -608,10 +608,16 @@ function toggleTestMode() {
 async function clearTestOrders() {
   if (!confirm('¿Borrar todas las órdenes de prueba? Esta acción no se puede deshacer.')) return;
   try {
-    await supabase('orders?is_test=eq.true', { method: 'DELETE' });
+    await supabase('orders?is_test=eq.true', {
+      method: 'DELETE',
+      headers: { 'Prefer': 'return=representation' }
+    });
     showToast('✓ Órdenes de prueba eliminadas');
     loadOrders();
-  } catch(e) { showToast('❌ Error al borrar órdenes de prueba'); }
+  } catch(e) {
+    console.error('clearTestOrders error:', e);
+    showToast('❌ Error al borrar órdenes de prueba');
+  }
 }
 
 // ── Update status ────────────────────────────────────────────
@@ -661,7 +667,7 @@ function renderOrders(orders) {
   <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)" style="flex-shrink:0;">
           ${statusOptions}
         </select>
-        ${o.is_test ? '<span class="status-badge badge-test">🧪 Prueba</span>' : ''}
+        ${(o.is_test === true || o.is_test === 'true') ? '<span class="status-badge badge-test">🧪 Prueba</span>' : ''}
       </div>
       <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; margin-bottom:10px; display:flex; gap:16px; flex-wrap:wrap;">
         <div style="display:flex; align-items:center; gap:6px;">
@@ -3009,7 +3015,7 @@ async function printOrder(id) {
 </head>
 <body>
 
-  ${order.is_test ? `
+  ${(order.is_test === true || order.is_test === 'true') ? `
   <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-45deg); font-size:120px; font-weight:900; color:rgba(217,119,6,0.12); pointer-events:none; z-index:0; white-space:nowrap; font-family:Arial,sans-serif; letter-spacing:8px;">
     TEST
   </div>
