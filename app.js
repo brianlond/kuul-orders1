@@ -2654,7 +2654,7 @@ document.addEventListener('keydown', e => {
 let editingOrderId = null;
 let editLineCount = 0;
 
-function openEditModal(id) {
+async function openEditModal(id) {
   const order = window._orders ? window._orders.find(o => o.id === id) : null;
   if (!order) return;
   editingOrderId = id;
@@ -2671,9 +2671,18 @@ function openEditModal(id) {
   document.getElementById('edit-tax-toggle').checked = !!order.tax_rate;
   document.getElementById('edit-tax-rate').value = order.tax_rate || 10.25;
 
-  // Get level from order first, fallback to customer lookup
-  const editCustomer = (allCustomers || []).find(c => c.phone === order.phone);
-  const editLevel = order.level || editCustomer?.level || 'Salon';
+  // Get level from order first, then customer cache, then DB
+  let editLevel = order.level || null;
+  if (!editLevel) {
+    let editCustomer = (allCustomers || []).find(c => c.phone === order.phone);
+    if (!editCustomer) {
+      try {
+        const res = await supabase(`customers?phone=eq.${encodeURIComponent(order.phone)}&select=level`);
+        editCustomer = res && res[0] ? res[0] : null;
+      } catch(e) {}
+    }
+    editLevel = editCustomer?.level || 'Salon';
+  }
   window._editOrderLevel = editLevel;
   // Set level selector and badge
   const editLvlSel = document.getElementById('edit-level-select');
