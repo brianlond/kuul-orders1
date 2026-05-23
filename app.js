@@ -295,8 +295,10 @@ async function loadProfileAndApply(token, uid, errEl) {
   hideLoginModal();
   startInactivityWatcher();
 
-  // Auto-fill seller name
+  // Auto-fill seller name in Nueva Orden and POS
   const sellerInput = document.getElementById('seller-name');
+  const posSellerInput = document.getElementById('pos-seller-name');
+  if (posSellerInput && profile[0].name) posSellerInput.value = profile[0].name;
   if (sellerInput && profile[0].name) {
     sellerInput.value = profile[0].name;
     if (currentRole === 'seller') {
@@ -588,11 +590,18 @@ function statusClass(status) {
 
 function toggleTestMode() {
   isTestMode = !isTestMode;
-  const banner = document.getElementById('test-mode-banner');
-  const btn    = document.getElementById('test-mode-btn');
-  if (banner) banner.style.display = isTestMode ? 'flex' : 'none';
-  if (btn)    btn.style.background  = isTestMode ? '#d97706' : '';
-  if (btn)    btn.style.color       = isTestMode ? '#fff'    : '#d97706';
+  // Update all banners and buttons
+  const banners = ['test-mode-banner', 'test-mode-banner-order', 'test-mode-banner-pos'];
+  banners.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isTestMode ? 'flex' : 'none';
+  });
+  const posBtn = document.getElementById('pos-test-btn');
+  if (posBtn) {
+    posBtn.style.background = isTestMode ? '#d97706' : 'none';
+    posBtn.style.color      = isTestMode ? '#fff'    : '#d97706';
+    posBtn.textContent      = isTestMode ? '🧪 Prueba ON' : '🧪 Prueba';
+  }
   showToast(isTestMode ? '🧪 Modo prueba activado' : '✅ Modo prueba desactivado');
 }
 
@@ -1643,8 +1652,10 @@ async function confirmCobrar() {
 
   try {
     const discountNote = discountAmt > 0 ? ` · Descuento: -$${discountAmt.toFixed(2)}` : '';
+    const posSellerInput = document.getElementById('pos-seller-name');
+    const posSeller = (posSellerInput?.value.trim()) || currentUser?.name || 'Caja';
     const orderData = {
-      seller: 'Caja',
+      seller: posSeller,
       client: posClient ? posClient.name : 'Cliente general',
       business: posClient ? posClient.business : 'Venta en bodega',
       phone: posClient ? posClient.phone : '—',

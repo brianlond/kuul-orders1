@@ -54,6 +54,11 @@
     <!-- VENDEDOR -->
     <div id="tab-vendedor" class="section active">
 
+      <div id="test-mode-banner-order" style="display:none;" class="test-mode-banner">
+        🧪 MODO PRUEBA ACTIVO — Esta orden se guardará como prueba y puede borrarse
+        <button onclick="toggleTestMode()" style="margin-left:auto; padding:4px 12px; background:#d97706; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit;">Desactivar</button>
+      </div>
+
       <div class="section-label">Datos del vendedor</div>
       <div class="field-group">
         <label>Nombre del vendedor</label>
@@ -220,7 +225,6 @@
       <div class="admin-bar">
         <span id="order-count-label" class="order-count">0 órdenes</span>
         <div style="display:flex; gap:8px; align-items:center;">
-          <button id="test-mode-btn" onclick="toggleTestMode()" class="clear-btn" style="color:#d97706; border-color:#d97706;">🧪 Modo prueba</button>
           <button class="clear-btn" onclick="clearOrders()">🗑 Limpiar todo</button>
         </div>
       </div>
@@ -424,6 +428,15 @@
             </div>
             <div style="margin-bottom:8px;">
               <input type="text" id="pos-discount-reason" placeholder="Reason (e.g. Preferred pricing)" style="width:100%; font-size:13px; padding:5px 8px; border:1px solid var(--border); border-radius:6px;">
+            </div>
+            <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <div style="flex:1; min-width:120px;">
+                <input type="text" id="pos-seller-name" placeholder="Vendedor..." style="width:100%; font-size:13px; padding:5px 8px; border:1px solid var(--border); border-radius:6px;">
+              </div>
+              <button id="pos-test-btn" onclick="toggleTestMode()" style="padding:5px 10px; border:1px solid #d97706; border-radius:6px; background:none; color:#d97706; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; white-space:nowrap;">🧪 Prueba</button>
+            </div>
+            <div id="test-mode-banner-pos" style="display:none; background:#fef3c7; border:1px dashed #d97706; border-radius:6px; padding:6px 10px; font-size:11px; font-weight:600; color:#92400e; margin-bottom:6px;">
+              🧪 MODO PRUEBA ACTIVO
             </div>
             <button class="cobrar-btn" id="pos-cobrar-btn" onclick="posCobrar()" disabled>Cobrar $0.00</button>
           </div>
