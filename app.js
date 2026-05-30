@@ -783,6 +783,7 @@ function initSteppedSelector() {
     const img = logo ? `<img src="${logo}" alt="${b}" style="height:28px; max-width:80px; object-fit:contain; display:block; margin:0 auto 2px;">` : '';
     return `<button class="brand-chip step-chip" onclick="selectBrand('${b}')">${img}<span>${b}</span></button>`;
   }).join('');
+  initDragScroll(container);
 }
 
 function selectBrand(brand) {
@@ -795,6 +796,7 @@ function selectBrand(brand) {
   container.innerHTML = categories.map(c => `
     <button class="step-chip" onclick="selectCategory('${c}')">${c}</button>
   `).join('');
+  initDragScroll(container);
 
   document.getElementById('step-category').style.display = 'block';
   document.getElementById('step-variation').style.display = 'none';
@@ -3645,6 +3647,8 @@ window.addEventListener('load', () => {
   setTimeout(() => {
     initTabDragScroll();
     initDragScroll(document.getElementById('pos-brand-chips-wrap'));
+    initDragScroll(document.getElementById('brand-options'));
+    initDragScroll(document.getElementById('category-options'));
   }, 500);
 });
 
