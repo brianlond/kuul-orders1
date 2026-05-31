@@ -159,13 +159,22 @@ function addProductLine(barcode = '', qty = 1) {
   const product = PRODUCTS.find(p => p.barcode === barcode);
   const price = product ? getPrice(product) : 0;
   const label = product ? `${product.brand} [${product.color_code || '—'}] ${product.name} — $${price.toFixed(2)}` : '';
+  const priceLabel = price > 0 ? `$${price.toFixed(2)}` : '';
   div.innerHTML = `
-    <div class="product-line-label">${label}</div>
-    <input type="number" id="qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcTotal()">
-    <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--gold); cursor:pointer; white-space:nowrap;">
-      <input type="checkbox" id="free-${id}" onchange="recalcTotal()" style="accent-color:var(--gold);"> Gratis
-    </label>
-    <button class="remove-btn" onclick="removeLine(${id})" aria-label="Eliminar">×</button>
+    <div class="product-row-top">
+      <div class="product-line-label">${label.replace(/ — \$[\d.]+/, '')}</div>
+      <span class="product-line-price" id="price-label-${id}">${priceLabel}</span>
+    </div>
+    <div class="product-row-bottom">
+      <button onclick="changeQty(${id}, -1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text);">−</button>
+      <input type="number" id="qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcTotal()">
+      <button onclick="changeQty(${id}, 1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text);">+</button>
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:#16a34a; cursor:pointer; margin-left:4px;">
+        <input type="checkbox" id="free-${id}" onchange="toggleFree(${id})" style="accent-color:#16a34a; width:16px; height:16px;"> Gratis
+      </label>
+      <button class="remove-btn" onclick="removeLine(${id})" aria-label="Eliminar" style="margin-left:auto;">×</button>
+    </div>
+  `;
   `;
   container.appendChild(div);
   recalcTotal();
@@ -174,6 +183,34 @@ function addProductLine(barcode = '', qty = 1) {
 function removeLine(id) {
   const el = document.getElementById('line-' + id);
   if (el) el.remove();
+  recalcTotal();
+}
+
+function changeQty(id, delta) {
+  const input = document.getElementById('qty-' + id);
+  if (!input) return;
+  const newVal = Math.max(1, Math.min(999, (parseInt(input.value) || 1) + delta));
+  input.value = newVal;
+  recalcTotal();
+}
+
+function toggleFree(id) {
+  const freeCheck = document.getElementById('free-' + id);
+  const priceLabel = document.getElementById('price-label-' + id);
+  const row = document.getElementById('line-' + id);
+  if (!row) return;
+  const barcode = row.dataset.barcode;
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  if (freeCheck && freeCheck.checked) {
+    if (priceLabel) { priceLabel.textContent = 'FREE'; priceLabel.style.color = '#16a34a'; }
+    row.style.borderColor = '#bbf7d0';
+    row.style.background = '#f0fdf4';
+  } else {
+    const price = product ? getPrice(product) : 0;
+    if (priceLabel) { priceLabel.textContent = '$' + price.toFixed(2); priceLabel.style.color = 'var(--gold)'; }
+    row.style.borderColor = '';
+    row.style.background = '';
+  }
   recalcTotal();
 }
 
