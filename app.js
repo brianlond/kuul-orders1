@@ -175,7 +175,6 @@ function addProductLine(barcode = '', qty = 1) {
       <button class="remove-btn" onclick="removeLine(${id})" aria-label="Eliminar" style="margin-left:auto;">×</button>
     </div>
   `;
-  `;
   container.appendChild(div);
   recalcTotal();
 }
