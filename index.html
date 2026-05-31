@@ -346,20 +346,38 @@
     </div>
 
     <div id="tab-sellers" class="section">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
         <div>
-          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Comisiones y Metas</h2>
+          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Ventas y Comisiones</h2>
           <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">20% comisión · Meta semanal $2,500 → +$125</div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <label style="font-size:13px; color:var(--text-muted);">Semana:</label>
-          <button onclick="sellersWeekPrev()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">◀</button>
-          <span id="sellers-week-label" style="font-size:13px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); min-width:160px; text-align:center; display:inline-block;">—</span>
-          <input type="hidden" id="sellers-week">
-          <button onclick="sellersWeekNext()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">▶</button>
-          <button onclick="loadSellersReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
+        <!-- View toggle -->
+        <div style="display:flex; gap:6px;">
+          <button id="sellers-view-week-btn" onclick="setSellersView('week')" style="padding:6px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">Semana</button>
+          <button id="sellers-view-month-btn" onclick="setSellersView('month')" style="padding:6px 16px; background:none; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; color:var(--text-muted); cursor:pointer; font-family:inherit;">Mes</button>
         </div>
       </div>
+
+      <!-- Week controls -->
+      <div id="sellers-week-controls" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+        <label style="font-size:13px; color:var(--text-muted);">Semana:</label>
+        <button onclick="sellersWeekPrev()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">◀</button>
+        <span id="sellers-week-label" style="font-size:13px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); min-width:160px; text-align:center; display:inline-block;">—</span>
+        <input type="hidden" id="sellers-week">
+        <button onclick="sellersWeekNext()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">▶</button>
+        <button onclick="loadSellersReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
+      </div>
+
+      <!-- Month controls -->
+      <div id="sellers-month-controls" style="display:none; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+        <label style="font-size:13px; color:var(--text-muted);">Mes:</label>
+        <button onclick="sellersMonthPrev()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">◀</button>
+        <span id="sellers-month-label" style="font-size:13px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); min-width:160px; text-align:center; display:inline-block;">—</span>
+        <input type="hidden" id="sellers-month">
+        <button onclick="sellersMonthNext()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">▶</button>
+        <button onclick="loadMonthlyReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
+      </div>
+
       <div id="sellers-report"></div>
     </div>
 

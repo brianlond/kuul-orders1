@@ -3211,30 +3211,97 @@ function initSellersTab() {
 }
 
 function getWeekNumber(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = d.getDay() || 7;
+  d.setDate(d.getDate() + 4 - day);
+  const yearStart = new Date(d.getFullYear(), 0, 1);
   return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
 function getWeekRange(weekStr) {
-  const [year, w] = weekStr.split('-W');
-  const jan4 = new Date(Date.UTC(parseInt(year), 0, 4));
-  const weekStart = new Date(jan4);
-  weekStart.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1) + (parseInt(w) - 1) * 7);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
-  weekEnd.setUTCHours(23, 59, 59, 999);
-  return { start: weekStart, end: weekEnd };
+  if (!weekStr || !weekStr.includes('-W')) return { start: new Date(), end: new Date() };
+  const [yearStr, wStr] = weekStr.split('-W');
+  const year = parseInt(yearStr);
+  const week = parseInt(wStr);
+  // Find Monday of that week
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7;
+  const monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { start: monday, end: sunday };
+}
+
+// ── SELLERS VIEW TOGGLE ───────────────────────────────────────
+let sellersView = 'week'; // 'week' or 'month'
+
+function setSellersView(view) {
+  sellersView = view;
+  const weekControls  = document.getElementById('sellers-week-controls');
+  const monthControls = document.getElementById('sellers-month-controls');
+  const weekBtn  = document.getElementById('sellers-view-week-btn');
+  const monthBtn = document.getElementById('sellers-view-month-btn');
+
+  if (view === 'week') {
+    weekControls.style.display  = 'flex';
+    monthControls.style.display = 'none';
+    weekBtn.style.background  = 'var(--gold)';  weekBtn.style.color  = '#fff'; weekBtn.style.border = 'none';
+    monthBtn.style.background = 'none'; monthBtn.style.color = 'var(--text-muted)'; monthBtn.style.border = '1px solid var(--border)';
+    loadSellersReport();
+  } else {
+    weekControls.style.display  = 'none';
+    monthControls.style.display = 'flex';
+    monthBtn.style.background = 'var(--gold)'; monthBtn.style.color = '#fff'; monthBtn.style.border = 'none';
+    weekBtn.style.background  = 'none'; weekBtn.style.color = 'var(--text-muted)'; weekBtn.style.border = '1px solid var(--border)';
+    if (!document.getElementById('sellers-month').value) initMonthPicker();
+    loadMonthlyReport();
+  }
+}
+
+function initMonthPicker() {
+  const now = new Date();
+  const val = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}`;
+  document.getElementById('sellers-month').value = val;
+  updateMonthLabel(val);
+}
+
+function updateMonthLabel(val) {
+  const [y, m] = val.split('-').map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  document.getElementById('sellers-month-label').textContent = label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function sellersMonthPrev() {
+  const input = document.getElementById('sellers-month');
+  if (!input.value) { initMonthPicker(); return; }
+  const [y, m] = input.value.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`;
+  input.value = val;
+  updateMonthLabel(val);
+  loadMonthlyReport();
+}
+
+function sellersMonthNext() {
+  const input = document.getElementById('sellers-month');
+  if (!input.value) { initMonthPicker(); return; }
+  const [y, m] = input.value.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`;
+  input.value = val;
+  updateMonthLabel(val);
+  loadMonthlyReport();
 }
 
 function sellersWeekPrev() {
   const input = document.getElementById('sellers-week');
   if (!input || !input.value) { initSellersTab(); return; }
   const { start } = getWeekRange(input.value);
-  start.setDate(start.getDate() - 7);
-  setWeekValue('sellers-week', 'sellers-week-label', start.getFullYear(), getWeekNumber(start));
+  const prev = new Date(start);
+  prev.setDate(prev.getDate() - 7);
+  setWeekValue('sellers-week', 'sellers-week-label', prev.getFullYear(), getWeekNumber(prev));
   loadSellersReport();
 }
 
@@ -3242,9 +3309,144 @@ function sellersWeekNext() {
   const input = document.getElementById('sellers-week');
   if (!input || !input.value) { initSellersTab(); return; }
   const { start } = getWeekRange(input.value);
-  start.setDate(start.getDate() + 7);
-  setWeekValue('sellers-week', 'sellers-week-label', start.getFullYear(), getWeekNumber(start));
+  const next = new Date(start);
+  next.setDate(next.getDate() + 7);
+  setWeekValue('sellers-week', 'sellers-week-label', next.getFullYear(), getWeekNumber(next));
   loadSellersReport();
+}
+
+async function loadMonthlyReport() {
+  const container = document.getElementById('sellers-report');
+  const monthInput = document.getElementById('sellers-month');
+  if (!container || !monthInput?.value) return;
+
+  container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Cargando...</div>';
+
+  const [y, m] = monthInput.value.split('-').map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end   = new Date(y, m, 0, 23, 59, 59, 999);
+
+  try {
+    const orders = await supabase(`orders?created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}&is_test=eq.false&status=neq.Cancelada&select=*`);
+    if (!orders || orders.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin órdenes este mes</div>';
+      return;
+    }
+
+    const monthLabel = start.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+    const totalSales = orders.reduce((s, o) => s + parseFloat(o.subtotal || 0), 0);
+    const totalOrders = orders.length;
+
+    // ── By Seller ──────────────────────────────────────────
+    const bySeller = {};
+    orders.forEach(o => {
+      if (!bySeller[o.seller]) bySeller[o.seller] = { sales: 0, orders: 0 };
+      bySeller[o.seller].sales  += parseFloat(o.subtotal || 0);
+      bySeller[o.seller].orders += 1;
+    });
+
+    // ── By Brand ───────────────────────────────────────────
+    const byBrand = {};
+    orders.forEach(o => {
+      (o.lines || []).forEach(l => {
+        if (!byBrand[l.brand]) byBrand[l.brand] = 0;
+        byBrand[l.brand] += parseFloat(l.subtotal || 0);
+      });
+    });
+
+    // ── By Category ────────────────────────────────────────
+    const byCategory = {};
+    orders.forEach(o => {
+      (o.lines || []).forEach(l => {
+        const prod = PRODUCTS.find(p => p.barcode === l.barcode);
+        const cat = prod?.category || 'Sin categoría';
+        if (!byCategory[cat]) byCategory[cat] = 0;
+        byCategory[cat] += parseFloat(l.subtotal || 0);
+      });
+    });
+
+    // ── By Client (top 10) ─────────────────────────────────
+    const byClient = {};
+    orders.forEach(o => {
+      const key = o.client;
+      if (!byClient[key]) byClient[key] = { sales: 0, orders: 0, business: o.business };
+      byClient[key].sales  += parseFloat(o.subtotal || 0);
+      byClient[key].orders += 1;
+    });
+
+    // ── Weekly breakdown ───────────────────────────────────
+    const byWeek = {};
+    orders.forEach(o => {
+      const d = new Date(o.created_at);
+      const wk = getWeekNumber(d);
+      const key = `Semana ${wk}`;
+      if (!byWeek[key]) byWeek[key] = 0;
+      byWeek[key] += parseFloat(o.subtotal || 0);
+    });
+
+    const bar = (pct, color = 'var(--gold)') =>
+      `<div style="background:var(--border); border-radius:99px; height:8px; margin-top:4px;">
+        <div style="background:${color}; width:${Math.min(100,pct)}%; height:8px; border-radius:99px;"></div>
+      </div>`;
+
+    const card = (title, rows, color = 'var(--gold)') => {
+      const max = Math.max(...rows.map(r => r.val));
+      return `
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; margin-bottom:16px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:${color}; margin-bottom:12px;">${title}</div>
+        ${rows.map(r => `
+          <div style="margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px;">
+              <span style="color:var(--text); font-weight:500;">${r.label}</span>
+              <span style="color:var(--text); font-weight:700; font-family:var(--font-display);">$${r.val.toFixed(2)}</span>
+            </div>
+            ${bar(max > 0 ? (r.val / max) * 100 : 0, color)}
+            ${r.sub ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${r.sub}</div>` : ''}
+          </div>`).join('')}
+      </div>`;
+    };
+
+    const sellerRows = Object.entries(bySeller).sort((a,b) => b[1].sales - a[1].sales)
+      .map(([name, d]) => ({ label: name, val: d.sales, sub: `${d.orders} órdenes · Comisión: $${(d.sales * COMMISSION_RATE).toFixed(2)}` }));
+
+    const brandRows = Object.entries(byBrand).sort((a,b) => b[1] - a[1]).slice(0, 10)
+      .map(([brand, val]) => ({ label: brand, val, sub: `${((val/totalSales)*100).toFixed(1)}% del total` }));
+
+    const catRows = Object.entries(byCategory).sort((a,b) => b[1] - a[1]).slice(0, 8)
+      .map(([cat, val]) => ({ label: cat, val, sub: `${((val/totalSales)*100).toFixed(1)}% del total` }));
+
+    const clientRows = Object.entries(byClient).sort((a,b) => b[1].sales - a[1].sales).slice(0, 10)
+      .map(([name, d]) => ({ label: name, val: d.sales, sub: `${d.business} · ${d.orders} órdenes` }));
+
+    const weekRows = Object.entries(byWeek).sort((a,b) => a[0].localeCompare(b[0]))
+      .map(([wk, val]) => ({ label: wk, val }));
+
+    container.innerHTML = `
+    <!-- Summary -->
+    <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px; display:flex; gap:24px; flex-wrap:wrap;">
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Mes</div><div style="font-size:18px; font-weight:600; color:var(--text);">${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Total ventas</div><div style="font-size:18px; font-weight:700; color:var(--gold); font-family:var(--font-display);">$${totalSales.toFixed(2)}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Órdenes</div><div style="font-size:18px; font-weight:600; color:var(--text);">${totalOrders}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Promedio/orden</div><div style="font-size:18px; font-weight:600; color:var(--text);">$${(totalSales/totalOrders).toFixed(2)}</div></div>
+      <div><div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Comisiones totales</div><div style="font-size:18px; font-weight:600; color:var(--text);">$${(totalSales * COMMISSION_RATE).toFixed(2)}</div></div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div>
+        ${card('📈 Ventas por semana', weekRows, '#6b9e6b')}
+        ${card('👤 Por vendedor', sellerRows, 'var(--gold)')}
+        ${card('🏆 Top 10 clientes', clientRows, '#2563eb')}
+      </div>
+      <div>
+        ${card('🏷️ Por marca', brandRows, '#7c3aed')}
+        ${card('📦 Por categoría', catRows, '#b45309')}
+      </div>
+    </div>`;
+
+  } catch(e) {
+    console.error(e);
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Error cargando datos</div>';
+  }
 }
 
 async function loadSellersReport() {
