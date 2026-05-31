@@ -394,6 +394,11 @@ async function loadProfileAndApply(token, uid, errEl) {
   const miProgresoBtn = document.getElementById('tab-miprogreso-btn');
   if (miProgresoBtn) miProgresoBtn.style.display = currentRole === 'seller' ? '' : 'none';
 
+  // Load products for all roles (needed for order form and POS)
+  if (!PRODUCTS || PRODUCTS.length === 0) {
+    dbFetchProducts().then(prods => { PRODUCTS = prods; }).catch(e => console.error('Products load error:', e));
+  }
+
   if (isAdmin) {
     showAdminView();
   } else if (isDelivery) {
