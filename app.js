@@ -937,7 +937,7 @@ function selectVariation(barcode) {
   document.getElementById('step-qty').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function changeQty(delta) {
+function posChangeQty(delta) {
   stepState.qty = Math.max(1, (stepState.qty || 1) + delta);
   document.getElementById('qty-display').textContent = stepState.qty;
 }
