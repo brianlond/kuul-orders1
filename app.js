@@ -46,11 +46,12 @@ let PRODUCTS = [];
 
 // ── Supabase helpers ─────────────────────────────────────────
 async function supabase(path, options = {}) {
+  const sessionToken = localStorage.getItem('sb_token') || SUPABASE_KEY;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${sessionToken}`,
       'Content-Type': 'application/json',
       ...(options.headers || {})
     }
