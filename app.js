@@ -1498,7 +1498,7 @@ function posAddProduct(barcode) {
     existing.subtotal = getPrice(product) * existing.qty;
   } else {
     const price = getPrice(product);
-    posCart.push({ barcode: product.barcode, brand: product.brand, code: product.color_code || '—', name: product.name, price, qty: 1, subtotal: price });
+    posCart.push({ barcode: product.barcode, brand: product.brand, code: product.color_code || '—', name: product.name, price, qty: 1, subtotal: price, is_free: false });
   }
   if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
   renderPOSCart();
@@ -1513,9 +1513,17 @@ function posChangeQty(barcode, delta) {
   } else {
     const product = PRODUCTS.find(p => p.barcode === barcode);
     item.price = product ? getPrice(product) : item.price;
-    item.subtotal = item.price * item.qty;
+    item.subtotal = item.is_free ? 0 : item.price * item.qty;
   }
   if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
+function posToggleFree(barcode) {
+  const item = posCart.find(c => c.barcode === barcode);
+  if (!item) return;
+  item.is_free = !item.is_free;
+  item.subtotal = item.is_free ? 0 : item.price * item.qty;
   renderPOSCart();
 }
 
@@ -1571,17 +1579,24 @@ function renderPOSCart() {
   } else {
     countEl.textContent = posCart.length + ' producto' + (posCart.length !== 1 ? 's' : '');
     container.innerHTML = posCart.map(item => `
-      <div class="pos-cart-item">
+      <div class="pos-cart-item" style="${item.is_free ? 'background:#f0fdf4; border-color:#bbf7d0;' : ''}">
         <div class="pos-cart-info">
-          <div class="pos-cart-name">${item.brand} [${item.code}] ${item.name}</div>
-          <div class="pos-cart-price">$${item.price.toFixed(2)} c/u</div>
+          <div class="pos-cart-name">${item.brand} [${item.code}] ${item.name}
+            ${item.is_free ? '<span style="margin-left:6px; background:#16a34a; color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px;">FREE</span>' : ''}
+          </div>
+          <div class="pos-cart-price" style="${item.is_free ? 'color:#16a34a;' : ''}">
+            ${item.is_free ? 'GRATIS' : '$' + item.price.toFixed(2) + ' c/u'}
+          </div>
         </div>
         <div class="pos-cart-qty">
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', -1)">−</button>
           <span class="qty-num">${item.qty}</span>
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', 1)">+</button>
         </div>
-        <span class="pos-cart-total">$${item.subtotal.toFixed(2)}</span>
+        <label style="display:flex; align-items:center; gap:3px; font-size:11px; color:#16a34a; cursor:pointer;">
+          <input type="checkbox" ${item.is_free ? 'checked' : ''} onchange="posToggleFree('${item.barcode}')" style="accent-color:#16a34a;"> Gratis
+        </label>
+        <span class="pos-cart-total" style="${item.is_free ? 'color:#16a34a;' : ''}">$${item.subtotal.toFixed(2)}</span>
         <span class="pos-cart-remove" onclick="posRemoveItem('${item.barcode}')">×</span>
       </div>
     `).join('');
