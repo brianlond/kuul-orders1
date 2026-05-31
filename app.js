@@ -298,16 +298,51 @@ async function loadProfileAndApply(token, uid, errEl) {
 
   // Auto-fill seller name in Nueva Orden and POS
   const sellerInput = document.getElementById('seller-name');
+  const sellerSelect = document.getElementById('seller-name-select');
   const posSellerInput = document.getElementById('pos-seller-name');
   if (posSellerInput && profile[0].name) posSellerInput.value = profile[0].name;
-  if (sellerInput && profile[0].name) {
-    sellerInput.value = profile[0].name;
-    if (currentRole === 'seller') {
+
+  if (currentRole === 'seller') {
+    // Seller: readonly input with their name
+    if (sellerInput && profile[0].name) {
+      sellerInput.value = profile[0].name;
       sellerInput.readOnly = true;
       sellerInput.style.background = 'var(--surface-2)';
       sellerInput.style.color = 'var(--text-muted)';
       sellerInput.style.cursor = 'default';
     }
+    if (sellerSelect) sellerSelect.style.display = 'none';
+    const posSellerSelect = document.getElementById('pos-seller-select');
+    if (posSellerSelect) posSellerSelect.style.display = 'none';
+  } else if (isAdmin) {
+    // Admin: show dropdown with all sellers in both Nueva Orden and POS
+    if (sellerInput) sellerInput.style.display = 'none';
+
+    supabase('profiles?select=name,role&order=name').then(sellers => {
+      if (!sellers) return;
+      const opts = '<option value="">— Seleccionar vendedor —</option>' +
+        sellers.filter(s => s.name).map(s =>
+          `<option value="${s.name}">${s.name}${s.role === 'admin' ? ' (admin)' : ''}</option>`
+        ).join('');
+
+      // Nueva Orden dropdown
+      if (sellerSelect) {
+        sellerSelect.style.display = 'block';
+        sellerSelect.innerHTML = opts;
+        if (profile[0].name) { sellerSelect.value = profile[0].name; }
+        document.getElementById('seller-name').value = profile[0].name || '';
+      }
+
+      // POS dropdown
+      const posSellerSelect = document.getElementById('pos-seller-select');
+      if (posSellerSelect) {
+        posSellerSelect.style.display = 'block';
+        posSellerSelect.innerHTML = opts;
+        if (profile[0].name) { posSellerSelect.value = profile[0].name; }
+        document.getElementById('pos-seller-name').value = profile[0].name || '';
+        document.getElementById('pos-seller-name').style.display = 'none';
+      }
+    });
   }
 
   // Show Mi Progreso tab for sellers

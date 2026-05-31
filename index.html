@@ -62,6 +62,10 @@
       <div class="section-label">Datos del vendedor</div>
       <div class="field-group">
         <label>Nombre del vendedor</label>
+        <!-- Admin sees dropdown, seller sees readonly input -->
+        <select id="seller-name-select" style="display:none;" onchange="document.getElementById('seller-name').value = this.options[this.selectedIndex].text">
+          <option value="">— Seleccionar vendedor —</option>
+        </select>
         <input type="text" id="seller-name" placeholder="Tu nombre">
       </div>
 
@@ -449,6 +453,9 @@
             </div>
             <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <div style="flex:1; min-width:120px;">
+                <select id="pos-seller-select" style="display:none; width:100%; font-size:13px; padding:5px 8px; border:1px solid var(--border); border-radius:6px;" onchange="document.getElementById('pos-seller-name').value = this.options[this.selectedIndex].text">
+                  <option value="">— Vendedor —</option>
+                </select>
                 <input type="text" id="pos-seller-name" placeholder="Vendedor..." style="width:100%; font-size:13px; padding:5px 8px; border:1px solid var(--border); border-radius:6px;">
               </div>
               <button id="pos-test-btn" onclick="toggleTestMode()" style="padding:5px 10px; border:1px solid #d97706; border-radius:6px; background:none; color:#d97706; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; white-space:nowrap;">🧪 Prueba</button>
