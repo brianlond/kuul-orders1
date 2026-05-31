@@ -162,6 +162,9 @@ function addProductLine(barcode = '', qty = 1) {
   div.innerHTML = `
     <div class="product-line-label">${label}</div>
     <input type="number" id="qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcTotal()">
+    <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--gold); cursor:pointer; white-space:nowrap;">
+      <input type="checkbox" id="free-${id}" onchange="recalcTotal()" style="accent-color:var(--gold);"> Gratis
+    </label>
     <button class="remove-btn" onclick="removeLine(${id})" aria-label="Eliminar">×</button>
   `;
   container.appendChild(div);
@@ -203,7 +206,12 @@ function recalcTotal() {
     const barcode = row.dataset.barcode;
     if (barcode && qty) {
       const product = PRODUCTS.find(p => p.barcode === barcode);
-      if (product) subtotal += getPrice(product) * (parseInt(qty.value) || 0);
+      if (product) {
+        const lineId = row.id.replace('line-', '');
+        const freeCheck = document.getElementById(`free-${lineId}`);
+        const isFree = freeCheck && freeCheck.checked;
+        subtotal += isFree ? 0 : getPrice(product) * (parseInt(qty.value) || 0);
+      }
     }
   });
   const hasShipping = document.getElementById('shipping-toggle').checked;
@@ -532,7 +540,9 @@ async function submitOrder() {
       const product = PRODUCTS.find(p => p.barcode === barcode);
       const q = parseInt(qty.value) || 0;
       if (product && q > 0) {
-        const price = getPrice(product);
+        const freeCheck = row.querySelector('input[type=checkbox]');
+        const isFree = freeCheck && freeCheck.checked;
+        const price = isFree ? 0 : getPrice(product);
         const lineSubtotal = price * q;
         lines.push({
           barcode: product.barcode,
@@ -542,7 +552,8 @@ async function submitOrder() {
           price,
           level: currentLevel,
           qty: q,
-          subtotal: lineSubtotal
+          subtotal: lineSubtotal,
+          is_free: isFree
         });
         subtotal += lineSubtotal;
       }
@@ -2971,15 +2982,17 @@ async function printOrder(id) {
 
   const linesHTML = order.lines.map(l => {
     const isAdjusted = l.dispatched_qty !== undefined && l.dispatched_qty < l.qty;
+    const isFree = l.is_free || l.price === 0;
     return `
     <tr>
       <td>
         ${l.brand} [${l.code}] ${l.name}
+        ${isFree ? `<span style="display:inline-block; margin-left:6px; background:#16a34a; color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px; letter-spacing:0.05em;">FREE</span>` : ''}
         ${isAdjusted ? `<div style="font-size:10px; color:#d97706; margin-top:2px;">⚠ Quantity adjusted: ${l.qty} ordered, ${l.dispatched_qty} dispatched</div>` : ''}
       </td>
       <td style="text-align:center;">${isAdjusted ? l.dispatched_qty : l.qty}</td>
-      <td style="text-align:right;">$${parseFloat(l.price).toFixed(2)}</td>
-      <td style="text-align:right;">$${(parseFloat(l.price) * (isAdjusted ? l.dispatched_qty : l.qty)).toFixed(2)}</td>
+      <td style="text-align:right;">${isFree ? '<span style="color:#16a34a; font-weight:700;">FREE</span>' : '$' + parseFloat(l.price).toFixed(2)}</td>
+      <td style="text-align:right;">${isFree ? '$0.00' : '$' + (parseFloat(l.price) * (isAdjusted ? l.dispatched_qty : l.qty)).toFixed(2)}</td>
     </tr>
   `}).join('');
 
