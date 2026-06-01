@@ -2698,6 +2698,7 @@ function showTab(name) {
   if (name === 'pos') initPOS();
   if (name === 'sellers') initSellersTab();
   if (name === 'miprogreso') initMiProgreso();
+  if (name === 'suppliers') initSuppliersTab();
   if (name === 'delivery') loadDeliveryOrders();
   if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
 }
@@ -4039,4 +4040,434 @@ function getPrice(product) {
   // Wholesale = salon * (1 - discount_wholesale / 100)
   const wholesaleDiscount = parseFloat(product.discount_wholesale) || 0;
   return Math.round(salon * (1 - wholesaleDiscount / 100) * 100) / 100;
+}
+
+// ── SUPPLIERS / PURCHASE ORDERS ──────────────────────────────
+let suppliersView = 'po';
+let allSuppliers = [];
+let allPurchaseOrders = [];
+let currentPO = null;
+
+function setSuppliersView(view) {
+  suppliersView = view;
+  const poBtn   = document.getElementById('suppliers-view-po-btn');
+  const listBtn = document.getElementById('suppliers-view-list-btn');
+  if (view === 'po') {
+    poBtn.style.background = 'var(--gold)'; poBtn.style.color = '#fff'; poBtn.style.border = 'none';
+    listBtn.style.background = 'none'; listBtn.style.color = 'var(--text-muted)'; listBtn.style.border = '1px solid var(--border)';
+    renderPOList();
+  } else {
+    listBtn.style.background = 'var(--gold)'; listBtn.style.color = '#fff'; listBtn.style.border = 'none';
+    poBtn.style.background = 'none'; poBtn.style.color = 'var(--text-muted)'; poBtn.style.border = '1px solid var(--border)';
+    renderSupplierList();
+  }
+}
+
+async function initSuppliersTab() {
+  try {
+    allSuppliers = await supabase('suppliers?select=*&active=eq.true&order=name') || [];
+    allPurchaseOrders = await supabase('purchase_orders?select=*&order=created_at.desc') || [];
+  } catch(e) { allSuppliers = []; allPurchaseOrders = []; }
+  setSuppliersView('po');
+}
+
+// ── PO LIST ──────────────────────────────────────────────────
+function renderPOList() {
+  const container = document.getElementById('suppliers-container');
+  const statusColors = {
+    'Borrador': 'badge-nueva', 'Enviada': 'badge-proceso',
+    'En camino': 'badge-lista', 'Recibida parcial': 'badge-proceso',
+    'Recibida completa': 'badge-entregada'
+  };
+  const html = `
+    <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+      <button onclick="openNewPO()" style="padding:8px 18px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">+ Nueva orden de compra</button>
+    </div>
+    ${allPurchaseOrders.length === 0 ? '<div class="empty-state"><div class="empty-icon">📋</div>No hay órdenes de compra</div>' :
+      allPurchaseOrders.map(po => `
+      <div class="order-card">
+        <div class="order-header">
+          <div>
+            <div class="order-name">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
+            <div class="order-business">${new Date(po.created_at).toLocaleDateString('es-MX')} · ${(po.lines||[]).length} productos · $${parseFloat(po.total||0).toFixed(2)}</div>
+          </div>
+          <span class="status-badge ${statusColors[po.status]||''}">${po.status}</span>
+        </div>
+        ${po.notes ? `<div class="order-meta">📝 ${po.notes}</div>` : ''}
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <button onclick="openPODetail(${po.id})" class="contact-btn" style="border:1px solid var(--gold); color:var(--gold); background:none; cursor:pointer; font-family:inherit;">📋 Ver detalle</button>
+          ${po.status === 'Enviada' || po.status === 'En camino' ? `<button onclick="openReceivePO(${po.id})" class="submit-btn" style="margin:0; padding:6px 14px; font-size:13px;">✅ Recibir pedido</button>` : ''}
+          ${po.status === 'Borrador' ? `<button onclick="deletePO(${po.id})" class="clear-btn">🗑 Eliminar</button>` : ''}
+        </div>
+      </div>`).join('')}`;
+  container.innerHTML = html;
+}
+
+// ── SUPPLIER LIST ─────────────────────────────────────────────
+function renderSupplierList() {
+  const container = document.getElementById('suppliers-container');
+  container.innerHTML = `
+    <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+      <button onclick="openNewSupplier()" style="padding:8px 18px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">+ Nuevo proveedor</button>
+    </div>
+    ${allSuppliers.length === 0 ? '<div class="empty-state"><div class="empty-icon">🏭</div>No hay proveedores</div>' :
+      allSuppliers.map(s => `
+      <div class="order-card">
+        <div class="order-header">
+          <div>
+            <div class="order-name">${s.name}</div>
+            <div class="order-business">${(s.brands||[]).join(', ') || 'Sin marcas asignadas'}</div>
+          </div>
+        </div>
+        ${s.contact ? `<div class="order-meta">👤 ${s.contact}</div>` : ''}
+        ${s.phone ? `<div class="order-meta">📞 ${s.phone}</div>` : ''}
+        ${s.email ? `<div class="order-meta">✉️ ${s.email}</div>` : ''}
+        ${s.notes ? `<div class="order-meta">📝 ${s.notes}</div>` : ''}
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button onclick="openEditSupplier(${s.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">✏️ Editar</button>
+          <button onclick="openNewPO(${s.id})" class="contact-btn" style="border:1px solid var(--gold); color:var(--gold); background:none; cursor:pointer; font-family:inherit;">+ Orden de compra</button>
+        </div>
+      </div>`).join('')}`;
+}
+
+// ── NEW / EDIT SUPPLIER ───────────────────────────────────────
+function openNewSupplier() {
+  showSupplierModal(null);
+}
+
+function openEditSupplier(id) {
+  showSupplierModal(allSuppliers.find(s => s.id === id));
+}
+
+function showSupplierModal(supplier) {
+  const isEdit = !!supplier;
+  const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
+  const selectedBrands = supplier?.brands || [];
+  document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
+  <div id="supplier-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto;">
+      <div style="font-size:18px; font-weight:700; margin-bottom:16px;">${isEdit ? 'Editar' : 'Nuevo'} Proveedor</div>
+      <div class="field-group"><label>Nombre *</label><input type="text" id="sup-name" value="${supplier?.name||''}"></div>
+      <div class="field-group"><label>Contacto</label><input type="text" id="sup-contact" value="${supplier?.contact||''}"></div>
+      <div class="row2">
+        <div class="field-group"><label>Teléfono</label><input type="tel" id="sup-phone" value="${supplier?.phone||''}"></div>
+        <div class="field-group"><label>Email</label><input type="email" id="sup-email" value="${supplier?.email||''}"></div>
+      </div>
+      <div class="field-group">
+        <label>Marcas que maneja</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+          ${brands.map(b => `<label style="display:flex; align-items:center; gap:4px; font-size:13px; cursor:pointer; padding:4px 10px; border:1px solid var(--border); border-radius:99px; ${selectedBrands.includes(b) ? 'background:var(--gold-pale); border-color:var(--gold); color:var(--gold);' : ''}">
+            <input type="checkbox" name="sup-brand" value="${b}" ${selectedBrands.includes(b) ? 'checked' : ''} style="display:none;" onchange="this.parentElement.style.background=this.checked?'var(--gold-pale)':''; this.parentElement.style.borderColor=this.checked?'var(--gold)':'var(--border)'; this.parentElement.style.color=this.checked?'var(--gold)':'var(--text)';">${b}
+          </label>`).join('')}
+        </div>
+      </div>
+      <div class="field-group"><label>Notas</label><input type="text" id="sup-notes" value="${supplier?.notes||''}"></div>
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button onclick="saveSupplier(${isEdit ? supplier.id : 'null'})" class="submit-btn" style="flex:1; margin:0;">Guardar</button>
+        <button onclick="document.getElementById('supplier-modal').remove()" class="cancel-btn" style="flex:1;">Cancelar</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+async function saveSupplier(id) {
+  const name = document.getElementById('sup-name').value.trim();
+  if (!name) { showToast('❌ El nombre es requerido'); return; }
+  const brands = [...document.querySelectorAll('input[name="sup-brand"]:checked')].map(c => c.value);
+  const data = {
+    name, brands,
+    contact: document.getElementById('sup-contact').value.trim(),
+    phone:   document.getElementById('sup-phone').value.trim(),
+    email:   document.getElementById('sup-email').value.trim(),
+    notes:   document.getElementById('sup-notes').value.trim()
+  };
+  try {
+    if (id) {
+      await supabase(`suppliers?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+    } else {
+      await supabase('suppliers', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(data) });
+    }
+    document.getElementById('supplier-modal')?.remove();
+    await initSuppliersTab();
+    showToast('✓ Proveedor guardado');
+  } catch(e) { showToast('❌ Error al guardar'); }
+}
+
+// ── NEW PO ────────────────────────────────────────────────────
+let poLines = [];
+
+function openNewPO(supplierId = null) {
+  poLines = [];
+  const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
+  document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
+  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:100%; max-width:600px; margin:auto;">
+      <div style="font-size:18px; font-weight:700; margin-bottom:16px;">Nueva Orden de Compra</div>
+      <div class="field-group">
+        <label>Proveedor *</label>
+        <select id="po-supplier" onchange="filterPOBrands()">
+          <option value="">— Seleccionar proveedor —</option>
+          ${allSuppliers.map(s => `<option value="${s.id}" data-brands='${JSON.stringify(s.brands||[])}' ${supplierId==s.id?'selected':''}>${s.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Filtrar por marca</label>
+        <select id="po-brand-filter" onchange="renderPOProductSelector()">
+          <option value="">Todas las marcas</option>
+          ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Buscar producto</label>
+        <input type="text" id="po-search" placeholder="Nombre o código..." oninput="renderPOProductSelector()">
+      </div>
+      <div id="po-product-selector" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px;"></div>
+      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos en la orden</div>
+      <div id="po-lines-container" style="margin-bottom:12px;"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-top:1px solid var(--border); margin-bottom:12px;">
+        <span style="font-weight:600;">Total estimado:</span>
+        <span id="po-total" style="font-size:18px; font-weight:700; color:var(--gold); font-family:var(--font-display);">$0.00</span>
+      </div>
+      <div class="field-group"><label>Notas</label><input type="text" id="po-notes" placeholder="Instrucciones, condiciones, etc."></div>
+      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+        <button onclick="savePO('Borrador')" style="flex:1; padding:10px; border:1px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">💾 Guardar borrador</button>
+        <button onclick="savePO('Enviada')" class="submit-btn" style="flex:1; margin:0;">📤 Guardar y enviar</button>
+        <button onclick="document.getElementById('po-modal').remove()" class="cancel-btn" style="flex:1;">Cancelar</button>
+      </div>
+    </div>
+  </div>`);
+  if (supplierId) filterPOBrands();
+  renderPOProductSelector();
+}
+
+function filterPOBrands() {
+  const sel = document.getElementById('po-supplier');
+  const opt = sel.options[sel.selectedIndex];
+  const brands = opt ? JSON.parse(opt.dataset.brands || '[]') : [];
+  const brandFilter = document.getElementById('po-brand-filter');
+  if (brands.length > 0) {
+    brandFilter.value = brands[0];
+  }
+  renderPOProductSelector();
+}
+
+function renderPOProductSelector() {
+  const brand = document.getElementById('po-brand-filter')?.value || '';
+  const search = (document.getElementById('po-search')?.value || '').toLowerCase();
+  const container = document.getElementById('po-product-selector');
+  if (!container) return;
+
+  let prods = PRODUCTS || [];
+  if (brand) prods = prods.filter(p => p.brand === brand);
+  if (search) prods = prods.filter(p =>
+    p.name.toLowerCase().includes(search) ||
+    (p.color_code||'').toLowerCase().includes(search)
+  );
+  prods = prods.slice(0, 50);
+
+  container.innerHTML = prods.length === 0
+    ? '<div style="padding:12px; text-align:center; color:var(--text-muted); font-size:13px;">Sin productos</div>'
+    : prods.map(p => {
+        const wholesale = p.price * (1 - (p.discount_wholesale||0)/100);
+        return `<div onclick="addPOLine('${p.barcode}')" style="padding:10px 14px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-size:13px; transition:background 0.1s;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+          <span>${p.brand} [${p.color_code||'—'}] ${p.name}</span>
+          <span style="color:var(--gold); font-weight:600; white-space:nowrap; margin-left:8px;">$${wholesale.toFixed(2)}</span>
+        </div>`;
+      }).join('');
+}
+
+function addPOLine(barcode) {
+  const product = PRODUCTS.find(p => p.barcode === barcode);
+  if (!product) return;
+  const existing = poLines.find(l => l.barcode === barcode);
+  if (existing) { existing.qty++; existing.subtotal = existing.cost * existing.qty; }
+  else {
+    const cost = product.price * (1 - (product.discount_wholesale||0)/100);
+    poLines.push({ barcode, brand: product.brand, code: product.color_code||'—', name: product.name, cost: Math.round(cost*100)/100, qty: 1, subtotal: Math.round(cost*100)/100, received: 0 });
+  }
+  renderPOLines();
+}
+
+function renderPOLines() {
+  const container = document.getElementById('po-lines-container');
+  const total = document.getElementById('po-total');
+  if (!container) return;
+  if (poLines.length === 0) {
+    container.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:13px; padding:12px;">Toca un producto para agregarlo</div>';
+    if (total) total.textContent = '$0.00';
+    return;
+  }
+  const totalAmt = poLines.reduce((s, l) => s + l.subtotal, 0);
+  container.innerHTML = poLines.map((l, idx) => `
+    <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${l.brand} [${l.code}] ${l.name}</div>
+        <div style="color:var(--text-muted); font-size:11px;">$${l.cost.toFixed(2)} c/u</div>
+      </div>
+      <input type="number" value="${l.qty}" min="1" style="width:60px; text-align:center; padding:4px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px;" onchange="updatePOLineQty(${idx}, this.value)">
+      <span style="font-weight:700; color:var(--gold); min-width:60px; text-align:right;">$${l.subtotal.toFixed(2)}</span>
+      <button onclick="removePOLine(${idx})" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:0 4px;">×</button>
+    </div>`).join('');
+  if (total) total.textContent = '$' + totalAmt.toFixed(2);
+}
+
+function updatePOLineQty(idx, val) {
+  const qty = Math.max(1, parseInt(val) || 1);
+  poLines[idx].qty = qty;
+  poLines[idx].subtotal = Math.round(poLines[idx].cost * qty * 100) / 100;
+  renderPOLines();
+}
+
+function removePOLine(idx) {
+  poLines.splice(idx, 1);
+  renderPOLines();
+}
+
+async function savePO(status) {
+  const suppSel = document.getElementById('po-supplier');
+  const suppId = suppSel?.value;
+  const suppName = suppSel?.options[suppSel.selectedIndex]?.text || '';
+  if (!suppId) { showToast('❌ Selecciona un proveedor'); return; }
+  if (poLines.length === 0) { showToast('❌ Agrega al menos un producto'); return; }
+  const total = poLines.reduce((s, l) => s + l.subtotal, 0);
+  try {
+    await supabase('purchase_orders', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify({
+        supplier_id: parseInt(suppId),
+        supplier_name: suppName,
+        status, lines: poLines, total,
+        notes: document.getElementById('po-notes')?.value.trim() || null,
+        created_by: currentUser?.name || '',
+        sent_at: status === 'Enviada' ? new Date().toISOString() : null
+      })
+    });
+    document.getElementById('po-modal')?.remove();
+    await initSuppliersTab();
+    showToast('✓ Orden de compra guardada');
+  } catch(e) { console.error(e); showToast('❌ Error al guardar'); }
+}
+
+// ── PO DETAIL ─────────────────────────────────────────────────
+function openPODetail(id) {
+  const po = allPurchaseOrders.find(p => p.id === id);
+  if (!po) return;
+  const statusColors = { 'Borrador':'#888','Enviada':'var(--gold)','En camino':'#2563eb','Recibida parcial':'#d97706','Recibida completa':'#16a34a' };
+  document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
+  <div id="po-detail-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:100%; max-width:600px; margin:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div>
+          <div style="font-size:18px; font-weight:700;">OC-${String(po.id).padStart(4,'0')}</div>
+          <div style="font-size:13px; color:var(--text-muted);">${po.supplier_name} · ${new Date(po.created_at).toLocaleDateString('es-MX')}</div>
+        </div>
+        <span style="font-size:12px; font-weight:700; padding:4px 12px; border-radius:99px; background:${statusColors[po.status]}22; color:${statusColors[po.status]}; border:1px solid ${statusColors[po.status]}44;">${po.status}</span>
+      </div>
+      <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
+        <thead><tr style="background:var(--surface-2);">
+          <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>
+          <th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Qty</th>
+          <th style="text-align:right; padding:8px 10px; border:1px solid var(--border);">Costo</th>
+          <th style="text-align:right; padding:8px 10px; border:1px solid var(--border);">Total</th>
+        </tr></thead>
+        <tbody>
+          ${(po.lines||[]).map(l => `<tr>
+            <td style="padding:8px 10px; border:1px solid var(--border);">${l.brand} [${l.code}] ${l.name}</td>
+            <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">${l.qty}</td>
+            <td style="text-align:right; padding:8px 10px; border:1px solid var(--border);">$${parseFloat(l.cost).toFixed(2)}</td>
+            <td style="text-align:right; padding:8px 10px; border:1px solid var(--border);">$${parseFloat(l.subtotal).toFixed(2)}</td>
+          </tr>`).join('')}
+          <tr style="font-weight:700; background:var(--surface-2);">
+            <td colspan="3" style="padding:8px 10px; border:1px solid var(--border); text-align:right;">TOTAL</td>
+            <td style="text-align:right; padding:8px 10px; border:1px solid var(--border); color:var(--gold);">$${parseFloat(po.total||0).toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>
+      ${po.notes ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">📝 ${po.notes}</div>` : ''}
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${po.status === 'Borrador' ? `<button onclick="updatePOStatus(${po.id},'Enviada'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📤 Marcar enviada</button>` : ''}
+        ${po.status === 'Enviada' ? `<button onclick="updatePOStatus(${po.id},'En camino'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:#2563eb; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🚚 Marcar en camino</button>` : ''}
+        ${po.status === 'En camino' || po.status === 'Enviada' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openReceivePO(${po.id})" style="padding:8px 14px; background:#16a34a; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✅ Recibir pedido</button>` : ''}
+        <button onclick="document.getElementById('po-detail-modal').remove()" class="cancel-btn" style="flex:1;">Cerrar</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+async function updatePOStatus(id, status) {
+  try {
+    await supabase(`purchase_orders?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ status, sent_at: status === 'Enviada' ? new Date().toISOString() : undefined }) });
+    await initSuppliersTab();
+    showToast('✓ Estado actualizado');
+  } catch(e) { showToast('❌ Error'); }
+}
+
+// ── RECEIVE PO ────────────────────────────────────────────────
+function openReceivePO(id) {
+  const po = allPurchaseOrders.find(p => p.id === id);
+  if (!po) return;
+  document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
+  <div id="receive-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:100%; max-width:600px; margin:auto;">
+      <div style="font-size:18px; font-weight:700; margin-bottom:4px;">Recibir pedido — OC-${String(po.id).padStart(4,'0')}</div>
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Verifica cada producto y anota la cantidad recibida</div>
+      <div id="receive-lines">
+        ${(po.lines||[]).map((l, idx) => `
+        <div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border);">
+          <input type="checkbox" id="rec-check-${idx}" style="width:20px; height:20px; accent-color:#16a34a; flex-shrink:0;" onchange="updateReceiveRow(${idx})">
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:13px; font-weight:500;">${l.brand} [${l.code}] ${l.name}</div>
+            <div style="font-size:11px; color:var(--text-muted);">Pedido: ${l.qty} unidades</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <label style="font-size:11px; color:var(--text-muted);">Recibido:</label>
+            <input type="number" id="rec-qty-${idx}" value="${l.qty}" min="0" max="${l.qty}" style="width:60px; text-align:center; padding:4px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px;">
+          </div>
+        </div>`).join('')}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+        <button onclick="confirmReceivePO(${po.id})" class="submit-btn" style="flex:1; margin:0;">✅ Confirmar recepción</button>
+        <button onclick="document.getElementById('receive-modal').remove()" class="cancel-btn" style="flex:1;">Cancelar</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+function updateReceiveRow(idx) {
+  const check = document.getElementById(`rec-check-${idx}`);
+  const qty = document.getElementById(`rec-qty-${idx}`);
+  if (qty) qty.style.opacity = check?.checked ? '0.5' : '1';
+}
+
+async function confirmReceivePO(id) {
+  const po = allPurchaseOrders.find(p => p.id === id);
+  if (!po) return;
+  const updatedLines = (po.lines||[]).map((l, idx) => {
+    const check = document.getElementById(`rec-check-${idx}`);
+    const qtyInput = document.getElementById(`rec-qty-${idx}`);
+    const receivedQty = check?.checked ? 0 : (parseInt(qtyInput?.value) || l.qty);
+    return { ...l, received: receivedQty };
+  });
+  const allReceived = updatedLines.every(l => l.received >= l.qty);
+  const anyReceived = updatedLines.some(l => l.received > 0);
+  const status = allReceived ? 'Recibida completa' : anyReceived ? 'Recibida parcial' : 'En camino';
+  try {
+    await supabase(`purchase_orders?id=eq.${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ lines: updatedLines, status, received_at: new Date().toISOString() })
+    });
+    document.getElementById('receive-modal')?.remove();
+    await initSuppliersTab();
+    showToast(allReceived ? '✅ Pedido recibido completamente' : '⚠️ Pedido recibido parcialmente');
+  } catch(e) { showToast('❌ Error al confirmar'); }
+}
+
+async function deletePO(id) {
+  if (!confirm('¿Eliminar esta orden de compra?')) return;
+  try {
+    await supabase(`purchase_orders?id=eq.${id}`, { method: 'DELETE', headers: { 'Prefer': 'return=representation' } });
+    await initSuppliersTab();
+    showToast('✓ Orden eliminada');
+  } catch(e) { showToast('❌ Error al eliminar'); }
 }

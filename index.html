@@ -46,6 +46,9 @@
       <button class="tab" id="tab-sellers-btn" onclick="showTab('sellers')">
         💰 Vendedores
       </button>
+      <button class="tab" id="tab-suppliers-btn" onclick="showTab('suppliers')">
+        🏭 Proveedores
+      </button>
       <button class="tab" id="tab-pos-btn" onclick="showTab('pos')">
         🏪 Caja
       </button>
@@ -333,6 +336,21 @@
     </div>
 
     <!-- SELLERS -->
+    <!-- SUPPLIERS -->
+    <div id="tab-suppliers" class="section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Proveedores</h2>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Gestión de órdenes de compra</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="suppliers-view-po-btn" onclick="setSuppliersView('po')" style="padding:6px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📋 Órdenes</button>
+          <button id="suppliers-view-list-btn" onclick="setSuppliersView('list')" style="padding:6px 16px; background:none; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; color:var(--text-muted); cursor:pointer; font-family:inherit;">🏭 Proveedores</button>
+        </div>
+      </div>
+      <div id="suppliers-container"></div>
+    </div>
+
     <!-- MI PROGRESO (seller view) -->
     <div id="tab-miprogreso" class="section">
       <div class="admin-bar">
