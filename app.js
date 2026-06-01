@@ -4214,8 +4214,9 @@ function openNewPO(supplierId = null) {
   poLines = [];
   const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
   document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
-  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; flex-direction:column;">
-    <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:14px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:680px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+    <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;">
       <div>
         <div style="font-size:17px; font-weight:700;">Nueva Orden de Compra</div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Selecciona productos y cantidades</div>
@@ -4250,9 +4251,10 @@ function openNewPO(supplierId = null) {
         <input type="text" id="po-notes" placeholder="Instrucciones, condiciones, etc." style="font-size:15px; padding:10px 12px; margin-top:4px;">
       </div>
     </div>
-    <div style="background:var(--surface); border-top:1px solid var(--border); padding:14px 20px; display:flex; gap:10px; flex-shrink:0;">
+    <div style="background:var(--surface); border-top:1px solid var(--border); padding:14px 20px; display:flex; gap:10px; flex-shrink:0; border-radius:0 0 var(--radius-lg) var(--radius-lg);">
       <button onclick="savePO('Borrador')" style="flex:1; padding:14px; border:1.5px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">💾 Borrador</button>
       <button onclick="savePO('Enviada')" style="flex:2; padding:14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">📤 Guardar y enviar</button>
+    </div>
     </div>
   </div>`);
   if (supplierId) filterPOBrands();
@@ -4635,8 +4637,9 @@ function openEditPO(id) {
   const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
 
   document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
-  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; flex-direction:column;">
-    <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:14px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:680px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+    <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;">
       <div>
         <div style="font-size:17px; font-weight:700;">Editar Orden de Compra</div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
@@ -4664,9 +4667,10 @@ function openEditPO(id) {
         <input type="text" id="po-notes" value="${po.notes || ''}" placeholder="Instrucciones, condiciones, etc." style="font-size:15px; padding:10px 12px; margin-top:4px;">
       </div>
     </div>
-    <div style="background:var(--surface); border-top:1px solid var(--border); padding:14px 20px; display:flex; gap:10px; flex-shrink:0;">
+    <div style="background:var(--surface); border-top:1px solid var(--border); padding:14px 20px; display:flex; gap:10px; flex-shrink:0; border-radius:0 0 var(--radius-lg) var(--radius-lg);">
       <button onclick="updatePO(${po.id}, 'Borrador')" style="flex:1; padding:14px; border:1.5px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">💾 Borrador</button>
       <button onclick="updatePO(${po.id}, 'Enviada')" style="flex:2; padding:14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">📤 Guardar y enviar</button>
+    </div>
     </div>
   </div>`);
 
