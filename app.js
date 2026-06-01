@@ -4097,7 +4097,9 @@ function renderPOList() {
         <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
           <button onclick="openPODetail(${po.id})" class="contact-btn" style="border:1px solid var(--gold); color:var(--gold); background:none; cursor:pointer; font-family:inherit;">📋 Ver detalle</button>
           ${po.status === 'Enviada' || po.status === 'En camino' ? `<button onclick="openReceivePO(${po.id})" class="submit-btn" style="margin:0; padding:6px 14px; font-size:13px;">✅ Recibir pedido</button>` : ''}
-          ${po.status === 'Borrador' ? `<button onclick="deletePO(${po.id})" class="clear-btn">🗑 Eliminar</button>` : ''}
+          ${po.status === 'Borrador' ? `
+          <button onclick="openEditPO(${po.id})" class="contact-btn" style="border:1px solid #2563eb; color:#2563eb; background:none; cursor:pointer; font-family:inherit;">✏️ Editar</button>
+          <button onclick="deletePO(${po.id})" class="clear-btn">🗑 Eliminar</button>` : ''}
         </div>
       </div>`).join('')}`;
   container.innerHTML = html;
@@ -4378,6 +4380,7 @@ function openPODetail(id) {
         ${po.status === 'Borrador' ? `<button onclick="updatePOStatus(${po.id},'Enviada'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📤 Marcar enviada</button>` : ''}
         ${po.status === 'Enviada' ? `<button onclick="updatePOStatus(${po.id},'En camino'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:#2563eb; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🚚 Marcar en camino</button>` : ''}
         ${po.status === 'En camino' || po.status === 'Enviada' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openReceivePO(${po.id})" style="padding:8px 14px; background:#16a34a; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✅ Recibir pedido</button>` : ''}
+        ${po.status === 'Borrador' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openEditPO(${po.id})" style="padding:8px 14px; border:1px solid #2563eb; background:none; color:#2563eb; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✏️ Editar</button>` : ''}
         <button onclick="printPO(${po.id})" style="padding:8px 14px; border:1px solid var(--border); background:none; color:var(--text); border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🖨️ Imprimir</button>
         <button onclick="deletePOFromDetail(${po.id})" style="padding:8px 14px; border:1px solid #dc2626; background:none; color:#dc2626; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🗑 Eliminar</button>
         <button onclick="document.getElementById('po-detail-modal').remove()" class="cancel-btn" style="flex:1;">Cerrar</button>
@@ -4588,4 +4591,66 @@ async function deletePOFromDetail(id) {
     await initSuppliersTab();
     showToast('✓ Orden de compra eliminada');
   } catch(e) { showToast('❌ Error al eliminar'); }
+}
+
+// ── EDIT DRAFT PO ─────────────────────────────────────────────
+function openEditPO(id) {
+  const po = allPurchaseOrders.find(p => p.id === id);
+  if (!po || po.status !== 'Borrador') return;
+
+  // Load existing lines into poLines
+  poLines = (po.lines || []).map(l => ({ ...l }));
+
+  const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
+
+  document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
+  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:100%; max-width:600px; margin:auto;">
+      <div style="font-size:18px; font-weight:700; margin-bottom:4px;">Editar Orden de Compra</div>
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
+      <div class="field-group">
+        <label>Filtrar por marca</label>
+        <select id="po-brand-filter" onchange="renderPOProductSelector()">
+          <option value="">Todas las marcas</option>
+          ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Buscar producto</label>
+        <input type="text" id="po-search" placeholder="Nombre o código..." oninput="renderPOProductSelector()">
+      </div>
+      <div id="po-product-selector" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px;"></div>
+      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos en la orden</div>
+      <div id="po-lines-container" style="margin-bottom:12px;"></div>
+      <div class="field-group"><label>Notas</label><input type="text" id="po-notes" value="${po.notes || ''}" placeholder="Instrucciones, condiciones, etc."></div>
+      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+        <button onclick="updatePO(${po.id}, 'Borrador')" style="flex:1; padding:10px; border:1px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">💾 Guardar borrador</button>
+        <button onclick="updatePO(${po.id}, 'Enviada')" class="submit-btn" style="flex:1; margin:0;">📤 Guardar y enviar</button>
+        <button onclick="document.getElementById('po-modal').remove()" class="cancel-btn" style="flex:1;">Cancelar</button>
+      </div>
+    </div>
+  </div>`);
+
+  renderPOProductSelector();
+  renderPOLines();
+}
+
+async function updatePO(id, status) {
+  if (poLines.length === 0) { showToast('❌ Agrega al menos un producto'); return; }
+  const total = poLines.reduce((s, l) => s + l.subtotal, 0);
+  try {
+    await supabase(`purchase_orders?id=eq.${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status,
+        lines: poLines,
+        total,
+        notes: document.getElementById('po-notes')?.value.trim() || null,
+        sent_at: status === 'Enviada' ? new Date().toISOString() : null
+      })
+    });
+    document.getElementById('po-modal')?.remove();
+    await initSuppliersTab();
+    showToast('✓ Orden de compra actualizada');
+  } catch(e) { console.error(e); showToast('❌ Error al guardar'); }
 }
