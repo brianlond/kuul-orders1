@@ -4362,14 +4362,14 @@ function openPODetail(id) {
       <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
         <thead><tr style="background:var(--surface-2);">
           <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>
-          <th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Cantidad pedida</th>
-          ${po.status.includes('Recibida') ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Recibido</th>' : ''}
+          <th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Qty (units)</th>
+          ${po.status.includes('Recibida') ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Received (units)</th>' : ''}
         </tr></thead>
         <tbody>
           ${(po.lines||[]).map(l => `<tr>
             <td style="padding:8px 10px; border:1px solid var(--border);">${l.brand} [${l.code}] ${l.name}</td>
-            <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">${l.qty}</td>
-            ${po.status.includes('Recibida') ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:${l.received >= l.qty ? '#16a34a' : '#d97706'};">${l.received ?? '—'}</td>` : ''}
+            <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">${l.qty} <span style="font-size:10px; color:#888;">units</span></td>
+            ${po.status.includes('Recibida') ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:${l.received >= l.qty ? '#16a34a' : '#d97706'};">${l.received ?? '—'} <span style="font-size:10px;">units</span></td>` : ''}
           </tr>`).join('')}
         </tbody>
       </table>
@@ -4409,7 +4409,8 @@ function openReceivePO(id) {
           <input type="checkbox" id="rec-check-${idx}" style="width:20px; height:20px; accent-color:#16a34a; flex-shrink:0;" onchange="updateReceiveRow(${idx})">
           <div style="flex:1; min-width:0;">
             <div style="font-size:13px; font-weight:500;">${l.brand} [${l.code}] ${l.name}</div>
-            <div style="font-size:11px; color:var(--text-muted);">Pedido: ${l.qty} unidades</div>
+            <div style="font-size:11px; color:var(--text-muted);">Ordered: ${l.qty} units</div>
+            <div style="font-size:10px; color:#b8952a;">Unit of measure: units</div>
           </div>
           <div style="display:flex; align-items:center; gap:6px;">
             <label style="font-size:11px; color:var(--text-muted);">Recibido:</label>
@@ -4535,8 +4536,8 @@ function printPO(id) {
       <tr>
         <th>#</th>
         <th>Producto</th>
-        <th style="text-align:center;">Cantidad pedida</th>
-        ${po.status.includes('Recibida') ? '<th style="text-align:center;">Recibido</th>' : '<th style="text-align:center;">✓ Recibido</th>'}
+        <th style="text-align:center;">Qty (units)</th>
+        ${po.status.includes('Recibida') ? '<th style="text-align:center;">Received (units)</th>' : '<th style="text-align:center;">✓ Recibido</th>'}
       </tr>
     </thead>
     <tbody>
@@ -4544,8 +4545,8 @@ function printPO(id) {
       <tr>
         <td style="color:#888;">${i+1}</td>
         <td><strong>${l.brand}</strong> [${l.code}] ${l.name}</td>
-        <td style="text-align:center; font-weight:700;">${l.qty}</td>
-        <td style="text-align:center;">${po.status.includes('Recibida') ? `<strong style="color:${l.received>=l.qty?'#16a34a':'#d97706'}">${l.received??'—'}</strong>` : '___'}</td>
+        <td style="text-align:center; font-weight:700;">${l.qty} <span style="font-size:10px; color:#888; font-weight:400;">units</span></td>
+        <td style="text-align:center;">${po.status.includes('Recibida') ? `<strong style="color:${l.received>=l.qty?'#16a34a':'#d97706'}">${l.received??'—'} uds</strong>` : '___'}</td>
       </tr>`).join('')}
     </tbody>
   </table>
