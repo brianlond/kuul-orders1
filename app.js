@@ -4089,7 +4089,7 @@ function renderPOList() {
         <div class="order-header">
           <div>
             <div class="order-name">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
-            <div class="order-business">${new Date(po.created_at).toLocaleDateString('es-MX')} · ${(po.lines||[]).length} productos · $${parseFloat(po.total||0).toFixed(2)}</div>
+            <div class="order-business">${new Date(po.created_at).toLocaleDateString('es-MX')} · ${(po.lines||[]).length} productos </div>
           </div>
           <span class="status-badge ${statusColors[po.status]||''}">${po.status}</span>
         </div>
@@ -4224,10 +4224,7 @@ function openNewPO(supplierId = null) {
       <div id="po-product-selector" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px;"></div>
       <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos en la orden</div>
       <div id="po-lines-container" style="margin-bottom:12px;"></div>
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-top:1px solid var(--border); margin-bottom:12px;">
-        <span style="font-weight:600;">Total estimado:</span>
-        <span id="po-total" style="font-size:18px; font-weight:700; color:var(--gold); font-family:var(--font-display);">$0.00</span>
-      </div>
+
       <div class="field-group"><label>Notas</label><input type="text" id="po-notes" placeholder="Instrucciones, condiciones, etc."></div>
       <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
         <button onclick="savePO('Borrador')" style="flex:1; padding:10px; border:1px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">💾 Guardar borrador</button>
@@ -4271,7 +4268,7 @@ function renderPOProductSelector() {
         const wholesale = p.price * (1 - (p.discount_wholesale||0)/100);
         return `<div onclick="addPOLine('${p.barcode}')" style="padding:10px 14px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-size:13px; transition:background 0.1s;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
           <span>${p.brand} [${p.color_code||'—'}] ${p.name}</span>
-          <span style="color:var(--gold); font-weight:600; white-space:nowrap; margin-left:8px;">$${wholesale.toFixed(2)}</span>
+
         </div>`;
       }).join('');
 }
@@ -4302,10 +4299,8 @@ function renderPOLines() {
     <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
       <div style="flex:1; min-width:0;">
         <div style="font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${l.brand} [${l.code}] ${l.name}</div>
-        <div style="color:var(--text-muted); font-size:11px;">$${l.cost.toFixed(2)} c/u</div>
       </div>
       <input type="number" value="${l.qty}" min="1" style="width:60px; text-align:center; padding:4px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px;" onchange="updatePOLineQty(${idx}, this.value)">
-      <span style="font-weight:700; color:var(--gold); min-width:60px; text-align:right;">$${l.subtotal.toFixed(2)}</span>
       <button onclick="removePOLine(${idx})" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:0 4px;">×</button>
     </div>`).join('');
   if (total) total.textContent = '$' + totalAmt.toFixed(2);
@@ -4367,21 +4362,15 @@ function openPODetail(id) {
       <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
         <thead><tr style="background:var(--surface-2);">
           <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>
-          <th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Qty</th>
-          <th style="text-align:right; padding:8px 10px; border:1px solid var(--border);">Costo</th>
-          <th style="text-align:right; padding:8px 10px; border:1px solid var(--border);">Total</th>
+          <th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Cantidad pedida</th>
+          ${po.status.includes('Recibida') ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Recibido</th>' : ''}
         </tr></thead>
         <tbody>
           ${(po.lines||[]).map(l => `<tr>
             <td style="padding:8px 10px; border:1px solid var(--border);">${l.brand} [${l.code}] ${l.name}</td>
             <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">${l.qty}</td>
-            <td style="text-align:right; padding:8px 10px; border:1px solid var(--border);">$${parseFloat(l.cost).toFixed(2)}</td>
-            <td style="text-align:right; padding:8px 10px; border:1px solid var(--border);">$${parseFloat(l.subtotal).toFixed(2)}</td>
+            ${po.status.includes('Recibida') ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:${l.received >= l.qty ? '#16a34a' : '#d97706'};">${l.received ?? '—'}</td>` : ''}
           </tr>`).join('')}
-          <tr style="font-weight:700; background:var(--surface-2);">
-            <td colspan="3" style="padding:8px 10px; border:1px solid var(--border); text-align:right;">TOTAL</td>
-            <td style="text-align:right; padding:8px 10px; border:1px solid var(--border); color:var(--gold);">$${parseFloat(po.total||0).toFixed(2)}</td>
-          </tr>
         </tbody>
       </table>
       ${po.notes ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">📝 ${po.notes}</div>` : ''}
