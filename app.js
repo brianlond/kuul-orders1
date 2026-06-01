@@ -4378,6 +4378,8 @@ function openPODetail(id) {
         ${po.status === 'Borrador' ? `<button onclick="updatePOStatus(${po.id},'Enviada'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📤 Marcar enviada</button>` : ''}
         ${po.status === 'Enviada' ? `<button onclick="updatePOStatus(${po.id},'En camino'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:#2563eb; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🚚 Marcar en camino</button>` : ''}
         ${po.status === 'En camino' || po.status === 'Enviada' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openReceivePO(${po.id})" style="padding:8px 14px; background:#16a34a; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✅ Recibir pedido</button>` : ''}
+        <button onclick="printPO(${po.id})" style="padding:8px 14px; border:1px solid var(--border); background:none; color:var(--text); border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🖨️ Imprimir</button>
+        <button onclick="deletePOFromDetail(${po.id})" style="padding:8px 14px; border:1px solid #dc2626; background:none; color:#dc2626; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🗑 Eliminar</button>
         <button onclick="document.getElementById('po-detail-modal').remove()" class="cancel-btn" style="flex:1;">Cerrar</button>
       </div>
     </div>
@@ -4458,5 +4460,116 @@ async function deletePO(id) {
     await supabase(`purchase_orders?id=eq.${id}`, { method: 'DELETE', headers: { 'Prefer': 'return=representation' } });
     await initSuppliersTab();
     showToast('✓ Orden eliminada');
+  } catch(e) { showToast('❌ Error al eliminar'); }
+}
+
+// ── PRINT PURCHASE ORDER ──────────────────────────────────────
+function printPO(id) {
+  const po = allPurchaseOrders.find(p => p.id === id);
+  if (!po) return;
+  const supplier = allSuppliers.find(s => s.id === po.supplier_id);
+  const date = new Date(po.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>OC-${String(po.id).padStart(4,'0')}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #1a1a1a; padding: 32px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 3px solid #b8952a; padding-bottom: 16px; }
+    .company-name { font-size: 22px; font-weight: 700; color: #b8952a; }
+    .po-title { font-size: 28px; font-weight: 900; color: #1a1a1a; }
+    .po-number { font-size: 13px; color: #888; margin-top: 4px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .info-box { background: #f9f5ec; border: 1px solid #e8dfc8; border-radius: 8px; padding: 12px 16px; }
+    .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #b8952a; font-weight: 700; margin-bottom: 6px; }
+    .info-value { font-size: 14px; font-weight: 600; }
+    .info-sub { font-size: 12px; color: #666; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background: #1a1a1a; color: #fff; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; background: #fef9ee; color: #b8952a; border: 1px solid #e8dfc8; }
+    .footer { margin-top: 32px; border-top: 1px solid #eee; padding-top: 16px; font-size: 11px; color: #aaa; text-align: center; }
+    .notes-box { background: #fffbf0; border: 1px solid #e8dfc8; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; }
+    @media print { body { padding: 20px; } }
+    @page { margin-bottom: 32px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="company-name">LucyGlam Beauty</div>
+      <div style="font-size:12px; color:#888;">(818) 669-4493 · lucyglamshop@gmail.com</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="po-title">ORDEN DE COMPRA</div>
+      <div class="po-number">OC-${String(po.id).padStart(4,'0')} · <span class="status-badge">${po.status}</span></div>
+      <div style="font-size:12px; color:#888; margin-top:4px;">${date}</div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-box">
+      <div class="info-label">Proveedor</div>
+      <div class="info-value">${po.supplier_name}</div>
+      ${supplier?.contact ? `<div class="info-sub">👤 ${supplier.contact}</div>` : ''}
+      ${supplier?.phone ? `<div class="info-sub">📞 ${supplier.phone}</div>` : ''}
+      ${supplier?.email ? `<div class="info-sub">✉️ ${supplier.email}</div>` : ''}
+    </div>
+    <div class="info-box">
+      <div class="info-label">Información</div>
+      <div class="info-value">Creado por: ${po.created_by || '—'}</div>
+      <div class="info-sub">Fecha: ${date}</div>
+      <div class="info-sub">Total productos: ${(po.lines||[]).length}</div>
+      <div class="info-sub">Total unidades: ${(po.lines||[]).reduce((s,l)=>s+l.qty,0)}</div>
+    </div>
+  </div>
+
+  ${po.notes ? `<div class="notes-box">📝 <strong>Notas:</strong> ${po.notes}</div>` : ''}
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Producto</th>
+        <th style="text-align:center;">Cantidad pedida</th>
+        ${po.status.includes('Recibida') ? '<th style="text-align:center;">Recibido</th>' : '<th style="text-align:center;">✓ Recibido</th>'}
+      </tr>
+    </thead>
+    <tbody>
+      ${(po.lines||[]).map((l, i) => `
+      <tr>
+        <td style="color:#888;">${i+1}</td>
+        <td><strong>${l.brand}</strong> [${l.code}] ${l.name}</td>
+        <td style="text-align:center; font-weight:700;">${l.qty}</td>
+        <td style="text-align:center;">${po.status.includes('Recibida') ? `<strong style="color:${l.received>=l.qty?'#16a34a':'#d97706'}">${l.received??'—'}</strong>` : '___'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    LucyGlam Beauty · OC-${String(po.id).padStart(4,'0')} · ${date}
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 500);
+  }
+}
+
+async function deletePOFromDetail(id) {
+  if (!confirm('¿Eliminar esta orden de compra? Esta acción no se puede deshacer.')) return;
+  try {
+    await supabase(`purchase_orders?id=eq.${id}`, { method: 'DELETE', headers: { 'Prefer': 'return=representation' } });
+    document.getElementById('po-detail-modal')?.remove();
+    await initSuppliersTab();
+    showToast('✓ Orden de compra eliminada');
   } catch(e) { showToast('❌ Error al eliminar'); }
 }
