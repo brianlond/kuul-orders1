@@ -4198,41 +4198,61 @@ async function saveSupplier(id) {
 // ── NEW PO ────────────────────────────────────────────────────
 let poLines = [];
 
+function setPOBrandFilter(brand) {
+  document.getElementById('po-brand-filter').value = brand;
+  // Update chip styles
+  document.querySelectorAll('[id^="po-chip-"]').forEach(btn => {
+    const isActive = (brand === '' && btn.id === 'po-chip-all') || btn.id === 'po-chip-' + brand.replace(/\s/g, '-');
+    btn.style.background = isActive ? 'var(--gold)' : 'none';
+    btn.style.color = isActive ? '#fff' : 'var(--text)';
+    btn.style.border = isActive ? '1px solid var(--gold)' : '1px solid var(--border)';
+  });
+  renderPOProductSelector();
+}
+
 function openNewPO(supplierId = null) {
   poLines = [];
   const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
   document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
-  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;">
-    <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:100%; max-width:600px; margin:auto;">
-      <div style="font-size:18px; font-weight:700; margin-bottom:16px;">Nueva Orden de Compra</div>
-      <div class="field-group">
-        <label>Proveedor *</label>
-        <select id="po-supplier" onchange="filterPOBrands()">
+  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; flex-direction:column;">
+    <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:14px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+      <div>
+        <div style="font-size:17px; font-weight:700;">Nueva Orden de Compra</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Selecciona productos y cantidades</div>
+      </div>
+      <button onclick="document.getElementById('po-modal').remove()" style="width:36px; height:36px; border:none; background:var(--surface-2); border-radius:50%; font-size:18px; cursor:pointer; color:var(--text);">×</button>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:16px 20px; background:var(--bg);">
+      <div class="field-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted);">Proveedor *</label>
+        <select id="po-supplier" onchange="filterPOBrands()" style="font-size:15px; padding:10px 12px; margin-top:4px;">
           <option value="">— Seleccionar proveedor —</option>
           ${allSuppliers.map(s => `<option value="${s.id}" data-brands='${JSON.stringify(s.brands||[])}' ${supplierId==s.id?'selected':''}>${s.name}</option>`).join('')}
         </select>
       </div>
-      <div class="field-group">
-        <label>Filtrar por marca</label>
-        <select id="po-brand-filter" onchange="renderPOProductSelector()">
-          <option value="">Todas las marcas</option>
-          ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
-        </select>
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:8px;">Marca</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button onclick="setPOBrandFilter('')" id="po-chip-all" style="padding:8px 16px; border-radius:99px; border:1px solid var(--gold); background:var(--gold); color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">Todas</button>
+          ${brands.map(b => `<button onclick="setPOBrandFilter('${b}')" id="po-chip-${b.replace(/[^a-zA-Z0-9]/g,'-')}" style="padding:8px 16px; border-radius:99px; border:1px solid var(--border); background:none; color:var(--text); font-size:13px; cursor:pointer; font-family:inherit;">${b}</button>`).join('')}
+        </div>
+        <input type="hidden" id="po-brand-filter" value="">
       </div>
-      <div class="field-group">
-        <label>Buscar producto</label>
-        <input type="text" id="po-search" placeholder="Nombre o código..." oninput="renderPOProductSelector()">
+      <div style="position:relative; margin-bottom:12px;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted);">🔍</span>
+        <input type="text" id="po-search" placeholder="Buscar producto..." oninput="renderPOProductSelector()" style="width:100%; padding:12px 12px 12px 40px; font-size:15px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface);">
       </div>
-      <div id="po-product-selector" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px;"></div>
-      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos en la orden</div>
+      <div id="po-product-selector" style="border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); margin-bottom:16px; max-height:300px; overflow-y:auto;"></div>
+      <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos seleccionados</div>
       <div id="po-lines-container" style="margin-bottom:12px;"></div>
-
-      <div class="field-group"><label>Notas</label><input type="text" id="po-notes" placeholder="Instrucciones, condiciones, etc."></div>
-      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-        <button onclick="savePO('Borrador')" style="flex:1; padding:10px; border:1px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">💾 Guardar borrador</button>
-        <button onclick="savePO('Enviada')" class="submit-btn" style="flex:1; margin:0;">📤 Guardar y enviar</button>
-        <button onclick="document.getElementById('po-modal').remove()" class="cancel-btn" style="flex:1;">Cancelar</button>
+      <div class="field-group">
+        <label style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted);">Notas</label>
+        <input type="text" id="po-notes" placeholder="Instrucciones, condiciones, etc." style="font-size:15px; padding:10px 12px; margin-top:4px;">
       </div>
+    </div>
+    <div style="background:var(--surface); border-top:1px solid var(--border); padding:14px 20px; display:flex; gap:10px; flex-shrink:0;">
+      <button onclick="savePO('Borrador')" style="flex:1; padding:14px; border:1.5px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">💾 Borrador</button>
+      <button onclick="savePO('Enviada')" style="flex:2; padding:14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">📤 Guardar y enviar</button>
     </div>
   </div>`);
   if (supplierId) filterPOBrands();
@@ -4262,15 +4282,22 @@ function renderPOProductSelector() {
     p.name.toLowerCase().includes(search) ||
     (p.color_code||'').toLowerCase().includes(search)
   );
-  prods = prods.slice(0, 50);
+  prods = prods.slice(0, 80);
 
   container.innerHTML = prods.length === 0
-    ? '<div style="padding:12px; text-align:center; color:var(--text-muted); font-size:13px;">Sin productos</div>'
+    ? '<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:14px;">Sin productos — selecciona una marca o escribe para buscar</div>'
     : prods.map(p => {
-        const wholesale = p.price * (1 - (p.discount_wholesale||0)/100);
-        return `<div onclick="addPOLine('${p.barcode}')" style="padding:10px 14px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-size:13px; transition:background 0.1s;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
-          <span>${p.brand} [${p.color_code||'—'}] ${p.name}</span>
-
+        const inOrder = poLines.find(l => l.barcode === p.barcode);
+        return `<div onclick="addPOLine('${p.barcode}')" style="padding:14px 16px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:12px; background:${inOrder ? 'var(--gold-pale)' : ''}; -webkit-tap-highlight-color:rgba(0,0,0,0.05);" 
+          ontouchstart="this.style.background='var(--surface-2)'" ontouchend="this.style.background='${inOrder ? 'var(--gold-pale)' : ''}'">
+          <div style="min-width:0;">
+            <div style="font-size:14px; font-weight:500; color:var(--text);">${p.name}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${p.brand} ${p.color_code ? '· ' + p.color_code : ''}</div>
+          </div>
+          <div style="flex-shrink:0; display:flex; align-items:center; gap:8px;">
+            ${inOrder ? `<span style="font-size:12px; background:var(--gold); color:#fff; padding:2px 8px; border-radius:99px; font-weight:700;">${inOrder.qty}</span>` : ''}
+            <span style="font-size:22px; color:var(--gold); font-weight:300;">+</span>
+          </div>
         </div>`;
       }).join('');
 }
@@ -4298,12 +4325,16 @@ function renderPOLines() {
   }
   const totalAmt = poLines.reduce((s, l) => s + l.subtotal, 0);
   container.innerHTML = poLines.map((l, idx) => `
-    <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
+    <div style="display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--border);">
       <div style="flex:1; min-width:0;">
-        <div style="font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${l.brand} [${l.code}] ${l.name}</div>
+        <div style="font-size:14px; font-weight:600; color:var(--text);">${l.brand} [${l.code}] ${l.name}</div>
       </div>
-      <input type="number" value="${l.qty}" min="1" style="width:60px; text-align:center; padding:4px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px;" onchange="updatePOLineQty(${idx}, this.value)">
-      <button onclick="removePOLine(${idx})" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:0 4px;">×</button>
+      <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+        <button onclick="updatePOLineQty(${idx}, ${l.qty}-1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center;">−</button>
+        <span style="font-size:16px; font-weight:700; min-width:28px; text-align:center;">${l.qty}</span>
+        <button onclick="updatePOLineQty(${idx}, ${l.qty}+1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center;">+</button>
+      </div>
+      <button onclick="removePOLine(${idx})" style="width:32px; height:32px; background:none; border:1px solid #dc262633; border-radius:var(--radius); color:#dc2626; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;">×</button>
     </div>`).join('');
   if (total) total.textContent = '$' + totalAmt.toFixed(2);
 }
@@ -4604,30 +4635,38 @@ function openEditPO(id) {
   const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
 
   document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
-  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;">
-    <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:100%; max-width:600px; margin:auto;">
-      <div style="font-size:18px; font-weight:700; margin-bottom:4px;">Editar Orden de Compra</div>
-      <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
-      <div class="field-group">
-        <label>Filtrar por marca</label>
-        <select id="po-brand-filter" onchange="renderPOProductSelector()">
-          <option value="">Todas las marcas</option>
-          ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
-        </select>
+  <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; flex-direction:column;">
+    <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:14px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+      <div>
+        <div style="font-size:17px; font-weight:700;">Editar Orden de Compra</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
       </div>
-      <div class="field-group">
-        <label>Buscar producto</label>
-        <input type="text" id="po-search" placeholder="Nombre o código..." oninput="renderPOProductSelector()">
+      <button onclick="document.getElementById('po-modal').remove()" style="width:36px; height:36px; border:none; background:var(--surface-2); border-radius:50%; font-size:18px; cursor:pointer; color:var(--text);">×</button>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:16px 20px; background:var(--bg);">
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:8px;">Marca</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button onclick="setPOBrandFilter('')" id="po-chip-all" style="padding:8px 16px; border-radius:99px; border:1px solid var(--gold); background:var(--gold); color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">Todas</button>
+          ${brands.map(b => `<button onclick="setPOBrandFilter('${b}')" id="po-chip-${b.replace(/[^a-zA-Z0-9]/g,'-')}" style="padding:8px 16px; border-radius:99px; border:1px solid var(--border); background:none; color:var(--text); font-size:13px; cursor:pointer; font-family:inherit;">${b}</button>`).join('')}
+        </div>
+        <input type="hidden" id="po-brand-filter" value="">
       </div>
-      <div id="po-product-selector" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px;"></div>
-      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos en la orden</div>
+      <div style="position:relative; margin-bottom:12px;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted);">🔍</span>
+        <input type="text" id="po-search" placeholder="Buscar producto..." oninput="renderPOProductSelector()" style="width:100%; padding:12px 12px 12px 40px; font-size:15px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface);">
+      </div>
+      <div id="po-product-selector" style="border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); margin-bottom:16px; max-height:300px; overflow-y:auto;"></div>
+      <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;">Productos seleccionados</div>
       <div id="po-lines-container" style="margin-bottom:12px;"></div>
-      <div class="field-group"><label>Notas</label><input type="text" id="po-notes" value="${po.notes || ''}" placeholder="Instrucciones, condiciones, etc."></div>
-      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-        <button onclick="updatePO(${po.id}, 'Borrador')" style="flex:1; padding:10px; border:1px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">💾 Guardar borrador</button>
-        <button onclick="updatePO(${po.id}, 'Enviada')" class="submit-btn" style="flex:1; margin:0;">📤 Guardar y enviar</button>
-        <button onclick="document.getElementById('po-modal').remove()" class="cancel-btn" style="flex:1;">Cancelar</button>
+      <div class="field-group">
+        <label style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted);">Notas</label>
+        <input type="text" id="po-notes" value="${po.notes || ''}" placeholder="Instrucciones, condiciones, etc." style="font-size:15px; padding:10px 12px; margin-top:4px;">
       </div>
+    </div>
+    <div style="background:var(--surface); border-top:1px solid var(--border); padding:14px 20px; display:flex; gap:10px; flex-shrink:0;">
+      <button onclick="updatePO(${po.id}, 'Borrador')" style="flex:1; padding:14px; border:1.5px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">💾 Borrador</button>
+      <button onclick="updatePO(${po.id}, 'Enviada')" style="flex:2; padding:14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">📤 Guardar y enviar</button>
     </div>
   </div>`);
 
