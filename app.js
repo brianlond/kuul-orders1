@@ -4556,12 +4556,27 @@ function printPO(id) {
 </body>
 </html>`;
 
-  const win = window.open('', '_blank');
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => win.print(), 500);
-  }
+  // Show in modal instead of new tab
+  const existing = document.getElementById('po-print-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'po-print-modal';
+  modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;';
+  modal.innerHTML = `
+    <div style="background:#fff; border-radius:12px; width:100%; max-width:680px; margin:auto; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:#1a1a1a;">
+        <span style="color:#fff; font-weight:600; font-size:14px;">OC-${String(po.id).padStart(4,'0')} — ${po.supplier_name}</span>
+        <div style="display:flex; gap:8px;">
+          <button onclick="document.getElementById('po-print-frame').contentWindow.print()" style="padding:6px 14px; background:var(--gold); color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">🖨️ Imprimir / PDF</button>
+          <button onclick="document.getElementById('po-print-modal').remove()" style="padding:6px 14px; background:none; border:1px solid #555; color:#fff; border-radius:6px; font-size:13px; cursor:pointer;">Cerrar</button>
+        </div>
+      </div>
+      <iframe id="po-print-frame" style="width:100%; height:80vh; border:none;" srcdoc=""></iframe>
+    </div>`;
+
+  document.body.appendChild(modal);
+  document.getElementById('po-print-frame').srcdoc = html;
 }
 
 async function deletePOFromDetail(id) {
