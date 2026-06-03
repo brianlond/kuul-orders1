@@ -4404,7 +4404,10 @@ function openPODetail(id) {
           ${(po.lines||[]).map(l => `<tr>
             <td style="padding:8px 10px; border:1px solid var(--border);">${l.brand} [${l.code}] ${l.name}</td>
             <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">${l.qty} <span style="font-size:10px; color:#888;">units</span></td>
-            ${po.status.includes('Recibida') ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:${l.received >= l.qty ? '#16a34a' : '#d97706'};">${l.received ?? '—'} <span style="font-size:10px;">units</span></td>` : ''}
+            ${po.status.includes('Recibida') ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">
+              <span style="color:${l.received > l.qty ? '#2563eb' : l.received >= l.qty ? '#16a34a' : '#d97706'}; font-weight:700;">${l.received ?? '—'} <span style="font-size:10px; font-weight:400;">units</span></span>
+              ${l.receive_note ? `<div style="font-size:10px; color:${l.received > l.qty ? '#2563eb' : '#d97706'}; margin-top:2px;">${l.receive_note}</div>` : ''}
+            </td>` : ''}
           </tr>`).join('')}
         </tbody>
       </table>
@@ -4435,47 +4438,94 @@ function openReceivePO(id) {
   const po = allPurchaseOrders.find(p => p.id === id);
   if (!po) return;
   document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
-  <div id="receive-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;">
-    <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:100%; max-width:600px; margin:auto;">
-      <div style="font-size:18px; font-weight:700; margin-bottom:4px;">Recibir pedido — OC-${String(po.id).padStart(4,'0')}</div>
-      <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Verifica cada producto y anota la cantidad recibida</div>
-      <div id="receive-lines">
+  <div id="receive-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:620px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border); flex-shrink:0;">
+        <div style="font-size:18px; font-weight:700;">Recibir pedido — OC-${String(po.id).padStart(4,'0')}</div>
+        <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">Marca ✓ cada producto recibido y ajusta la cantidad. Si llegan más o menos quedará registrado.</div>
+      </div>
+      <div id="receive-lines" style="flex:1; overflow-y:auto; padding:0 20px;">
         ${(po.lines||[]).map((l, idx) => `
-        <div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border);">
-          <input type="checkbox" id="rec-check-${idx}" style="width:20px; height:20px; accent-color:#16a34a; flex-shrink:0;" onchange="updateReceiveRow(${idx})">
+        <div id="rec-row-${idx}" style="display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--border);">
+          <input type="checkbox" id="rec-check-${idx}" onchange="updateRecRow(${idx}, ${l.qty})"
+            style="width:22px; height:22px; accent-color:#16a34a; flex-shrink:0; cursor:pointer;">
           <div style="flex:1; min-width:0;">
-            <div style="font-size:13px; font-weight:500;">${l.brand} [${l.code}] ${l.name}</div>
-            <div style="font-size:11px; color:var(--text-muted);">Ordered: ${l.qty} units</div>
-            <div style="font-size:10px; color:#b8952a;">Unit of measure: units</div>
+            <div style="font-size:14px; font-weight:600; color:var(--text);">${l.brand} [${l.code}] ${l.name}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Pedido: <strong>${l.qty}</strong> units</div>
+            <div id="rec-note-${idx}" style="font-size:11px; color:#d97706; margin-top:2px; display:none;"></div>
           </div>
-          <div style="display:flex; align-items:center; gap:6px;">
+          <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
             <label style="font-size:11px; color:var(--text-muted);">Recibido:</label>
-            <input type="number" id="rec-qty-${idx}" value="${l.qty}" min="0" max="${l.qty}" style="width:60px; text-align:center; padding:4px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px;">
+            <input type="number" id="rec-qty-${idx}" value="${l.qty}" min="0"
+              style="width:70px; text-align:center; padding:6px 4px; border:1px solid var(--border); border-radius:var(--radius); font-size:15px; font-weight:700; opacity:0.4;" 
+              oninput="updateRecRow(${idx}, ${l.qty})" disabled>
           </div>
+          <div id="rec-status-${idx}" style="width:24px; text-align:center; font-size:18px; opacity:0.3;">✅</div>
         </div>`).join('')}
       </div>
-      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-        <button onclick="confirmReceivePO(${po.id})" class="submit-btn" style="flex:1; margin:0;">✅ Confirmar recepción</button>
-        <button onclick="document.getElementById('receive-modal').remove()" class="cancel-btn" style="flex:1;">Cancelar</button>
+      <div style="padding:14px 20px; border-top:1px solid var(--border); display:flex; gap:10px; flex-shrink:0;">
+        <button onclick="confirmReceivePO(${po.id})" class="submit-btn" style="flex:2; margin:0; padding:14px; font-size:15px;">✅ Confirmar recepción</button>
+        <button onclick="document.getElementById('receive-modal').remove()" class="cancel-btn" style="flex:1; padding:14px;">Cancelar</button>
       </div>
     </div>
   </div>`);
 }
 
-function updateReceiveRow(idx) {
-  const check = document.getElementById(`rec-check-${idx}`);
-  const qty = document.getElementById(`rec-qty-${idx}`);
-  if (qty) qty.style.opacity = check?.checked ? '0.5' : '1';
+function updateRecRow(idx, orderedQty) {
+  const check  = document.getElementById(`rec-check-${idx}`);
+  const input  = document.getElementById(`rec-qty-${idx}`);
+  const status = document.getElementById(`rec-status-${idx}`);
+  const note   = document.getElementById(`rec-note-${idx}`);
+  const row    = document.getElementById(`rec-row-${idx}`);
+  if (!check || !input) return;
+
+  // Enable/disable input based on checkbox
+  input.disabled = !check.checked;
+  input.style.opacity = check.checked ? '1' : '0.4';
+  if (status) status.style.opacity = check.checked ? '1' : '0.3';
+
+  if (!check.checked) {
+    if (status) status.textContent = '✅';
+    if (note) note.style.display = 'none';
+    if (row) row.style.background = '';
+    return;
+  }
+
+  const received = parseInt(input.value) || 0;
+  const diff = received - orderedQty;
+
+  if (received === orderedQty) {
+    if (status) status.textContent = '✅';
+    if (note) note.style.display = 'none';
+    if (row) row.style.background = '#f0fdf4';
+  } else if (received === 0) {
+    if (status) status.textContent = '❌';
+    if (note) { note.textContent = 'No recibido'; note.style.color = '#dc2626'; note.style.display = 'block'; }
+    if (row) row.style.background = '#fff5f5';
+  } else if (diff > 0) {
+    if (status) status.textContent = '⚠️';
+    if (note) { note.textContent = `Llegaron ${diff} unidades de más`; note.style.color = '#2563eb'; note.style.display = 'block'; }
+    if (row) row.style.background = '#eff6ff';
+  } else {
+    if (status) status.textContent = '⚠️';
+    if (note) { note.textContent = `Faltaron ${Math.abs(diff)} unidades`; note.style.color = '#d97706'; note.style.display = 'block'; }
+    if (row) row.style.background = '#fffbeb';
+  }
 }
 
 async function confirmReceivePO(id) {
   const po = allPurchaseOrders.find(p => p.id === id);
   if (!po) return;
   const updatedLines = (po.lines||[]).map((l, idx) => {
-    const check = document.getElementById(`rec-check-${idx}`);
+    const check    = document.getElementById(`rec-check-${idx}`);
     const qtyInput = document.getElementById(`rec-qty-${idx}`);
-    const receivedQty = check?.checked ? 0 : (parseInt(qtyInput?.value) || l.qty);
-    return { ...l, received: receivedQty };
+    const received = check?.checked ? (parseInt(qtyInput?.value) || 0) : null;
+    const diff = received !== null ? received - l.qty : null;
+    const recNote = received === null ? null :
+      received === l.qty ? null :
+      received > l.qty ? `Llegaron ${received - l.qty} unidades de más` :
+      `Faltaron ${l.qty - received} unidades`;
+    return { ...l, received: received !== null ? received : l.received || 0, receive_note: recNote };
   });
   const allReceived = updatedLines.every(l => l.received >= l.qty);
   const anyReceived = updatedLines.some(l => l.received > 0);
