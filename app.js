@@ -939,7 +939,8 @@ function selectVariation(barcode) {
 
 function posStepChangeQty(delta) {
   stepState.qty = Math.max(1, (stepState.qty || 1) + delta);
-  document.getElementById('qty-display').textContent = stepState.qty;
+  const el = document.getElementById('qty-display');
+  if (el) el.value = stepState.qty;
 }
 
 function confirmAddProduct() {
@@ -1519,6 +1520,20 @@ function posChangeQty(barcode, delta) {
   renderPOSCart();
 }
 
+function posSetQty(barcode, qty) {
+  const item = posCart.find(c => c.barcode === barcode);
+  if (!item) return;
+  if (qty <= 0) { posCart = posCart.filter(c => c.barcode !== barcode); }
+  else {
+    item.qty = qty;
+    const product = PRODUCTS.find(p => p.barcode === barcode);
+    item.price = product ? getPrice(product) : item.price;
+    item.subtotal = item.is_free ? 0 : item.price * item.qty;
+  }
+  if (posSelectedCategory) renderPOSProducts(posFilteredProducts);
+  renderPOSCart();
+}
+
 function posToggleFree(barcode) {
   const item = posCart.find(c => c.barcode === barcode);
   if (!item) return;
@@ -1590,7 +1605,7 @@ function renderPOSCart() {
         </div>
         <div class="pos-cart-qty">
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', -1)">−</button>
-          <span class="qty-num">${item.qty}</span>
+          <input type="number" class="qty-num" value="${item.qty}" min="1" style="width:52px; text-align:center; font-size:15px; font-weight:700; border:1px solid var(--border); border-radius:var(--radius); padding:3px; background:var(--surface); color:var(--text);" onchange="posSetQty('${item.barcode}', parseInt(this.value)||1)">
           <button class="qty-btn" onclick="posChangeQty('${item.barcode}', 1)">+</button>
         </div>
         <label style="display:flex; align-items:center; gap:3px; font-size:11px; color:#16a34a; cursor:pointer;">
@@ -4333,7 +4348,7 @@ function renderPOLines() {
       </div>
       <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
         <button onclick="updatePOLineQty(${idx}, ${l.qty}-1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center;">−</button>
-        <span style="font-size:16px; font-weight:700; min-width:28px; text-align:center;">${l.qty}</span>
+        <input type="number" value="${l.qty}" min="1" style="width:64px; text-align:center; padding:4px; border:1px solid var(--border); border-radius:var(--radius); font-size:16px; font-weight:700; background:var(--surface); color:var(--text);" onchange="updatePOLineQty(${idx}, parseInt(this.value)||1)">
         <button onclick="updatePOLineQty(${idx}, ${l.qty}+1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center;">+</button>
       </div>
       <button onclick="removePOLine(${idx})" style="width:32px; height:32px; background:none; border:1px solid #dc262633; border-radius:var(--radius); color:#dc2626; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;">×</button>
@@ -4457,7 +4472,7 @@ function openReceivePO(id) {
           <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
             <label style="font-size:11px; color:var(--text-muted);">Recibido:</label>
             <input type="number" id="rec-qty-${idx}" value="${l.qty}" min="0"
-              style="width:70px; text-align:center; padding:6px 4px; border:1px solid var(--border); border-radius:var(--radius); font-size:15px; font-weight:700; opacity:0.4;" 
+              style="width:80px; text-align:center; padding:6px 4px; border:1px solid var(--border); border-radius:var(--radius); font-size:15px; font-weight:700; opacity:0.4;" 
               oninput="updateRecRow(${idx}, ${l.qty})" disabled>
           </div>
           <div id="rec-status-${idx}" style="width:24px; text-align:center; font-size:18px; opacity:0.3;">✅</div>

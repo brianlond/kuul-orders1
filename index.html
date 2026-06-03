@@ -141,7 +141,7 @@
           <div class="step-label">④ Cantidad</div>
           <div class="qty-selector">
             <button class="qty-btn" onclick="posStepChangeQty(-1)">−</button>
-            <span id="qty-display">1</span>
+            <input id="qty-display" type="number" value="1" min="1" style="width:64px; text-align:center; font-size:20px; font-weight:700; border:1px solid var(--border); border-radius:var(--radius); padding:4px; background:var(--surface); color:var(--text);" oninput="if(parseInt(this.value)<1||!this.value)this.value=1; stepState.qty=parseInt(this.value)||1;">
             <button class="qty-btn" onclick="posStepChangeQty(1)">+</button>
             <button class="qty-confirm-btn" onclick="confirmAddProduct()">Agregar a la orden ✓</button>
           </div>
