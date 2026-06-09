@@ -420,7 +420,14 @@ async function checkSession() {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) { localStorage.removeItem('sb_token'); localStorage.removeItem('sb_uid'); return; }
-    await loadProfileAndApply(token, uid, null);
+    // Load products in parallel with profile
+    const [, prods] = await Promise.all([
+      loadProfileAndApply(token, uid, null),
+      PRODUCTS && PRODUCTS.length > 0 ? Promise.resolve(PRODUCTS) : dbFetchProducts().catch(() => [])
+    ]);
+    if (prods && prods.length > 0 && (!PRODUCTS || PRODUCTS.length === 0)) {
+      PRODUCTS = prods;
+    }
   } catch(e) { console.error(e); }
 }
 
@@ -447,11 +454,9 @@ document.addEventListener('keydown', e => {
 
 // ── Show admin view ──────────────────────────────────────────
 function showAdminView() {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.getElementById('tab-admin').classList.add('active');
-  document.getElementById('tab-admin-btn').classList.add('active');
   document.getElementById('logout-btn').style.display = 'inline-block';
+  showTab('vendedor');
+  // Preload orders in background
   loadOrders();
 }
 
@@ -2715,6 +2720,9 @@ function showTab(name) {
   if (name === 'sellers') initSellersTab();
   if (name === 'miprogreso') initMiProgreso();
   if (name === 'suppliers') initSuppliersTab();
+  if (name === 'vendedor' && (!PRODUCTS || PRODUCTS.length === 0)) {
+    dbFetchProducts().then(prods => { PRODUCTS = prods; if (typeof renderBrandOptions === 'function') renderBrandOptions(); }).catch(()=>{});
+  }
   if (name === 'delivery') loadDeliveryOrders();
   if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
 }
