@@ -3076,54 +3076,52 @@ async function printOrder(id) {
   <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' rel='stylesheet'>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', -apple-system, sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; padding: 40px; max-width: 760px; margin: 0 auto; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #b8952a; }
-    .logo-wrap { width: 100px; height: 100px; background: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1a1a; background: #fff; padding: 18px 24px; max-width: 740px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #b8952a; }
+    .logo-wrap { width: 52px; height: 52px; background: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink:0; }
     .logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
     .company-info { text-align: right; }
-    .company-name { font-size: 20px; font-weight: 700; color: #b8952a; letter-spacing: 0.05em; margin-bottom: 4px; }
-    .company-detail { font-size: 11px; color: #666; line-height: 1.6; }
-    .invoice-meta { display: flex; justify-content: space-between; margin-bottom: 28px; }
-    .invoice-title { font-size: 28px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.02em; }
-    .invoice-details { text-align: right; font-size: 11px; color: #666; line-height: 1.8; }
+    .company-name { font-size: 14px; font-weight: 700; color: #b8952a; letter-spacing: 0.05em; margin-bottom: 2px; }
+    .company-detail { font-size: 9px; color: #666; line-height: 1.5; }
+    .invoice-meta { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .invoice-title { font-size: 22px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.02em; line-height:1; }
+    .invoice-details { text-align: right; font-size: 9px; color: #666; line-height: 1.7; }
     .invoice-details strong { color: #1a1a1a; }
-    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 10px; font-weight: 600; background: #fff8e1; color: #b8952a; border: 1px solid #b8952a; margin-top: 4px; }
-    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
-    .party-box { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 14px 16px; }
-    .party-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #b8952a; margin-bottom: 8px; }
-    .party-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-    .party-detail { font-size: 11px; color: #555; line-height: 1.6; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 9px; font-weight: 600; background: #fff8e1; color: #b8952a; border: 1px solid #b8952a; }
+    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .party-box { background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 8px 10px; }
+    .party-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #b8952a; margin-bottom: 4px; }
+    .party-name { font-size: 11px; font-weight: 600; margin-bottom: 1px; }
+    .party-detail { font-size: 9px; color: #555; line-height: 1.5; }
+    table { width: 100%; border-collapse: collapse; }
     thead tr { background: #1a1a1a; color: #fff; }
-    thead th { padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    thead th { padding: 6px 8px; text-align: left; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
     thead th:nth-child(2) { text-align: center; }
     thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
     tbody tr { border-bottom: 1px solid #f0f0f0; }
     tbody tr:nth-child(even) { background: #fafafa; }
-    tbody td { padding: 9px 12px; font-size: 12px; color: #333; vertical-align: middle; }
+    tbody td { padding: 5px 8px; font-size: 10px; color: #333; vertical-align: middle; }
     tbody td:nth-child(2) { text-align: center; }
     tbody td:nth-child(3), tbody td:nth-child(4) { text-align: right; font-variant-numeric: tabular-nums; }
     .totals-section { display: flex; justify-content: flex-end; margin-top: 0; }
-    .totals-table { width: 280px; }
-    .totals-table td { padding: 5px 12px; font-size: 12px; }
+    .totals-table { width: 240px; }
+    .totals-table td { padding: 3px 8px; font-size: 10px; }
     .totals-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-    .totals-table .total-row td { font-size: 15px; font-weight: 700; color: #1a1a1a; border-top: 2px solid #b8952a; padding-top: 10px; }
+    .totals-table .total-row td { font-size: 12px; font-weight: 700; color: #1a1a1a; border-top: 2px solid #b8952a; padding-top: 6px; }
     .totals-table .muted { color: #666; }
-    .bottom-section { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #eee; }
-    .notes-box { }
-    .notes-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #b8952a; margin-bottom: 6px; }
-    .notes-text { font-size: 11px; color: #555; line-height: 1.6; }
-    .signature-box { }
-    .signature-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #b8952a; margin-bottom: 6px; }
-    .signature-line { border-bottom: 1px solid #ccc; margin-bottom: 6px; height: 48px; }
-    .signature-name { font-size: 11px; color: #888; }
-    .footer { margin-top: 28px; text-align: center; font-size: 10px; color: #aaa; }
-    .permit-tag { font-size: 10px; color: #888; margin-top: 2px; }
-    .no-permit { color: #c0392b; font-size: 10px; }
-    .print-btn { position: fixed; bottom: 24px; right: 24px; background: #1a1a1a; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+    .bottom-section { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #eee; }
+    .notes-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #b8952a; margin-bottom: 4px; }
+    .notes-text { font-size: 9px; color: #555; line-height: 1.5; }
+    .signature-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #b8952a; margin-bottom: 4px; }
+    .signature-line { border-bottom: 1px solid #ccc; margin-bottom: 4px; height: 36px; }
+    .signature-name { font-size: 9px; color: #888; }
+    .footer { margin-top: 10px; text-align: center; font-size: 8px; color: #aaa; }
+    .permit-tag { font-size: 9px; color: #888; margin-top: 1px; }
+    .no-permit { color: #c0392b; font-size: 9px; }
+    .print-btn { position: fixed; bottom: 16px; right: 16px; background: #1a1a1a; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
     .print-btn:hover { background: #b8952a; }
     @media print {
-      body { padding: 20px; }
+      body { padding: 10px 16px; }
       .print-btn { display: none; }
     }
     @page {
@@ -4570,7 +4568,7 @@ function printPO(id) {
   const po = allPurchaseOrders.find(p => p.id === id);
   if (!po) return;
   const supplier = allSuppliers.find(s => s.id === po.supplier_id);
-  const date = new Date(po.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
+  const date = new Date(po.created_at).toLocaleDateString('en-US', { day:'2-digit', month:'long', year:'numeric' });
 
   const html = `<!DOCTYPE html>
 <html>
@@ -4607,38 +4605,38 @@ function printPO(id) {
       <div style="font-size:12px; color:#888;">(818) 669-4493 · lucyglamshop@gmail.com</div>
     </div>
     <div style="text-align:right;">
-      <div class="po-title">ORDEN DE COMPRA</div>
-      <div class="po-number">OC-${String(po.id).padStart(4,'0')} · <span class="status-badge">${po.status}</span></div>
+      <div class="po-title">PURCHASE ORDER</div>
+      <div class="po-number">PO-${String(po.id).padStart(4,'0')} · <span class="status-badge">${po.status}</span></div>
       <div style="font-size:12px; color:#888; margin-top:4px;">${date}</div>
     </div>
   </div>
 
   <div class="info-grid">
     <div class="info-box">
-      <div class="info-label">Proveedor</div>
+      <div class="info-label">Supplier</div>
       <div class="info-value">${po.supplier_name}</div>
       ${supplier?.contact ? `<div class="info-sub">👤 ${supplier.contact}</div>` : ''}
       ${supplier?.phone ? `<div class="info-sub">📞 ${supplier.phone}</div>` : ''}
       ${supplier?.email ? `<div class="info-sub">✉️ ${supplier.email}</div>` : ''}
     </div>
     <div class="info-box">
-      <div class="info-label">Información</div>
-      <div class="info-value">Creado por: ${po.created_by || '—'}</div>
-      <div class="info-sub">Fecha: ${date}</div>
-      <div class="info-sub">Total productos: ${(po.lines||[]).length}</div>
-      <div class="info-sub">Total unidades: ${(po.lines||[]).reduce((s,l)=>s+l.qty,0)}</div>
+      <div class="info-label">Order Info</div>
+      <div class="info-value">Created by: ${po.created_by || '—'}</div>
+      <div class="info-sub">Date: ${date}</div>
+      <div class="info-sub">Total products: ${(po.lines||[]).length}</div>
+      <div class="info-sub">Total units: ${(po.lines||[]).reduce((s,l)=>s+l.qty,0)}</div>
     </div>
   </div>
 
-  ${po.notes ? `<div class="notes-box">📝 <strong>Notas:</strong> ${po.notes}</div>` : ''}
+  ${po.notes ? `<div class="notes-box">📝 <strong>Notes:</strong> ${po.notes}</div>` : ''}
 
   <table>
     <thead>
       <tr>
         <th>#</th>
-        <th>Producto</th>
+        <th>Product</th>
         <th style="text-align:center;">Qty (units)</th>
-        ${po.status.includes('Recibida') ? '<th style="text-align:center;">Received (units)</th>' : '<th style="text-align:center;">✓ Recibido</th>'}
+        ${po.status.includes('Recibida') ? '<th style="text-align:center;">Received (units)</th>' : '<th style="text-align:center;">✓ Received</th>'}
       </tr>
     </thead>
     <tbody>
@@ -4647,13 +4645,13 @@ function printPO(id) {
         <td style="color:#888;">${i+1}</td>
         <td><strong>${l.brand}</strong> [${l.code}] ${l.name}</td>
         <td style="text-align:center; font-weight:700;">${l.qty} <span style="font-size:10px; color:#888; font-weight:400;">units</span></td>
-        <td style="text-align:center;">${po.status.includes('Recibida') ? `<strong style="color:${l.received>=l.qty?'#16a34a':'#d97706'}">${l.received??'—'} uds</strong>` : '___'}</td>
+        <td style="text-align:center;">${po.status.includes('Recibida') ? `<strong style="color:${l.received>=l.qty?'#16a34a':'#d97706'}">${l.received??'—'} units</strong>` : '___'}</td>
       </tr>`).join('')}
     </tbody>
   </table>
 
   <div class="footer">
-    LucyGlam Beauty · OC-${String(po.id).padStart(4,'0')} · ${date}
+    LucyGlam Beauty · PO-${String(po.id).padStart(4,'0')} · ${date}
   </div>
 </body>
 </html>`;
