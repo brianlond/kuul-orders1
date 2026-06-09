@@ -3095,19 +3095,19 @@ async function printOrder(id) {
     .party-detail { font-size: 9px; color: #555; line-height: 1.5; }
     table { width: 100%; border-collapse: collapse; }
     thead tr { background: #1a1a1a; color: #fff; }
-    thead th { padding: 6px 8px; text-align: left; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    thead th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
     thead th:nth-child(2) { text-align: center; }
     thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
     tbody tr { border-bottom: 1px solid #f0f0f0; }
     tbody tr:nth-child(even) { background: #fafafa; }
-    tbody td { padding: 5px 8px; font-size: 10px; color: #333; vertical-align: middle; }
+    tbody td { padding: 7px 10px; font-size: 12px; color: #333; vertical-align: middle; }
     tbody td:nth-child(2) { text-align: center; }
     tbody td:nth-child(3), tbody td:nth-child(4) { text-align: right; font-variant-numeric: tabular-nums; }
     .totals-section { display: flex; justify-content: flex-end; margin-top: 0; }
-    .totals-table { width: 240px; }
-    .totals-table td { padding: 3px 8px; font-size: 10px; }
+    .totals-table { width: 260px; }
+    .totals-table td { padding: 4px 10px; font-size: 12px; }
     .totals-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-    .totals-table .total-row td { font-size: 12px; font-weight: 700; color: #1a1a1a; border-top: 2px solid #b8952a; padding-top: 6px; }
+    .totals-table .total-row td { font-size: 14px; font-weight: 700; color: #1a1a1a; border-top: 2px solid #b8952a; padding-top: 8px; }
     .totals-table .muted { color: #666; }
     .bottom-section { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #eee; }
     .notes-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #b8952a; margin-bottom: 4px; }
