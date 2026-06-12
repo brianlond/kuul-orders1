@@ -1600,25 +1600,30 @@ function renderPOSCart() {
   } else {
     countEl.textContent = posCart.length + ' producto' + (posCart.length !== 1 ? 's' : '');
     container.innerHTML = posCart.map(item => `
-      <div class="pos-cart-item" style="${item.is_free ? 'background:#f0fdf4; border-color:#bbf7d0;' : ''}">
+      <div class="pos-cart-item" style="${item.is_free ? 'background:#f0fdf4;' : ''}">
         <div class="pos-cart-info">
-          <div class="pos-cart-name">${item.brand} [${item.code}] ${item.name}
+          <div class="pos-cart-name">
+            ${item.brand} [${item.code}] ${item.name}
             ${item.is_free ? '<span style="margin-left:6px; background:#16a34a; color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px;">FREE</span>' : ''}
           </div>
           <div class="pos-cart-price" style="${item.is_free ? 'color:#16a34a;' : ''}">
             ${item.is_free ? 'GRATIS' : '$' + item.price.toFixed(2) + ' c/u'}
           </div>
         </div>
-        <div class="pos-cart-qty">
-          <button class="qty-btn" onclick="posChangeQty('${item.barcode}', -1)">−</button>
-          <input type="number" class="qty-num" value="${item.qty}" min="1" style="width:52px; text-align:center; font-size:15px; font-weight:700; border:1px solid var(--border); border-radius:var(--radius); padding:3px; background:var(--surface); color:var(--text);" onchange="posSetQty('${item.barcode}', parseInt(this.value)||1)">
-          <button class="qty-btn" onclick="posChangeQty('${item.barcode}', 1)">+</button>
+        <div class="pos-cart-bottom">
+          <div class="pos-cart-qty">
+            <button class="qty-btn" onclick="posChangeQty('${item.barcode}', -1)">−</button>
+            <input type="number" class="qty-num" value="${item.qty}" min="1" style="width:52px; text-align:center; font-size:15px; font-weight:700; border:1px solid var(--border); border-radius:var(--radius); padding:3px; background:var(--surface); color:var(--text);" onchange="posSetQty('${item.barcode}', parseInt(this.value)||1)">
+            <button class="qty-btn" onclick="posChangeQty('${item.barcode}', 1)">+</button>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:#16a34a; cursor:pointer;">
+              <input type="checkbox" ${item.is_free ? 'checked' : ''} onchange="posToggleFree('${item.barcode}')" style="accent-color:#16a34a; width:15px; height:15px;"> Gratis
+            </label>
+            <span class="pos-cart-total" style="${item.is_free ? 'color:#16a34a;' : ''}">$${item.subtotal.toFixed(2)}</span>
+            <span class="pos-cart-remove" onclick="posRemoveItem('${item.barcode}')">×</span>
+          </div>
         </div>
-        <label style="display:flex; align-items:center; gap:3px; font-size:11px; color:#16a34a; cursor:pointer;">
-          <input type="checkbox" ${item.is_free ? 'checked' : ''} onchange="posToggleFree('${item.barcode}')" style="accent-color:#16a34a;"> Gratis
-        </label>
-        <span class="pos-cart-total" style="${item.is_free ? 'color:#16a34a;' : ''}">$${item.subtotal.toFixed(2)}</span>
-        <span class="pos-cart-remove" onclick="posRemoveItem('${item.barcode}')">×</span>
       </div>
     `).join('');
   }
@@ -2932,6 +2937,89 @@ function removeEditLine(id) {
   const el = document.getElementById('edit-line-' + id);
   if (el) el.remove();
   recalcEditTotal();
+}
+
+function openEditProductSearch() {
+  const lvl = window._editOrderLevel || currentLevel || 'Salon';
+  const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
+  const existing = document.getElementById('edit-product-search-modal');
+  if (existing) existing.remove();
+
+  document.body.insertAdjacentHTML('beforeend', `
+  <div id="edit-product-search-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:600px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+        <div style="font-size:16px; font-weight:700;">Agregar producto</div>
+        <button onclick="document.getElementById('edit-product-search-modal').remove()" style="width:32px; height:32px; border:none; background:var(--surface-2); border-radius:50%; font-size:16px; cursor:pointer;">×</button>
+      </div>
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border); flex-shrink:0;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <button onclick="setEditSearchBrand('')" id="epsb-all" style="padding:6px 14px; border-radius:99px; border:1px solid var(--gold); background:var(--gold); color:#fff; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit;">Todas</button>
+          ${brands.map(b => `<button onclick="setEditSearchBrand('${b}')" id="epsb-${b.replace(/[^a-zA-Z0-9]/g,'-')}" style="padding:6px 14px; border-radius:99px; border:1px solid var(--border); background:none; color:var(--text); font-size:12px; cursor:pointer; font-family:inherit;">${b}</button>`).join('')}
+        </div>
+        <input type="text" id="edit-product-search-input" placeholder="🔍 Buscar por nombre o código..." oninput="renderEditProductSearch()" style="width:100%; padding:10px 12px; font-size:14px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface);">
+        <input type="hidden" id="edit-search-brand" value="">
+      </div>
+      <div id="edit-product-search-results" style="flex:1; overflow-y:auto;"></div>
+    </div>
+  </div>`);
+
+  renderEditProductSearch();
+}
+
+function setEditSearchBrand(brand) {
+  document.getElementById('edit-search-brand').value = brand;
+  document.querySelectorAll('[id^="epsb-"]').forEach(btn => {
+    const isActive = (brand === '' && btn.id === 'epsb-all') || btn.id === 'epsb-' + brand.replace(/[^a-zA-Z0-9]/g, '-');
+    btn.style.background = isActive ? 'var(--gold)' : 'none';
+    btn.style.color = isActive ? '#fff' : 'var(--text)';
+    btn.style.border = isActive ? '1px solid var(--gold)' : '1px solid var(--border)';
+  });
+  renderEditProductSearch();
+}
+
+function renderEditProductSearch() {
+  const brand  = document.getElementById('edit-search-brand')?.value || '';
+  const search = (document.getElementById('edit-product-search-input')?.value || '').toLowerCase();
+  const container = document.getElementById('edit-product-search-results');
+  if (!container) return;
+  const lvl = window._editOrderLevel || currentLevel || 'Salon';
+
+  let prods = PRODUCTS || [];
+  if (brand) prods = prods.filter(p => p.brand === brand);
+  if (search) prods = prods.filter(p =>
+    p.name.toLowerCase().includes(search) ||
+    (p.color_code || '').toLowerCase().includes(search) ||
+    (p.barcode || '').includes(search)
+  );
+  prods = prods.slice(0, 60);
+
+  if (prods.length === 0) {
+    container.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted); font-size:14px;">Sin resultados</div>';
+    return;
+  }
+
+  container.innerHTML = prods.map(p => {
+    const retail = parseFloat(p.price_retail) || parseFloat(p.price);
+    const salon  = parseFloat(p.price);
+    const wDisc  = parseFloat(p.discount_wholesale) || 0;
+    const wholesale = Math.round(salon * (1 - wDisc / 100) * 100) / 100;
+    const price = lvl === 'Retail' ? retail : lvl === 'Wholesale' ? wholesale : salon;
+    return `
+    <div onclick="addEditLineFromSearch('${p.barcode}')" style="padding:14px 16px; border-bottom:1px solid var(--border); cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:12px;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+      <div style="min-width:0;">
+        <div style="font-size:14px; font-weight:500; color:var(--text);">${p.name} ${p.color_code ? '· ' + p.color_code : ''}</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${p.brand} · ${p.category || ''}</div>
+      </div>
+      <div style="flex-shrink:0; font-size:14px; font-weight:700; color:var(--gold);">$${price.toFixed(2)}</div>
+    </div>`;
+  }).join('');
+}
+
+function addEditLineFromSearch(barcode) {
+  const lvl = window._editOrderLevel || currentLevel || 'Salon';
+  addEditLine(barcode, 1, lvl);
+  document.getElementById('edit-product-search-modal')?.remove();
 }
 
 function onEditPermitChange() {
