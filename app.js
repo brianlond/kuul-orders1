@@ -407,8 +407,12 @@ async function loadProfileAndApply(token, uid, errEl) {
     showTab('delivery');
   } else if (currentRole === 'seller') {
     document.querySelectorAll('.tab').forEach(t => { t.style.display = ['tab-vendedor-btn','tab-pos-btn','tab-miprogreso-btn'].includes(t.id) ? '' : 'none'; });
+    const helpBtnSeller = document.getElementById('help-btn');
+    if (helpBtnSeller) helpBtnSeller.style.display = 'inline-block';
     showTab('vendedor');
   }
+  // Auto-start tutorial on first login
+  if (currentRole !== 'delivery') checkAndStartTour();
 }
 
 async function checkSession() {
@@ -455,6 +459,8 @@ document.addEventListener('keydown', e => {
 // ── Show admin view ──────────────────────────────────────────
 function showAdminView() {
   document.getElementById('logout-btn').style.display = 'inline-block';
+  const helpBtn = document.getElementById('help-btn');
+  if (helpBtn) helpBtn.style.display = 'inline-block';
   showTab('vendedor');
   // Preload orders in background
   loadOrders();
@@ -4856,4 +4862,247 @@ async function updatePO(id, status) {
     await initSuppliersTab();
     showToast('✓ Orden de compra actualizada');
   } catch(e) { console.error(e); showToast('❌ Error al guardar'); }
+}
+
+// ── TUTORIAL INTERACTIVO (Shepherd.js) ───────────────────────
+let activeTour = null;
+
+function startTour() {
+  if (activeTour) { activeTour.cancel(); activeTour = null; }
+  if (isAdmin) startAdminTour();
+  else if (currentRole === 'seller') startSellerTour();
+}
+
+function shepherdDefaults() {
+  return new Shepherd.Tour({
+    useModalOverlay: true,
+    defaultStepOptions: {
+      cancelIcon: { enabled: true },
+      scrollTo: { behavior: 'smooth', block: 'center' },
+      modalOverlayOpeningPadding: 8,
+      modalOverlayOpeningRadius: 8,
+      popperOptions: { modifiers: [{ name: 'offset', options: { offset: [0, 12] } }] },
+      buttons: [
+        { text: 'Anterior', action() { this.back(); }, secondary: true },
+        { text: 'Siguiente →', action() { this.next(); } }
+      ]
+    }
+  });
+}
+
+function lastStep(tour) {
+  return [{
+    text: '← Anterior', action() { tour.back(); }, secondary: true
+  }, {
+    text: '¡Listo! 🎉', action() { tour.complete(); }
+  }];
+}
+
+// ── TOUR ADMIN ────────────────────────────────────────────────
+function startAdminTour() {
+  // Make sure we're on the right tab to show elements
+  showTab('vendedor');
+
+  const tour = shepherdDefaults();
+  activeTour = tour;
+
+  tour.addStep({
+    id: 'bienvenida',
+    title: '👋 Bienvenido a LucyGlam',
+    text: 'Este tutorial te guiará por las funciones principales de la app. Puedes salir en cualquier momento con la X o volver a verlo con el botón <strong>?</strong>.',
+    buttons: [{ text: 'Comenzar tour →', action() { tour.next(); } }]
+  });
+
+  tour.addStep({
+    id: 'tabs',
+    title: '📌 Pestañas principales',
+    text: 'Aquí están todas las secciones de la app: <strong>Nueva orden, Caja, Admin, Clientes, Catálogo, Proveedores y Vendedores</strong>.',
+    attachTo: { element: '.tabs', on: 'bottom' },
+  });
+
+  tour.addStep({
+    id: 'nueva-orden-vendedor',
+    title: '👤 Datos del vendedor',
+    text: 'Como admin puedes seleccionar a qué vendedor se le asignará la orden desde este dropdown.',
+    attachTo: { element: '#seller-name-select', on: 'bottom' },
+  });
+
+  tour.addStep({
+    id: 'nueva-orden-cliente',
+    title: '🔍 Buscar cliente',
+    text: 'Escribe el nombre o negocio del cliente para autocompletar sus datos si ya existe en el sistema.',
+    attachTo: { element: '#client-search', on: 'bottom' },
+  });
+
+  tour.addStep({
+    id: 'nueva-orden-nivel',
+    title: '💰 Nivel de cliente',
+    text: 'Selecciona el nivel: <strong>Salon, Retail o Wholesale</strong>. Los precios se ajustan automáticamente según el nivel.',
+    attachTo: { element: '#level-select', on: 'bottom' },
+  });
+
+  tour.addStep({
+    id: 'nueva-orden-marcas',
+    title: '🏷️ Selección de productos',
+    text: 'Selecciona una marca para filtrar productos, luego la categoría y finalmente el producto. Puedes arrastrar horizontalmente para ver más marcas.',
+    attachTo: { element: '#brand-options', on: 'top' },
+    when: { show() { showTab('vendedor'); } }
+  });
+
+  tour.addStep({
+    id: 'test-mode',
+    title: '🧪 Modo prueba',
+    text: 'Activa el modo prueba para crear órdenes de práctica que no afecten tus reportes. Puedes borrarlas desde la pestaña Admin.',
+    attachTo: { element: '#test-mode-banner-order', on: 'bottom' },
+    when: { show() { document.getElementById('test-mode-banner-order').style.display = 'flex'; } },
+    buttons: [
+      { text: '← Anterior', action() { tour.back(); document.getElementById('test-mode-banner-order').style.display = 'none'; }, secondary: true },
+      { text: 'Siguiente →', action() { tour.next(); document.getElementById('test-mode-banner-order').style.display = 'none'; } }
+    ]
+  });
+
+  tour.addStep({
+    id: 'admin-tab',
+    title: '📋 Pestaña Admin',
+    text: 'Aquí ves todas las órdenes de clientes. Puedes cambiar el status, ver el detalle, editar e imprimir el invoice.',
+    attachTo: { element: '#tab-admin-btn', on: 'bottom' },
+    when: { show() { showTab('admin'); } }
+  });
+
+  tour.addStep({
+    id: 'orders-list',
+    title: '📦 Lista de órdenes',
+    text: 'Cada tarjeta muestra el cliente, productos, total y status. Usa el selector de status para actualizar el progreso de cada orden.',
+    attachTo: { element: '#orders-list', on: 'top' },
+  });
+
+  tour.addStep({
+    id: 'delivery-tab',
+    title: '🚚 Reparto',
+    text: 'Muestra las órdenes listas para entregar con la dirección de cada cliente. El botón <strong>🗺️ Ver ruta completa</strong> abre Google Maps con todas las paradas.',
+    attachTo: { element: '#tab-delivery-btn', on: 'bottom' },
+    when: { show() { showTab('delivery'); } }
+  });
+
+  tour.addStep({
+    id: 'suppliers-tab',
+    title: '🏭 Proveedores',
+    text: 'Gestiona tus proveedores y crea órdenes de compra. Cuando recibas un pedido puedes marcarlo producto por producto para llevar el control.',
+    attachTo: { element: '#tab-suppliers-btn', on: 'bottom' },
+    when: { show() { showTab('suppliers'); } }
+  });
+
+  tour.addStep({
+    id: 'sellers-tab',
+    title: '💰 Vendedores',
+    text: 'Reportes de comisiones y metas por vendedor. Cambia entre vista <strong>Semana</strong> y <strong>Mes</strong> para ver ventas por vendedor, marca, categoría y clientes top.',
+    attachTo: { element: '#tab-sellers-btn', on: 'bottom' },
+    when: { show() { showTab('sellers'); } }
+  });
+
+  tour.addStep({
+    id: 'help-btn',
+    title: '❓ Volver a ver el tutorial',
+    text: 'Puedes repetir este tutorial en cualquier momento tocando el botón <strong>?</strong> en la esquina superior derecha.',
+    attachTo: { element: '#help-btn', on: 'bottom' },
+    when: { show() { showTab('vendedor'); } },
+    buttons: lastStep(tour)
+  });
+
+  tour.on('complete', () => {
+    localStorage.setItem('lucyglam_tour_done_admin', '1');
+    activeTour = null;
+  });
+  tour.on('cancel', () => { activeTour = null; });
+
+  tour.start();
+}
+
+// ── TOUR SELLER ───────────────────────────────────────────────
+function startSellerTour() {
+  showTab('vendedor');
+
+  const tour = shepherdDefaults();
+  activeTour = tour;
+
+  tour.addStep({
+    id: 'bienvenida',
+    title: '👋 Bienvenido a LucyGlam',
+    text: 'Este tutorial te guiará por las funciones que tienes disponibles. Puedes volver a verlo en cualquier momento con el botón <strong>?</strong>.',
+    buttons: [{ text: 'Comenzar →', action() { tour.next(); } }]
+  });
+
+  tour.addStep({
+    id: 'seller-name',
+    title: '👤 Tu nombre',
+    text: 'Tu nombre de vendedor aparece automáticamente. Todas las órdenes que crees quedarán registradas a tu nombre.',
+    attachTo: { element: '#seller-name', on: 'bottom' },
+  });
+
+  tour.addStep({
+    id: 'cliente',
+    title: '🔍 Datos del cliente',
+    text: 'Busca un cliente existente o llena los datos manualmente. El nivel del cliente determina el precio que ve.',
+    attachTo: { element: '#client-search', on: 'bottom' },
+  });
+
+  tour.addStep({
+    id: 'marcas',
+    title: '🏷️ Agregar productos',
+    text: 'Selecciona una marca, luego la categoría y el producto. Puedes arrastrar las marcas horizontalmente para ver más.',
+    attachTo: { element: '#brand-options', on: 'top' },
+  });
+
+  tour.addStep({
+    id: 'gratis',
+    title: '🎁 Productos gratis',
+    text: 'Cuando agregues un producto a la orden puedes marcar el checkbox <strong>Gratis</strong> para que salga sin costo en el invoice.',
+    attachTo: { element: '#product-lines', on: 'top' },
+  });
+
+  tour.addStep({
+    id: 'prueba',
+    title: '🧪 Modo prueba',
+    text: 'Usa este botón para practicar sin afectar las ventas reales. Las órdenes de prueba no cuentan en tus comisiones.',
+    attachTo: { element: '#test-mode-banner-order', on: 'bottom' },
+    when: { show() { document.getElementById('test-mode-banner-order').style.display = 'flex'; } },
+    buttons: [
+      { text: '← Anterior', action() { tour.back(); document.getElementById('test-mode-banner-order').style.display = 'none'; }, secondary: true },
+      { text: 'Siguiente →', action() { tour.next(); document.getElementById('test-mode-banner-order').style.display = 'none'; } }
+    ]
+  });
+
+  tour.addStep({
+    id: 'caja',
+    title: '💳 Caja (POS)',
+    text: 'La Caja es para ventas rápidas en persona. Agrega productos tocando sobre ellos y ajusta las cantidades en el carrito.',
+    attachTo: { element: '#tab-pos-btn', on: 'bottom' },
+    when: { show() { showTab('pos'); } }
+  });
+
+  tour.addStep({
+    id: 'progreso',
+    title: '📈 Mi Progreso',
+    text: 'Aquí ves tus ventas de la semana, tu comisión del 20% y qué tan cerca estás de la meta de $2,500 para el bono extra.',
+    attachTo: { element: '#tab-miprogreso-btn', on: 'bottom' },
+    when: { show() { showTab('miprogreso'); } },
+    buttons: lastStep(tour)
+  });
+
+  tour.on('complete', () => {
+    localStorage.setItem('lucyglam_tour_done_seller', '1');
+    activeTour = null;
+    showTab('vendedor');
+  });
+  tour.on('cancel', () => { activeTour = null; showTab('vendedor'); });
+
+  tour.start();
+}
+
+// Auto-start on first login
+function checkAndStartTour() {
+  const key = isAdmin ? 'lucyglam_tour_done_admin' : 'lucyglam_tour_done_seller';
+  if (!localStorage.getItem(key)) {
+    setTimeout(() => startTour(), 800);
+  }
 }

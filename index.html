@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kuul Orders</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/css/shepherd.css">
+  <script src="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/js/shepherd.min.js"></script>
   </head>
 <body>
 
@@ -17,6 +19,7 @@
         <span class="logo-text">LucyGlam <span>Beauty</span></span>
       </div>
       <button class="logout-btn" id="logout-btn" onclick="doLogout()" style="display:none;">Cerrar sesión</button>
+      <button id="help-btn" onclick="startTour()" style="display:none; width:32px; height:32px; border-radius:50%; border:2px solid var(--gold); background:none; color:var(--gold); font-size:16px; font-weight:700; cursor:pointer; margin-left:8px;">?</button>
     </div>
   </header>
 
