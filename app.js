@@ -1129,11 +1129,21 @@ window.loadCatalog = async function loadCatalog() {
   if (!list) return;
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
   try {
-    const allProds = await supabase('products?select=*&order=brand,category,name');
+    const [allProds, altBarcodes] = await Promise.all([
+      supabase('products?select=*&order=brand,category,name'),
+      supabase('product_barcodes?select=product_id,barcode').catch(() => [])
+    ]);
     if (!allProds || allProds.length === 0) {
       list.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div>No hay productos</div>`;
       return;
     }
+    // Attach alt_barcodes to each product
+    const bcMap = {};
+    (altBarcodes || []).forEach(b => {
+      if (!bcMap[b.product_id]) bcMap[b.product_id] = [];
+      bcMap[b.product_id].push(b.barcode);
+    });
+    allProds.forEach(p => { p.alt_barcodes = bcMap[p.id] || []; });
     allProds.sort((a,b) => a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name));
     window._catalogProducts = allProds;
     window._catalogBrand = '';
