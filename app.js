@@ -401,7 +401,7 @@ async function loadProfileAndApply(token, uid, errEl) {
   }
 
   // Render brand options now that products are loaded
-  if (typeof renderBrandOptions === 'function') renderBrandOptions();
+  if (typeof initSteppedSelector === 'function') initSteppedSelector();
 
   if (isAdmin) {
     showAdminView();
@@ -2728,7 +2728,7 @@ function showTab(name) {
   if (name === 'miprogreso') initMiProgreso();
   if (name === 'suppliers') initSuppliersTab();
   if (name === 'vendedor' && (!PRODUCTS || PRODUCTS.length === 0)) {
-    dbFetchProducts().then(prods => { PRODUCTS = prods; if (typeof renderBrandOptions === 'function') renderBrandOptions(); }).catch(()=>{});
+    dbFetchProducts().then(prods => { PRODUCTS = prods; if (typeof initSteppedSelector === 'function') initSteppedSelector(); }).catch(()=>{});
   }
   if (name === 'delivery') loadDeliveryOrders();
   if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
