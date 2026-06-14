@@ -61,14 +61,34 @@ async function supabase(path, options = {}) {
 }
 
 async function dbFetchProducts() {
-  const prods = await supabase('products?select=*&active=eq.true');
-  return prods.sort((a, b) => {
+  const [prods, altBarcodes] = await Promise.all([
+    supabase('products?select=*&active=eq.true'),
+    supabase('product_barcodes?select=product_id,barcode').catch(() => [])
+  ]);
+  // Attach alternate barcodes array to each product
+  const barcodeMap = {};
+  (altBarcodes || []).forEach(b => {
+    if (!barcodeMap[b.product_id]) barcodeMap[b.product_id] = [];
+    barcodeMap[b.product_id].push(b.barcode);
+  });
+  const result = prods.map(p => ({ ...p, alt_barcodes: barcodeMap[p.id] || [] }));
+  return result.sort((a, b) => {
     if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
     const aCode = parseFloat(a.color_code) || 999;
     const bCode = parseFloat(b.color_code) || 999;
     if (aCode !== bCode) return aCode - bCode;
     return a.name.localeCompare(b.name);
   });
+}
+
+// Helper: find product by any barcode (primary or alternate)
+function findProductByBarcode(barcode) {
+  if (!barcode) return null;
+  const bc = String(barcode).trim();
+  return PRODUCTS.find(p =>
+    String(p.barcode).trim() === bc ||
+    (p.alt_barcodes || []).some(ab => String(ab).trim() === bc)
+  ) || null;
 }
 
 async function dbInsertOrder(order) {
@@ -156,7 +176,7 @@ function addProductLine(barcode = '', qty = 1) {
   div.className = 'product-row';
   div.id = 'line-' + id;
   div.dataset.barcode = barcode;
-  const product = PRODUCTS.find(p => p.barcode === barcode);
+  const product = findProductByBarcode(barcode);
   const price = product ? getPrice(product) : 0;
   const label = product ? `${product.brand} [${product.color_code || '—'}] ${product.name} — $${price.toFixed(2)}` : '';
   const priceLabel = price > 0 ? `$${price.toFixed(2)}` : '';
@@ -199,7 +219,7 @@ function toggleFree(id) {
   const row = document.getElementById('line-' + id);
   if (!row) return;
   const barcode = row.dataset.barcode;
-  const product = PRODUCTS.find(p => p.barcode === barcode);
+  const product = findProductByBarcode(barcode);
   if (freeCheck && freeCheck.checked) {
     if (priceLabel) { priceLabel.textContent = 'FREE'; priceLabel.style.color = '#16a34a'; }
     row.style.borderColor = '#bbf7d0';
@@ -241,7 +261,7 @@ function recalcTotal() {
     const qty = row.querySelector('input[type=number]');
     const barcode = row.dataset.barcode;
     if (barcode && qty) {
-      const product = PRODUCTS.find(p => p.barcode === barcode);
+      const product = findProductByBarcode(barcode);
       if (product) {
         const lineId = row.id.replace('line-', '');
         const freeCheck = document.getElementById(`free-${lineId}`);
@@ -586,7 +606,7 @@ async function submitOrder() {
     const qty = row.querySelector('input[type=number]');
     const barcode = row.dataset.barcode;
     if (barcode && qty) {
-      const product = PRODUCTS.find(p => p.barcode === barcode);
+      const product = findProductByBarcode(barcode);
       const q = parseInt(qty.value) || 0;
       if (product && q > 0) {
         const freeCheck = row.querySelector('input[type=checkbox]');
@@ -1098,6 +1118,8 @@ document.addEventListener('click', e => {
 
 // ── Catalog ───────────────────────────────────────────────────
 let editingProductId = null;
+let _altBarcodesOriginal = []; // barcodes already saved in DB
+let _altBarcodesPending  = []; // barcodes added this session (not yet saved)
 let catalogFilter = 'all';
 
 window.loadCatalog = async function loadCatalog() {
@@ -1275,6 +1297,8 @@ function editProduct(id) {
   const p = (window._catalogProducts || []).find(p => p.id === id);
   if (!p) return;
   editingProductId = id;
+  _altBarcodesOriginal = [...(p.alt_barcodes || [])];
+  _altBarcodesPending  = [];
   document.getElementById('product-modal-title').textContent = 'Editar producto';
   document.getElementById('pm-brand').value = p.brand || '';
   document.getElementById('pm-category').value = p.category || '';
@@ -1287,11 +1311,15 @@ function editProduct(id) {
   const wsPrice = p.price && p.discount_wholesale ? (p.price * (1 - p.discount_wholesale / 100)).toFixed(4) : '';
   document.getElementById('pm-price-wholesale').value = wsPrice ? parseFloat(wsPrice) : '';
   document.getElementById('pm-active').checked = p.active !== false;
+  document.getElementById('pm-alt-barcodes-section').style.display = 'block';
+  renderAltBarcodes();
   document.getElementById('product-modal').style.display = 'flex';
 }
 
 function openAddProduct() {
   editingProductId = null;
+  _altBarcodesOriginal = [];
+  _altBarcodesPending  = [];
   document.getElementById('product-modal-title').textContent = 'Nuevo producto';
   document.getElementById('pm-brand').value = '';
   document.getElementById('pm-category').value = '';
@@ -1304,6 +1332,7 @@ function openAddProduct() {
   document.getElementById('pm-discount-wholesale').value = '';
   document.getElementById('pm-active').value = 'true';
   document.getElementById('pm-error').textContent = '';
+  document.getElementById('pm-alt-barcodes-section').style.display = 'none';
   document.getElementById('product-modal').style.display = 'flex';
 }
 
@@ -1311,6 +1340,8 @@ function openEditProduct(id) {
   const p = PRODUCTS.find(x => x.id === id) || window._catalogProducts?.find(x => x.id === id);
   if (!p) return;
   editingProductId = id;
+  _altBarcodesOriginal = [...(p.alt_barcodes || [])];
+  _altBarcodesPending  = [];
   document.getElementById('product-modal-title').textContent = 'Editar producto';
   document.getElementById('pm-brand').value = p.brand;
   document.getElementById('pm-category').value = p.category || '';
@@ -1323,12 +1354,16 @@ function openEditProduct(id) {
   document.getElementById('pm-discount-wholesale').value = p.discount_wholesale || '';
   document.getElementById('pm-active').value = p.active ? 'true' : 'false';
   document.getElementById('pm-error').textContent = '';
+  document.getElementById('pm-alt-barcodes-section').style.display = 'block';
+  renderAltBarcodes();
   document.getElementById('product-modal').style.display = 'flex';
 }
 
 function closeProductModal() {
   document.getElementById('product-modal').style.display = 'none';
   editingProductId = null;
+  _altBarcodesOriginal = [];
+  _altBarcodesPending  = [];
 }
 
 function calcSalonPrice() {
@@ -1337,6 +1372,59 @@ function calcSalonPrice() {
   if (retail > 0 && discount > 0) {
     document.getElementById('pm-price').value = (retail * (1 - discount/100)).toFixed(2);
   }
+}
+
+function renderAltBarcodes() {
+  const list = document.getElementById('pm-alt-barcode-list');
+  if (!list) return;
+  const all = [
+    ..._altBarcodesOriginal.map(bc => ({ bc, saved: true })),
+    ..._altBarcodesPending.map(bc => ({ bc, saved: false }))
+  ];
+  if (!all.length) {
+    list.innerHTML = '<div style="padding:10px 12px; font-size:13px; color:var(--text-faint);">Sin barcodes alternativos aún</div>';
+    return;
+  }
+  list.innerHTML = all.map(({ bc, saved }) => `
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--border); font-size:13px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:11px; padding:2px 8px; border-radius:var(--radius); background:${saved ? '#EAF3DE' : '#E6F1FB'}; color:${saved ? '#27500A' : '#0C447C'};">${saved ? 'Guardado' : 'Nuevo'}</span>
+        <span style="font-family:monospace;">${bc}</span>
+      </div>
+      <button type="button" onclick="removeAltBarcode('${bc}',${saved})" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:18px; line-height:1; padding:2px 6px; border-radius:4px;" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='var(--text-muted)'">×</button>
+    </div>
+  `).join('');
+}
+
+function addAltBarcode() {
+  const input = document.getElementById('pm-new-barcode');
+  const bc = input.value.trim();
+  if (!bc) return;
+  const mainBarcode = document.getElementById('pm-barcode').value.trim();
+  if (bc === mainBarcode) { showToast('⚠️ Es el mismo que el barcode principal'); input.value = ''; return; }
+  if (_altBarcodesOriginal.includes(bc) || _altBarcodesPending.includes(bc)) {
+    showToast('⚠️ Ese barcode ya está en la lista'); input.value = ''; return;
+  }
+  _altBarcodesPending.push(bc);
+  input.value = '';
+  renderAltBarcodes();
+}
+
+async function removeAltBarcode(bc, isSaved) {
+  if (isSaved) {
+    if (!confirm(`¿Eliminar el barcode ${bc}? Los movimientos de inventario con este código quedarán sin nombre.`)) return;
+    try {
+      await supabase(`product_barcodes?product_id=eq.${editingProductId}&barcode=eq.${encodeURIComponent(bc)}`, { method: 'DELETE' });
+      _altBarcodesOriginal = _altBarcodesOriginal.filter(x => x !== bc);
+      // Update in-memory product too
+      const p = PRODUCTS.find(x => x.id === editingProductId);
+      if (p) p.alt_barcodes = p.alt_barcodes.filter(x => x !== bc);
+      showToast('✓ Barcode eliminado');
+    } catch(e) { showToast('❌ Error al eliminar'); return; }
+  } else {
+    _altBarcodesPending = _altBarcodesPending.filter(x => x !== bc);
+  }
+  renderAltBarcodes();
 }
 
 async function saveProduct() {
@@ -1377,6 +1465,16 @@ async function saveProduct() {
       await supabase(`products?id=eq.${editingProductId}`, { method: 'PATCH', body: JSON.stringify(data) });
     } else {
       await supabase('products', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(data) });
+    }
+    // Save any pending alt barcodes
+    if (_altBarcodesPending.length > 0) {
+      const pid = editingProductId || (await supabase('products?select=id&order=id.desc&limit=1').then(r => r[0]?.id));
+      if (pid) {
+        const rows = _altBarcodesPending.map(bc => ({ product_id: pid, barcode: bc }));
+        await supabase('product_barcodes', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(rows) }).catch(e => {
+          console.warn('Some alt barcodes could not be saved (may already exist):', e);
+        });
+      }
     }
     closeProductModal();
     showToast('✓ Producto guardado');
@@ -1499,7 +1597,7 @@ function renderPOSProducts(products) {
 }
 
 function posAddProduct(barcode) {
-  const product = PRODUCTS.find(p => p.barcode === barcode);
+  const product = findProductByBarcode(barcode);
   if (!product) return;
   const existing = posCart.find(c => c.barcode === barcode);
   if (existing) {
@@ -1520,7 +1618,7 @@ function posChangeQty(barcode, delta) {
   if (item.qty === 0) {
     posCart = posCart.filter(c => c.barcode !== barcode);
   } else {
-    const product = PRODUCTS.find(p => p.barcode === barcode);
+    const product = findProductByBarcode(barcode);
     item.price = product ? getPrice(product) : item.price;
     item.subtotal = item.is_free ? 0 : item.price * item.qty;
   }
@@ -1534,7 +1632,7 @@ function posSetQty(barcode, qty) {
   if (qty <= 0) { posCart = posCart.filter(c => c.barcode !== barcode); }
   else {
     item.qty = qty;
-    const product = PRODUCTS.find(p => p.barcode === barcode);
+    const product = findProductByBarcode(barcode);
     item.price = product ? getPrice(product) : item.price;
     item.subtotal = item.is_free ? 0 : item.price * item.qty;
   }
@@ -1699,7 +1797,7 @@ function posScanBarcode(e) {
   if (e.key !== 'Enter') return;
   const barcode = document.getElementById('pos-search').value.trim();
   document.getElementById('pos-search').value = '';
-  const product = PRODUCTS.find(p => p.barcode === barcode);
+  const product = findProductByBarcode(barcode);
   if (product) {
     posAddProduct(barcode);
     showToast(`✓ ${product.name} agregado`);
@@ -2795,7 +2893,7 @@ function closeScanner() {
 }
 
 function handleScannedCode(barcode) {
-  const product = PRODUCTS.find(p => p.barcode === barcode);
+  const product = findProductByBarcode(barcode);
   if (!product) {
     showToast('⚠️ Producto no encontrado: ' + barcode);
     return;
@@ -4431,7 +4529,7 @@ function renderPOProductSelector() {
 }
 
 function addPOLine(barcode) {
-  const product = PRODUCTS.find(p => p.barcode === barcode);
+  const product = findProductByBarcode(barcode);
   if (!product) return;
   const existing = poLines.find(l => l.barcode === barcode);
   if (existing) { existing.qty++; existing.subtotal = existing.cost * existing.qty; }
@@ -5182,7 +5280,7 @@ async function handleReorderFile(input) {
     const start = new Date(); start.setDate(start.getDate() - 30);
     const orders = await supabase(`orders?created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}&is_test=eq.false&status=neq.Cancelada&select=lines`).catch(() => []);
 
-    // Build sales map from orders
+    // Build sales map from orders (keyed by product id for accuracy across barcode changes)
     const salesMap = {};
     (orders || []).forEach(o => {
       (o.lines || []).forEach(l => {
@@ -5191,12 +5289,20 @@ async function handleReorderFile(input) {
         salesMap[key] += parseInt(l.qty || 0);
       });
     });
+    // Also build a product-id-keyed sales map to consolidate across barcode changes
+    const salesByProdId = {};
+    Object.keys(salesMap).forEach(bc => {
+      const prod = findProductByBarcode(bc);
+      if (prod) {
+        salesByProdId[prod.id] = (salesByProdId[prod.id] || 0) + salesMap[bc];
+      }
+    });
 
     // Cross-reference with PRODUCTS catalog
     const normalize = s => String(s || '').toLowerCase().replace(/\s+/g,' ').trim();
     const analyzed = inv.map(row => {
       // Find in catalog by barcode first, then by name
-      let prod = PRODUCTS.find(p => String(p.barcode).trim() === row.barcode);
+      let prod = findProductByBarcode(row.barcode);
       if (!prod && row.name) prod = PRODUCTS.find(p => normalize(p.name) === normalize(row.name));
 
       const brand    = prod?.brand || row.brand || '❓ Sin identificar';
@@ -5205,7 +5311,7 @@ async function handleReorderFile(input) {
       const barcode  = prod?.barcode || row.barcode;
 
       // Sales: prefer Excel data (actual sales), fallback to Supabase orders
-      const sold30   = row.sold30 > 0 ? row.sold30 : (salesMap[barcode] || 0);
+      const sold30   = row.sold30 > 0 ? row.sold30 : (prod ? (salesByProdId[prod.id] || salesMap[barcode] || 0) : (salesMap[barcode] || 0));
       const dailySales = sold30 / 30;
 
       // Lead time from supplier whose brands include this brand

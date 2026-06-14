@@ -565,7 +565,7 @@
           <input type="text" id="pm-code" placeholder="Ej: 7.1">
         </div>
         <div class="field-group">
-          <label>Código de barras</label>
+          <label>Código de barras <span class="optional">(principal)</span></label>
           <input type="text" id="pm-barcode" placeholder="Ej: 7501438365004">
         </div>
       </div>
@@ -603,6 +603,19 @@
           <option value="true">Activo</option>
           <option value="false">Inactivo</option>
         </select>
+      </div>
+      <div class="field-group" id="pm-alt-barcodes-section" style="display:none;">
+        <label>Códigos de barras alternativos</label>
+        <div style="background:var(--gold-pale,#fffbeb); border:1px solid var(--gold,#d97706); border-radius:var(--radius); padding:10px 12px; font-size:12px; color:#92400e; margin-bottom:8px; display:flex; gap:8px; align-items:flex-start;">
+          <span>⚠️</span>
+          <span>Agrega aquí barcodes anteriores o alternativos. La app los reconocerá igual que el principal en órdenes, POS, scanner y análisis de reposición.</span>
+        </div>
+        <div id="pm-alt-barcode-list" style="border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:8px;"></div>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="pm-new-barcode" placeholder="Nuevo barcode o escanear..." style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addAltBarcode();}">
+          <button type="button" onclick="addAltBarcode()" style="padding:0 14px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; font-size:13px; white-space:nowrap;">+ Agregar</button>
+        </div>
+        <div style="font-size:11px; color:var(--text-faint); margin-top:5px;">📷 También puedes escanear con la pistola lectora directo en el campo</div>
       </div>
       <div id="pm-error" style="font-size:13px; color:var(--danger); margin-bottom:8px;"></div>
       <button class="submit-btn" id="pm-save-btn" onclick="saveProduct()">Guardar producto →</button>
