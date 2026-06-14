@@ -4166,16 +4166,21 @@ let currentPO = null;
 
 function setSuppliersView(view) {
   suppliersView = view;
-  const poBtn   = document.getElementById('suppliers-view-po-btn');
-  const listBtn = document.getElementById('suppliers-view-list-btn');
+  const poBtn      = document.getElementById('suppliers-view-po-btn');
+  const listBtn    = document.getElementById('suppliers-view-list-btn');
+  const reorderBtn = document.getElementById('suppliers-view-reorder-btn');
+  const btns = [poBtn, listBtn, reorderBtn];
+  btns.forEach(b => { if(b) { b.style.background='none'; b.style.color='var(--text-muted)'; b.style.border='1px solid var(--border)'; }});
+
   if (view === 'po') {
-    poBtn.style.background = 'var(--gold)'; poBtn.style.color = '#fff'; poBtn.style.border = 'none';
-    listBtn.style.background = 'none'; listBtn.style.color = 'var(--text-muted)'; listBtn.style.border = '1px solid var(--border)';
+    if(poBtn) { poBtn.style.background='var(--gold)'; poBtn.style.color='#fff'; poBtn.style.border='none'; }
     renderPOList();
-  } else {
-    listBtn.style.background = 'var(--gold)'; listBtn.style.color = '#fff'; listBtn.style.border = 'none';
-    poBtn.style.background = 'none'; poBtn.style.color = 'var(--text-muted)'; poBtn.style.border = '1px solid var(--border)';
+  } else if (view === 'list') {
+    if(listBtn) { listBtn.style.background='var(--gold)'; listBtn.style.color='#fff'; listBtn.style.border='none'; }
     renderSupplierList();
+  } else if (view === 'reorder') {
+    if(reorderBtn) { reorderBtn.style.background='var(--gold)'; reorderBtn.style.color='#fff'; reorderBtn.style.border='none'; }
+    renderReorderView();
   }
 }
 
@@ -4240,6 +4245,7 @@ function renderSupplierList() {
         ${s.contact ? `<div class="order-meta">👤 ${s.contact}</div>` : ''}
         ${s.phone ? `<div class="order-meta">📞 ${s.phone}</div>` : ''}
         ${s.email ? `<div class="order-meta">✉️ ${s.email}</div>` : ''}
+        <div class="order-meta">⏱️ Lead time: <strong>${s.lead_time_days || 7} días</strong></div>
         ${s.notes ? `<div class="order-meta">📝 ${s.notes}</div>` : ''}
         <div style="display:flex; gap:8px; margin-top:10px;">
           <button onclick="openEditSupplier(${s.id})" class="contact-btn" style="border:1px solid var(--border); color:var(--text-muted); background:none; cursor:pointer; font-family:inherit;">✏️ Editar</button>
@@ -4279,7 +4285,14 @@ function showSupplierModal(supplier) {
           </label>`).join('')}
         </div>
       </div>
-      <div class="field-group"><label>Notas</label><input type="text" id="sup-notes" value="${supplier?.notes||''}"></div>
+      <div class="row2">
+        <div class="field-group">
+          <label>Lead time (días)</label>
+          <input type="number" id="sup-lead-time" value="${supplier?.lead_time_days||7}" min="1" max="90" style="margin-top:4px;">
+          <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Días que tarda en llegar el pedido</div>
+        </div>
+        <div class="field-group"><label>Notas</label><input type="text" id="sup-notes" value="${supplier?.notes||''}"></div>
+      </div>
       <div style="display:flex; gap:8px; margin-top:16px;">
         <button onclick="saveSupplier(${isEdit ? supplier.id : 'null'})" class="submit-btn" style="flex:1; margin:0;">Guardar</button>
         <button onclick="document.getElementById('supplier-modal').remove()" class="cancel-btn" style="flex:1;">Cancelar</button>
@@ -4297,7 +4310,8 @@ async function saveSupplier(id) {
     contact: document.getElementById('sup-contact').value.trim(),
     phone:   document.getElementById('sup-phone').value.trim(),
     email:   document.getElementById('sup-email').value.trim(),
-    notes:   document.getElementById('sup-notes').value.trim()
+    notes:   document.getElementById('sup-notes').value.trim(),
+    lead_time_days: parseInt(document.getElementById('sup-lead-time').value) || 7
   };
   try {
     if (id) {
@@ -5105,4 +5119,338 @@ function checkAndStartTour() {
   if (!localStorage.getItem(key)) {
     setTimeout(() => startTour(), 800);
   }
+}
+
+// ── ANÁLISIS DE REPOSICIÓN ────────────────────────────────────
+let reorderData = null; // parsed Excel data
+let reorderResults = null; // analysis results
+let reorderSelected = new Set(); // selected barcodes
+
+function renderReorderView() {
+  const container = document.getElementById('suppliers-container');
+  container.innerHTML = `
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; margin-bottom:16px;">
+      <div style="font-size:15px; font-weight:700; margin-bottom:6px;">📊 Análisis de Reposición de Inventario</div>
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+        Sube tu archivo de inventario (mismo formato que siempre: barcode, quantity, sold last 30 days, brand, category, code, name). La app calculará qué necesitas ordenar basándose en las ventas reales y el lead time de cada proveedor.
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px; padding:10px 18px; background:var(--gold); color:#fff; border-radius:var(--radius); font-size:14px; font-weight:600; cursor:pointer;">
+          📁 Subir inventario (.xlsx)
+          <input type="file" accept=".xlsx,.xls,.csv" onchange="handleReorderFile(this)" style="display:none;">
+        </label>
+        <div style="font-size:12px; color:var(--text-muted);">Período de revisión: <strong>7 días</strong> · Buffer de seguridad: <strong>20%</strong></div>
+      </div>
+    </div>
+    <div id="reorder-results"></div>`;
+}
+
+async function handleReorderFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const resultsDiv = document.getElementById('reorder-results');
+  resultsDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Analizando inventario...</div>';
+
+  try {
+    // Read Excel with SheetJS
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+    if (!rows.length) { resultsDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Archivo vacío o formato incorrecto</div>'; return; }
+
+    // Normalize rows
+    const inv = rows.map(r => {
+      const keys = Object.keys(r).map(k => k.toLowerCase().trim());
+      const get = (...names) => {
+        for (const n of names) {
+          const k = Object.keys(r).find(k => k.toLowerCase().trim().includes(n));
+          if (k !== undefined) return r[k];
+        }
+        return '';
+      };
+      return {
+        barcode:  String(get('barcode','codigo','code') || '').replace('.0','').trim(),
+        qty:      parseFloat(get('quantity','stock','qty','cantidad') || 0),
+        sold30:   parseFloat(get('sold','vendido','ventas') || 0),
+        brand:    String(get('brand','marca') || '').trim(),
+        category: String(get('category','categoria') || '').trim(),
+        code:     String(get('color','code','codigo') || '').trim(),
+        name:     String(get('name','nombre') || '').trim(),
+      };
+    }).filter(r => r.barcode || r.name);
+
+    // Get sales from Supabase (last 30 days) for cross-reference
+    const end = new Date();
+    const start = new Date(); start.setDate(start.getDate() - 30);
+    const orders = await supabase(`orders?created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}&is_test=eq.false&status=neq.Cancelada&select=lines`).catch(() => []);
+
+    // Build sales map from orders
+    const salesMap = {};
+    (orders || []).forEach(o => {
+      (o.lines || []).forEach(l => {
+        const key = l.barcode || l.code;
+        if (!salesMap[key]) salesMap[key] = 0;
+        salesMap[key] += parseInt(l.qty || 0);
+      });
+    });
+
+    // Cross-reference with PRODUCTS catalog
+    const normalize = s => String(s || '').toLowerCase().replace(/\s+/g,' ').trim();
+    const analyzed = inv.map(row => {
+      // Find in catalog by barcode first, then by name
+      let prod = PRODUCTS.find(p => String(p.barcode).trim() === row.barcode);
+      if (!prod && row.name) prod = PRODUCTS.find(p => normalize(p.name) === normalize(row.name));
+
+      const brand    = prod?.brand || row.brand || '❓ Sin identificar';
+      const name     = prod?.name  || row.name  || '❓ Sin nombre';
+      const code     = prod?.color_code || row.code || '';
+      const barcode  = prod?.barcode || row.barcode;
+
+      // Sales: prefer Excel data (actual sales), fallback to Supabase orders
+      const sold30   = row.sold30 > 0 ? row.sold30 : (salesMap[barcode] || 0);
+      const dailySales = sold30 / 30;
+
+      // Lead time from supplier whose brands include this brand
+      const supplier = allSuppliers.find(s => (s.brands || []).some(b => normalize(b) === normalize(brand)));
+      const leadTime = supplier?.lead_time_days || 7;
+      const supplierName = supplier?.name || null;
+      const supplierId   = supplier?.id   || null;
+
+      // Review period = 7 days
+      const reviewPeriod = 7;
+      // Days of stock remaining
+      const daysOfStock = dailySales > 0 ? row.qty / dailySales : 999;
+      // Quantity to order = (daily × (review + lead)) × 1.20 buffer - current stock
+      const targetQty = Math.ceil(dailySales * (reviewPeriod + leadTime) * 1.20);
+      const orderQty  = Math.max(0, targetQty - row.qty);
+
+      // Priority
+      let priority, priorityColor, priorityBg;
+      if (row.qty < 0 || daysOfStock < 7) {
+        priority = '🔴 Urgente'; priorityColor = '#dc2626'; priorityBg = '#fff5f5';
+      } else if (daysOfStock < 14) {
+        priority = '🟠 Alta'; priorityColor = '#d97706'; priorityBg = '#fffbeb';
+      } else if (daysOfStock < 30) {
+        priority = '🟡 Media'; priorityColor = '#ca8a04'; priorityBg = '#fefce8';
+      } else {
+        priority = '🟢 OK'; priorityColor = '#16a34a'; priorityBg = '#f0fdf4';
+      }
+
+      return { barcode, brand, name, code, qty: row.qty, sold30, dailySales, leadTime, supplierName, supplierId, daysOfStock, orderQty, priority, priorityColor, priorityBg, needsOrder: orderQty > 0 };
+    });
+
+    // Only items that need ordering, sorted by priority then sold30
+    const priorityOrder = { '🔴 Urgente': 0, '🟠 Alta': 1, '🟡 Media': 2, '🟢 OK': 3 };
+    const toOrder = analyzed.filter(r => r.needsOrder).sort((a, b) =>
+      priorityOrder[a.priority] - priorityOrder[b.priority] || b.sold30 - a.sold30
+    );
+
+    reorderResults = toOrder;
+    reorderSelected = new Set(toOrder.map(r => r.barcode));
+    renderReorderResults(toOrder);
+
+  } catch(e) {
+    console.error(e);
+    resultsDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Error procesando el archivo. Verifica el formato.</div>';
+  }
+}
+
+function renderReorderResults(items) {
+  const container = document.getElementById('reorder-results');
+  if (!items || !items.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div>¡Inventario OK! No hay productos urgentes por ordenar.</div>';
+    return;
+  }
+
+  // Group by brand
+  const byBrand = {};
+  items.forEach(r => {
+    if (!byBrand[r.brand]) byBrand[r.brand] = [];
+    byBrand[r.brand].push(r);
+  });
+
+  const priorityOrder = { '🔴 Urgente': 0, '🟠 Alta': 1, '🟡 Media': 2, '🟢 OK': 3 };
+  const brands = Object.keys(byBrand).sort((a, b) => {
+    const topA = Math.min(...byBrand[a].map(r => priorityOrder[r.priority]));
+    const topB = Math.min(...byBrand[b].map(r => priorityOrder[r.priority]));
+    return topA - topB;
+  });
+
+  let html = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <div style="font-size:13px; color:var(--text-muted);">${items.length} productos necesitan reposición · <span id="selected-count">${reorderSelected.size}</span> seleccionados</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button onclick="selectAllReorder(true)" style="padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:12px; cursor:pointer; background:none; color:var(--text); font-family:inherit;">✅ Seleccionar todo</button>
+        <button onclick="selectAllReorder(false)" style="padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:12px; cursor:pointer; background:none; color:var(--text); font-family:inherit;">☐ Deseleccionar todo</button>
+        <button onclick="createPOFromReorder()" style="padding:6px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📋 Crear orden de compra</button>
+      </div>
+    </div>`;
+
+  brands.forEach(brand => {
+    const rows = byBrand[brand];
+    const supplier = rows[0].supplierName;
+    const totalOrder = rows.reduce((s, r) => s + r.orderQty, 0);
+    const topPriority = rows[0].priority;
+    const leadTime = rows[0].leadTime;
+
+    html += `
+    <div style="border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:16px;">
+      <!-- Brand header -->
+      <div style="background:var(--surface-2); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div>
+          <div style="font-size:14px; font-weight:700; color:var(--text);">${brand}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+            ${supplier ? `🏭 ${supplier} · ⏱️ ${leadTime} días lead time` : '⚠️ Sin proveedor asignado · ⏱️ ${leadTime} días (default)'}
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:12px; font-weight:700; color:${rows[0].priorityColor};">${topPriority}</span>
+          <span style="font-size:12px; color:var(--text-muted);">${rows.length} productos · ~${totalOrder} uds totales</span>
+        </div>
+      </div>
+      <!-- Products table -->
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="background:var(--surface); border-bottom:1px solid var(--border);">
+            <th style="padding:8px 12px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--text-muted); width:36px;">✓</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Producto</th>
+            <th style="padding:8px 12px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Stock</th>
+            <th style="padding:8px 12px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Vendido 30d</th>
+            <th style="padding:8px 12px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Días stock</th>
+            <th style="padding:8px 12px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Prioridad</th>
+            <th style="padding:8px 12px; text-align:center; font-size:10px; text-transform:uppercase; color:var(--text-muted);">Ordenar</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+          <tr id="reorder-row-${r.barcode}" style="border-bottom:1px solid var(--border); background:${reorderSelected.has(r.barcode) ? r.priorityBg : ''}; transition:background 0.2s;">
+            <td style="padding:10px 12px; text-align:center;">
+              <input type="checkbox" ${reorderSelected.has(r.barcode) ? 'checked' : ''} onchange="toggleReorderItem('${r.barcode}', this.checked, '${r.priorityBg}')" style="width:18px; height:18px; accent-color:var(--gold); cursor:pointer;">
+            </td>
+            <td style="padding:10px 12px;">
+              <div style="font-size:13px; font-weight:500; color:var(--text);">${r.name}</div>
+              ${r.code ? `<div style="font-size:11px; color:var(--text-muted);">${r.code}</div>` : ''}
+            </td>
+            <td style="padding:10px 12px; text-align:center; font-size:13px; font-weight:600; color:${r.qty < 0 ? '#dc2626' : 'var(--text)'};">${r.qty}</td>
+            <td style="padding:10px 12px; text-align:center; font-size:13px; color:var(--text);">${r.sold30}</td>
+            <td style="padding:10px 12px; text-align:center; font-size:13px; color:${r.daysOfStock < 7 ? '#dc2626' : r.daysOfStock < 14 ? '#d97706' : 'var(--text)'};">${r.daysOfStock === 999 ? '∞' : Math.round(r.daysOfStock)}</td>
+            <td style="padding:10px 12px; text-align:center;">
+              <span style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:99px; background:${r.priorityBg}; color:${r.priorityColor};">${r.priority}</span>
+            </td>
+            <td style="padding:10px 12px; text-align:center;">
+              <input type="number" value="${r.orderQty}" min="0" style="width:64px; text-align:center; padding:4px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-weight:700;" onchange="updateReorderQty('${r.barcode}', parseInt(this.value)||0)">
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function toggleReorderItem(barcode, checked, bg) {
+  if (checked) reorderSelected.add(barcode);
+  else reorderSelected.delete(barcode);
+  const row = document.getElementById(`reorder-row-${barcode}`);
+  if (row) row.style.background = checked ? bg : '';
+  const cnt = document.getElementById('selected-count');
+  if (cnt) cnt.textContent = reorderSelected.size;
+}
+
+function updateReorderQty(barcode, qty) {
+  const item = reorderResults.find(r => r.barcode === barcode);
+  if (item) item.orderQty = qty;
+}
+
+function selectAllReorder(select) {
+  if (select) reorderResults.forEach(r => reorderSelected.add(r.barcode));
+  else reorderSelected.clear();
+  renderReorderResults(reorderResults);
+}
+
+function createPOFromReorder() {
+  const selected = (reorderResults || []).filter(r => reorderSelected.has(r.barcode) && r.orderQty > 0);
+  if (!selected.length) { showToast('❌ Selecciona al menos un producto'); return; }
+
+  // Group by supplier
+  const bySupplier = {};
+  const noSupplier = [];
+  selected.forEach(r => {
+    if (r.supplierId) {
+      if (!bySupplier[r.supplierId]) bySupplier[r.supplierId] = { name: r.supplierName, id: r.supplierId, items: [] };
+      bySupplier[r.supplierId].items.push(r);
+    } else {
+      noSupplier.push(r);
+    }
+  });
+
+  const supplierGroups = Object.values(bySupplier);
+  const total = supplierGroups.length + (noSupplier.length ? 1 : 0);
+
+  if (total === 0) { showToast('❌ Ningún producto tiene proveedor asignado'); return; }
+
+  // Show modal to choose which supplier group to create PO for
+  const existing = document.getElementById('reorder-po-modal');
+  if (existing) existing.remove();
+
+  document.body.insertAdjacentHTML('beforeend', `
+  <div id="reorder-po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:520px; padding:24px; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+      <div style="font-size:17px; font-weight:700; margin-bottom:6px;">Crear órdenes de compra</div>
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">${selected.length} productos seleccionados, agrupados por proveedor:</div>
+      ${supplierGroups.map(g => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--surface-2);">
+        <div>
+          <div style="font-size:14px; font-weight:600;">${g.name}</div>
+          <div style="font-size:12px; color:var(--text-muted);">${g.items.length} productos · ${g.items.reduce((s,r)=>s+r.orderQty,0)} uds totales</div>
+        </div>
+        <button onclick="createPOForSupplier(${g.id}, '${g.name}')" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📋 Crear OC</button>
+      </div>`).join('')}
+      ${noSupplier.length ? `
+      <div style="padding:12px; border:1px dashed #d97706; border-radius:var(--radius); margin-bottom:8px; background:#fffbeb;">
+        <div style="font-size:13px; font-weight:600; color:#d97706;">⚠️ Sin proveedor asignado (${noSupplier.length} productos)</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Asigna un proveedor a estas marcas para crear la OC automáticamente.</div>
+      </div>` : ''}
+      <button onclick="document.getElementById('reorder-po-modal').remove()" class="cancel-btn" style="width:100%; margin-top:8px;">Cerrar</button>
+    </div>
+  </div>`);
+}
+
+async function createPOForSupplier(supplierId, supplierName) {
+  const selected = (reorderResults || []).filter(r => r.supplierId === supplierId && reorderSelected.has(r.barcode) && r.orderQty > 0);
+  if (!selected.length) return;
+
+  poLines = selected.map(r => ({
+    barcode: r.barcode,
+    brand: r.brand,
+    code: r.code || '—',
+    name: r.name,
+    cost: 0,
+    qty: r.orderQty,
+    subtotal: 0,
+    received: 0
+  }));
+
+  try {
+    await supabase('purchase_orders', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify({
+        supplier_id: supplierId,
+        supplier_name: supplierName,
+        status: 'Borrador',
+        lines: poLines,
+        total: 0,
+        notes: 'Generada automáticamente desde análisis de reposición',
+        created_by: currentUser?.name || ''
+      })
+    });
+    document.getElementById('reorder-po-modal')?.remove();
+    await initSuppliersTab();
+    setSuppliersView('po');
+    showToast(`✓ OC creada para ${supplierName}`);
+  } catch(e) { console.error(e); showToast('❌ Error al crear la orden'); }
 }
