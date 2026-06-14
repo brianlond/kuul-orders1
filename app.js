@@ -1215,7 +1215,8 @@ function renderCatalog(allProducts) {
   if (searchVal) filtered = filtered.filter(p =>
     (p.name || '').toLowerCase().includes(searchVal) ||
     (p.color_code || '').toLowerCase().includes(searchVal) ||
-    (p.barcode || '').toLowerCase().includes(searchVal)
+    (p.barcode || '').toLowerCase().includes(searchVal) ||
+    (p.alt_barcodes || []).some(ab => ab.toLowerCase().includes(searchVal))
   );
 
   if (countLabel) countLabel.textContent = `${filtered.length} productos`;
