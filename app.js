@@ -4620,23 +4620,46 @@ function openPODetail(id) {
         </div>
         <span style="font-size:12px; font-weight:700; padding:4px 12px; border-radius:99px; background:${statusColors[po.status]}22; color:${statusColors[po.status]}; border:1px solid ${statusColors[po.status]}44;">${po.status}</span>
       </div>
-      <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
-        <thead><tr style="background:var(--surface-2);">
-          <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>
-          <th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Qty (units)</th>
-          ${po.status.includes('Recibida') ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Received (units)</th>' : ''}
-        </tr></thead>
-        <tbody>
-          ${(po.lines||[]).map(l => `<tr>
-            <td style="padding:8px 10px; border:1px solid var(--border);">${l.brand} [${l.code}] ${l.name}</td>
-            <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">${l.qty} <span style="font-size:10px; color:#888;">units</span></td>
-            ${po.status.includes('Recibida') ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">
-              <span style="color:${l.received > l.qty ? '#2563eb' : l.received >= l.qty ? '#16a34a' : '#d97706'}; font-weight:700;">${l.received ?? '—'} <span style="font-size:10px; font-weight:400;">units</span></span>
-              ${l.receive_note ? `<div style="font-size:10px; color:${l.received > l.qty ? '#2563eb' : '#d97706'}; margin-top:2px;">${l.receive_note}</div>` : ''}
-            </td>` : ''}
-          </tr>`).join('')}
-        </tbody>
-      </table>
+      ${(() => {
+        const lines = [...(po.lines||[])].sort((a,b) => {
+          if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
+          if ((a.code||'') !== (b.code||'')) return (a.code||'').localeCompare(b.code||'', undefined, { numeric: true });
+          return a.name.localeCompare(b.name);
+        });
+        const groups = {};
+        lines.forEach(l => { if (!groups[l.brand]) groups[l.brand] = []; groups[l.brand].push(l); });
+        const showReceived = po.status.includes('Recibida');
+        let rows = '';
+        Object.keys(groups).sort().forEach(brand => {
+          const bl = groups[brand];
+          const bt = bl.reduce((s,l) => s + l.qty, 0);
+          rows += `<tr><td colspan="${showReceived?3:2}" style="background:var(--surface-2); font-size:11px; font-weight:700; padding:6px 10px; border:1px solid var(--border); letter-spacing:0.03em;">${brand.toUpperCase()} · ${bl.length} producto${bl.length!==1?'s':''} · ${bt} units</td></tr>`;
+          bl.forEach(l => {
+            rows += `<tr>
+              <td style="padding:8px 10px; border:1px solid var(--border);">
+                <span style="font-size:11px; background:var(--surface-2); padding:1px 6px; border-radius:4px; margin-right:6px;">${l.code||'—'}</span>${l.name}
+                ${l.barcode ? `<div style="font-size:10px; color:var(--text-faint); font-family:monospace; margin-top:2px;">${l.barcode}</div>` : ''}
+              </td>
+              <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">
+                <span style="font-size:18px; font-weight:800;">${l.qty}</span>
+                <div style="font-size:9px; font-weight:700; color:var(--gold); text-transform:uppercase;">units</div>
+              </td>
+              ${showReceived ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">
+                <span style="color:${l.received > l.qty ? '#2563eb' : l.received >= l.qty ? '#16a34a' : '#d97706'}; font-weight:700;">${l.received ?? '—'} <span style="font-size:10px; font-weight:400;">units</span></span>
+                ${l.receive_note ? `<div style="font-size:10px; color:${l.received > l.qty ? '#2563eb' : '#d97706'}; margin-top:2px;">${l.receive_note}</div>` : ''}
+              </td>` : ''}
+            </tr>`;
+          });
+        });
+        return `<table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
+          <thead><tr style="background:var(--surface-2);">
+            <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>
+            <th style="text-align:center; padding:8px 10px; border:1px solid var(--border); width:80px;">Cantidad</th>
+            ${showReceived ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border); width:100px;">Recibido</th>' : ''}
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      })()}
       ${po.notes ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">📝 ${po.notes}</div>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         ${po.status === 'Borrador' ? `<button onclick="updatePOStatus(${po.id},'Enviada'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📤 Marcar enviada</button>` : ''}
@@ -4843,25 +4866,58 @@ function printPO(id) {
 
   ${po.notes ? `<div class="notes-box">📝 <strong>Notes:</strong> ${po.notes}</div>` : ''}
 
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Product</th>
-        <th style="text-align:center;">Qty (units)</th>
-        ${po.status.includes('Recibida') ? '<th style="text-align:center;">Received (units)</th>' : '<th style="text-align:center;">✓ Received</th>'}
-      </tr>
-    </thead>
-    <tbody>
-      ${(po.lines||[]).map((l, i) => `
-      <tr>
-        <td style="color:#888;">${i+1}</td>
-        <td><strong>${l.brand}</strong> [${l.code}] ${l.name}</td>
-        <td style="text-align:center; font-weight:700;">${l.qty} <span style="font-size:10px; color:#888; font-weight:400;">units</span></td>
-        <td style="text-align:center;">${po.status.includes('Recibida') ? `<strong style="color:${l.received>=l.qty?'#16a34a':'#d97706'}">${l.received??'—'} units</strong>` : '___'}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
+  \${(() => {
+    const lines = [...(po.lines||[])].sort((a,b) => {
+      if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
+      if ((a.code||'') !== (b.code||'')) return (a.code||'').localeCompare(b.code||'', undefined, { numeric: true });
+      return a.name.localeCompare(b.name);
+    });
+    const groups = {};
+    lines.forEach(l => { if (!groups[l.brand]) groups[l.brand] = []; groups[l.brand].push(l); });
+    let counter = 1;
+    let rows = '';
+    Object.keys(groups).sort().forEach(brand => {
+      const brandLines = groups[brand];
+      const brandTotal = brandLines.reduce((s,l) => s + l.qty, 0);
+      rows += \`<tr>
+        <td colspan="4" style="background:#1a1a1a; color:#fff; font-size:12px; font-weight:700; padding:8px 12px; letter-spacing:0.04em;">
+          \${brand.toUpperCase()} — \${brandLines.length} item\${brandLines.length!==1?'s':''} · \${brandTotal} units total
+        </td>
+      </tr>\`;
+      brandLines.forEach(l => {
+        const isReceived = po.status.includes('Recibida');
+        const recOK = l.received >= l.qty;
+        rows += \`<tr>
+          <td style="color:#888; width:32px;">\${counter++}</td>
+          <td>
+            <span style="font-size:11px; background:#f0f0f0; color:#444; padding:2px 7px; border-radius:4px; margin-right:6px; font-weight:600;">\${l.code||'—'}</span>
+            \${l.name}
+            <div style="font-size:10px; color:#999; margin-top:2px; font-family:monospace;">\${l.barcode||''}</div>
+          </td>
+          <td style="text-align:center;">
+            <span style="font-size:20px; font-weight:900; color:#1a1a1a;">\${l.qty}</span>
+            <div style="font-size:10px; font-weight:700; color:#b8952a; text-transform:uppercase; letter-spacing:0.05em;">units</div>
+          </td>
+          <td style="text-align:center;">
+            \${isReceived
+              ? \`<strong style="color:\${recOK?'#16a34a':'#d97706'}; font-size:16px;">\${l.received??'—'}</strong><div style="font-size:10px;color:#888;">units</div>\`
+              : \`<span style="font-size:22px; color:#ccc;">□</span>\`}
+          </td>
+        </tr>\`;
+      });
+    });
+    return \`<table>
+      <thead>
+        <tr>
+          <th style="width:32px;">#</th>
+          <th>Product</th>
+          <th style="text-align:center; width:90px;">QTY<br><span style="font-weight:400; font-size:9px; opacity:0.7;">(UNITS)</span></th>
+          \${po.status.includes('Recibida') ? '<th style="text-align:center; width:90px;">RECEIVED<br><span style="font-weight:400; font-size:9px; opacity:0.7;">(UNITS)</span></th>' : '<th style="text-align:center; width:90px;">✓ CHECK</th>'}
+        </tr>
+      </thead>
+      <tbody>\${rows}</tbody>
+    </table>\`;
+  })()}
 
   <div class="footer">
     LucyGlam Beauty · PO-${String(po.id).padStart(4,'0')} · ${date}
@@ -5530,16 +5586,23 @@ async function createPOForSupplier(supplierId, supplierName) {
   const selected = (reorderResults || []).filter(r => r.supplierId === supplierId && reorderSelected.has(r.barcode) && r.orderQty > 0);
   if (!selected.length) return;
 
-  poLines = selected.map(r => ({
-    barcode: r.barcode,
-    brand: r.brand,
-    code: r.code || '—',
-    name: r.name,
-    cost: 0,
-    qty: r.orderQty,
-    subtotal: 0,
-    received: 0
-  }));
+  poLines = selected
+    .slice()
+    .sort((a, b) => {
+      if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
+      if ((a.code||'') !== (b.code||'')) return (a.code||'').localeCompare(b.code||'', undefined, { numeric: true });
+      return a.name.localeCompare(b.name);
+    })
+    .map(r => ({
+      barcode: r.barcode,
+      brand: r.brand,
+      code: r.code || '—',
+      name: r.name,
+      cost: 0,
+      qty: r.orderQty,
+      subtotal: 0,
+      received: 0
+    }));
 
   try {
     await supabase('purchase_orders', {
