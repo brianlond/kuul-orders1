@@ -2251,6 +2251,43 @@ function printPackingSlip() {
   if (!pickingOrder) return;
   const o = pickingOrder;
   const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  // Build table HTML before the template to avoid nested backtick issues
+  const poSortedLines = [...(po.lines||[])].sort((a,b) => {
+    if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
+    if ((a.code||'') !== (b.code||'')) return (a.code||'').localeCompare(b.code||'', undefined, { numeric: true });
+    return a.name.localeCompare(b.name);
+  });
+  const poGroups = {};
+  poSortedLines.forEach(l => { if (!poGroups[l.brand]) poGroups[l.brand] = []; poGroups[l.brand].push(l); });
+  const isPoReceived = po.status.includes('Recibida');
+  let poCounter = 1;
+  let poRows = '';
+  Object.keys(poGroups).sort().forEach(brand => {
+    const bl = poGroups[brand];
+    const bt = bl.reduce((s,l) => s + l.qty, 0);
+    poRows += '<tr><td colspan="4" style="background:#1a1a1a; color:#fff; font-size:12px; font-weight:700; padding:8px 12px; letter-spacing:0.04em;">' +
+      brand.toUpperCase() + ' — ' + bl.length + ' item' + (bl.length!==1?'s':'') + ' · ' + bt + ' units total</td></tr>';
+    bl.forEach(l => {
+      const recOK = l.received >= l.qty;
+      const receivedCell = isPoReceived
+        ? '<td style="text-align:center;"><strong style="color:' + (recOK?'#16a34a':'#d97706') + '; font-size:16px;">' + (l.received??'—') + '</strong><div style="font-size:10px;color:#888;">units</div></td>'
+        : '<td style="text-align:center;"><span style="font-size:22px; color:#ccc;">□</span></td>';
+      poRows += '<tr>' +
+        '<td style="color:#888; width:32px;">' + (poCounter++) + '</td>' +
+        '<td><span style="font-size:11px; background:#f0f0f0; color:#444; padding:2px 7px; border-radius:4px; margin-right:6px; font-weight:600;">' + (l.code||'—') + '</span>' +
+        l.name + '<div style="font-size:10px; color:#999; margin-top:2px; font-family:monospace;">' + (l.barcode||'') + '</div></td>' +
+        '<td style="text-align:center;"><span style="font-size:20px; font-weight:900; color:#1a1a1a;">' + l.qty + '</span><div style="font-size:10px; font-weight:700; color:#b8952a; text-transform:uppercase; letter-spacing:0.05em;">units</div></td>' +
+        receivedCell + '</tr>';
+    });
+  });
+  const receivedHeader = isPoReceived
+    ? '<th style="text-align:center; width:90px;">RECEIVED<br><span style="font-weight:400; font-size:9px; opacity:0.7;">(UNITS)</span></th>'
+    : '<th style="text-align:center; width:90px;">✓ CHECK</th>';
+  const poTableHTML = '<table><thead><tr>' +
+    '<th style="width:32px;">#</th><th>Product</th>' +
+    '<th style="text-align:center; width:90px;">QTY<br><span style="font-weight:400; font-size:9px; opacity:0.7;">(UNITS)</span></th>' +
+    receivedHeader + '</tr></thead><tbody>' + poRows + '</tbody></table>';
+
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Empaque #${String(o.id).padStart(5,'0')}</title>
   <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>
   <style>
@@ -4877,58 +4914,7 @@ function printPO(id) {
 
   ${po.notes ? `<div class="notes-box">📝 <strong>Notes:</strong> ${po.notes}</div>` : ''}
 
-  \${(() => {
-    const lines = [...(po.lines||[])].sort((a,b) => {
-      if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
-      if ((a.code||'') !== (b.code||'')) return (a.code||'').localeCompare(b.code||'', undefined, { numeric: true });
-      return a.name.localeCompare(b.name);
-    });
-    const groups = {};
-    lines.forEach(l => { if (!groups[l.brand]) groups[l.brand] = []; groups[l.brand].push(l); });
-    let counter = 1;
-    let rows = '';
-    Object.keys(groups).sort().forEach(brand => {
-      const brandLines = groups[brand];
-      const brandTotal = brandLines.reduce((s,l) => s + l.qty, 0);
-      rows += \`<tr>
-        <td colspan="4" style="background:#1a1a1a; color:#fff; font-size:12px; font-weight:700; padding:8px 12px; letter-spacing:0.04em;">
-          \${brand.toUpperCase()} — \${brandLines.length} item\${brandLines.length!==1?'s':''} · \${brandTotal} units total
-        </td>
-      </tr>\`;
-      brandLines.forEach(l => {
-        const isReceived = po.status.includes('Recibida');
-        const recOK = l.received >= l.qty;
-        rows += \`<tr>
-          <td style="color:#888; width:32px;">\${counter++}</td>
-          <td>
-            <span style="font-size:11px; background:#f0f0f0; color:#444; padding:2px 7px; border-radius:4px; margin-right:6px; font-weight:600;">\${l.code||'—'}</span>
-            \${l.name}
-            <div style="font-size:10px; color:#999; margin-top:2px; font-family:monospace;">\${l.barcode||''}</div>
-          </td>
-          <td style="text-align:center;">
-            <span style="font-size:20px; font-weight:900; color:#1a1a1a;">\${l.qty}</span>
-            <div style="font-size:10px; font-weight:700; color:#b8952a; text-transform:uppercase; letter-spacing:0.05em;">units</div>
-          </td>
-          <td style="text-align:center;">
-            \${isReceived
-              ? \`<strong style="color:\${recOK?'#16a34a':'#d97706'}; font-size:16px;">\${l.received??'—'}</strong><div style="font-size:10px;color:#888;">units</div>\`
-              : \`<span style="font-size:22px; color:#ccc;">□</span>\`}
-          </td>
-        </tr>\`;
-      });
-    });
-    return \`<table>
-      <thead>
-        <tr>
-          <th style="width:32px;">#</th>
-          <th>Product</th>
-          <th style="text-align:center; width:90px;">QTY<br><span style="font-weight:400; font-size:9px; opacity:0.7;">(UNITS)</span></th>
-          \${po.status.includes('Recibida') ? '<th style="text-align:center; width:90px;">RECEIVED<br><span style="font-weight:400; font-size:9px; opacity:0.7;">(UNITS)</span></th>' : '<th style="text-align:center; width:90px;">✓ CHECK</th>'}
-        </tr>
-      </thead>
-      <tbody>\${rows}</tbody>
-    </table>\`;
-  })()}
+  ${poTableHTML}
 
   <div class="footer">
     LucyGlam Beauty · PO-${String(po.id).padStart(4,'0')} · ${date}
