@@ -396,9 +396,12 @@ async function loadProfileAndApply(token, uid, errEl) {
 
   // Load products for all roles - await so they're ready when UI renders
   if (!PRODUCTS || PRODUCTS.length === 0) {
-    try { PRODUCTS = await dbFetchProducts(); } 
+    try { PRODUCTS = await dbFetchProducts(); }
     catch(e) { console.error('Products load error:', e); }
   }
+
+  // Render brand options now that products are loaded
+  if (typeof renderBrandOptions === 'function') renderBrandOptions();
 
   if (isAdmin) {
     showAdminView();
@@ -424,14 +427,7 @@ async function checkSession() {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) { localStorage.removeItem('sb_token'); localStorage.removeItem('sb_uid'); return; }
-    // Load products in parallel with profile
-    const [, prods] = await Promise.all([
-      loadProfileAndApply(token, uid, null),
-      PRODUCTS && PRODUCTS.length > 0 ? Promise.resolve(PRODUCTS) : dbFetchProducts().catch(() => [])
-    ]);
-    if (prods && prods.length > 0 && (!PRODUCTS || PRODUCTS.length === 0)) {
-      PRODUCTS = prods;
-    }
+    await loadProfileAndApply(token, uid, null);
   } catch(e) { console.error(e); }
 }
 
