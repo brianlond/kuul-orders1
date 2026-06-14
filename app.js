@@ -84,10 +84,12 @@ async function dbFetchProducts() {
 // Helper: find product by any barcode (primary or alternate)
 function findProductByBarcode(barcode) {
   if (!barcode) return null;
-  const bc = String(barcode).trim();
+  const clean = s => String(s || '').replace(/\.0$/, '').trim();
+  const bc = clean(barcode);
+  if (!bc) return null;
   return PRODUCTS.find(p =>
-    String(p.barcode).trim() === bc ||
-    (p.alt_barcodes || []).some(ab => String(ab).trim() === bc)
+    clean(p.barcode) === bc ||
+    (p.alt_barcodes || []).some(ab => clean(ab) === bc)
   ) || null;
 }
 
@@ -5246,6 +5248,9 @@ async function handleReorderFile(input) {
   resultsDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Analizando inventario...</div>';
 
   try {
+    // Always reload products fresh so alt_barcodes are up to date
+    PRODUCTS = await dbFetchProducts();
+
     // Read Excel with SheetJS
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data);
