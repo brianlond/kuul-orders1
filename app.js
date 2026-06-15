@@ -416,9 +416,6 @@ async function loadProfileAndApply(token, uid, errEl) {
   const miProgresoBtn = document.getElementById('tab-miprogreso-btn');
   if (miProgresoBtn) miProgresoBtn.style.display = currentRole === 'seller' ? '' : 'none';
 
-  // Show Cobranza tab for admin only
-  const cobranzaBtn = document.getElementById('tab-cobranza-btn');
-  if (cobranzaBtn) cobranzaBtn.style.display = isAdmin ? '' : 'none';
 
   // Load products for all roles - await so they're ready when UI renders
   if (!PRODUCTS || PRODUCTS.length === 0) {
@@ -2821,7 +2818,7 @@ function showTab(name) {
   // All tabs require login
   if (!currentRole) { showLoginModal(); return; }
   // Role-based access
-  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers' || name === 'cobranza') && !isAdmin) { return; }
+  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers') && !isAdmin) { return; }
   if (name === 'miprogreso' && currentRole !== 'seller') { return; }
   if (name === 'delivery' && !isDelivery && !isAdmin) { return; }
   if (name === 'pos' && currentRole === 'delivery') { return; }
@@ -2836,7 +2833,6 @@ function showTab(name) {
 
   // Tab-specific init
   if (name === 'admin') loadOrders();
-  if (isAdmin) document.getElementById('tab-cobranza-btn').style.display = '';
   if (name === 'customers') loadCustomers();
   if (name === 'catalog') loadCatalog();
   if (name === 'inventory') loadInventory();
@@ -2844,7 +2840,6 @@ function showTab(name) {
   if (name === 'sellers') initSellersTab();
   if (name === 'miprogreso') initMiProgreso();
   if (name === 'suppliers') initSuppliersTab();
-  if (name === 'cobranza') initCobranza();
   if (name === 'vendedor' && (!PRODUCTS || PRODUCTS.length === 0)) {
     dbFetchProducts().then(prods => { PRODUCTS = prods; if (typeof initSteppedSelector === 'function') initSteppedSelector(); }).catch(()=>{});
   }
@@ -4928,236 +4923,6 @@ async function deletePOFromDetail(id) {
 }
 
 
-// ── COBRANZA ──────────────────────────────────────────────────
-let _cobranzaView = 'pendiente';
-let _cobranzaOrders = [];
-
-async function initCobranza() {
-  _cobranzaView = 'pendiente';
-  renderCobranzaViewBtns();
-  document.getElementById('cobranza-container').innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>';
-  document.getElementById('cobranza-metrics').innerHTML = '';
-  document.getElementById('cobranza-notifications').innerHTML = '';
-  try {
-    const orders = await supabase('orders?select=*&is_test=eq.false&status=neq.Cancelada&order=created_at.desc') || [];
-    _cobranzaOrders = orders;
-    renderCobranzaMetrics();
-    renderCobranzaNotifications();
-    renderCobranzaOrders();
-  } catch(e) { document.getElementById('cobranza-container').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Error cargando órdenes</div>'; }
-}
-
-function showCobranzaView(view) {
-  _cobranzaView = view;
-  renderCobranzaViewBtns();
-  renderCobranzaOrders();
-}
-
-function renderCobranzaViewBtns() {
-  ['pendiente','entrega','pagado'].forEach(v => {
-    const btn = document.getElementById('cbr-btn-' + v);
-    if (!btn) return;
-    if (v === _cobranzaView) {
-      btn.style.background = 'var(--gold)'; btn.style.color = '#fff'; btn.style.border = 'none';
-    } else {
-      btn.style.background = 'none'; btn.style.color = 'var(--text-muted)'; btn.style.border = '1px solid var(--border)';
-    }
-  });
-}
-
-function renderCobranzaMetrics() {
-  const all = _cobranzaOrders;
-  const delivered = all.filter(o => o.status === 'Entregada');
-  const unpaid = delivered.filter(o => !o.payment_status || o.payment_status === 'pending');
-  const totalUnpaid = unpaid.reduce((s,o) => s + parseFloat(o.total || 0), 0);
-  const now = Date.now();
-  const overdue = unpaid.filter(o => {
-    const days = (now - new Date(o.created_at).getTime()) / 86400000;
-    return days > 7;
-  });
-  const overdueAmt = overdue.reduce((s,o) => s + parseFloat(o.total || 0), 0);
-  const paidToday = all.filter(o => {
-    if (!o.payment_date) return false;
-    const d = new Date(o.payment_date);
-    const today = new Date();
-    return d.getFullYear()===today.getFullYear() && d.getMonth()===today.getMonth() && d.getDate()===today.getDate();
-  });
-  const paidTodayAmt = paidToday.reduce((s,o) => s + parseFloat(o.total || 0), 0);
-  const pendingDelivery = all.filter(o => o.status === 'Armada');
-
-  const metrics = document.getElementById('cobranza-metrics');
-  metrics.innerHTML = [
-    { label: 'Por cobrar', val: '$' + totalUnpaid.toFixed(2), color: totalUnpaid > 0 ? '#E24B4A' : 'var(--text)' },
-    { label: 'Vencidas +7d', val: '$' + overdueAmt.toFixed(2), color: overdueAmt > 0 ? '#BA7517' : 'var(--text)' },
-    { label: 'Cobradas hoy', val: '$' + paidTodayAmt.toFixed(2), color: '#3B6D11' },
-    { label: 'Entregas pendientes', val: pendingDelivery.length, color: 'var(--text)' },
-  ].map(m => `<div style="background:var(--surface-2,var(--surface)); border-radius:var(--radius); padding:12px 14px;">
-    <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">${m.label}</div>
-    <div style="font-size:20px; font-weight:600; color:${m.color};">${m.val}</div>
-  </div>`).join('');
-}
-
-function renderCobranzaNotifications() {
-  const now = Date.now();
-  const notifs = [];
-  const delivered = _cobranzaOrders.filter(o => o.status === 'Entregada' && (!o.payment_status || o.payment_status === 'pending'));
-  delivered.forEach(o => {
-    const days = Math.floor((now - new Date(o.created_at).getTime()) / 86400000);
-    if (days >= 7) {
-      notifs.push({ color: '#E24B4A', text: `${o.customer_name || o.customer || 'Cliente'} — orden #${o.id} vencida hace ${days} días`, sub: '$' + parseFloat(o.total||0).toFixed(2) + (o.payment_method ? ' · ' + o.payment_method : '') });
-    }
-  });
-  const ready = _cobranzaOrders.filter(o => o.status === 'Armada');
-  if (ready.length > 0) {
-    notifs.push({ color: '#EF9F27', text: ready.length + ' orden' + (ready.length>1?'es':'') + ' lista' + (ready.length>1?'s':'') + ' para entregar', sub: 'Pendientes de despacho' });
-  }
-  const container = document.getElementById('cobranza-notifications');
-  if (!notifs.length) { container.innerHTML = ''; return; }
-  container.innerHTML = `<div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:4px;">
-    <div style="padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:space-between;">
-      <span>🔔 Alertas (${notifs.length})</span>
-      <span style="font-size:11px; color:var(--text-muted); font-weight:400; cursor:pointer;" onclick="document.getElementById('cobranza-notifications').innerHTML=''">Cerrar</span>
-    </div>
-    ${notifs.map(n => `<div style="display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-bottom:1px solid var(--border);">
-      <span style="width:8px; height:8px; border-radius:50%; background:${n.color}; flex-shrink:0; margin-top:5px; display:inline-block;"></span>
-      <div>
-        <div style="font-size:13px;">${n.text}</div>
-        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${n.sub}</div>
-      </div>
-    </div>`).join('')}
-  </div>`;
-}
-
-function renderCobranzaOrders() {
-  const container = document.getElementById('cobranza-container');
-  const now = Date.now();
-  let orders = [];
-
-  if (_cobranzaView === 'pendiente') {
-    orders = _cobranzaOrders.filter(o => o.status === 'Entregada' && (!o.payment_status || o.payment_status === 'pending'));
-  } else if (_cobranzaView === 'entrega') {
-    orders = _cobranzaOrders.filter(o => ['Aprobada','Armada'].includes(o.status));
-  } else {
-    orders = _cobranzaOrders.filter(o => o.payment_status === 'paid').slice(0, 50);
-  }
-
-  if (!orders.length) {
-    const msgs = { pendiente: '✅ No hay órdenes pendientes de cobro', entrega: '✅ No hay entregas pendientes', pagado: 'No hay pagos registrados aún' };
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">${_cobranzaView==='pagado'?'💳':'✅'}</div>${msgs[_cobranzaView]}</div>`;
-    return;
-  }
-
-  container.innerHTML = orders.map(o => {
-    const days = Math.floor((now - new Date(o.created_at).getTime()) / 86400000);
-    const total = parseFloat(o.total || 0).toFixed(2);
-    const client = o.customer_name || o.customer || '—';
-    const seller = o.seller_name || o.seller || '—';
-    const dateStr = new Date(o.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
-
-    let pill = '';
-    if (_cobranzaView === 'pendiente') {
-      if (days >= 7) pill = `<span style="font-size:11px; padding:2px 8px; border-radius:99px; background:#FCEBEB; color:#A32D2D; font-weight:500;">Vencida +${days}d</span>`;
-      else if (days >= 3) pill = `<span style="font-size:11px; padding:2px 8px; border-radius:99px; background:#FAEEDA; color:#854F0B; font-weight:500;">Pend. ${days}d</span>`;
-      else pill = `<span style="font-size:11px; padding:2px 8px; border-radius:99px; background:#E6F1FB; color:#185FA5; font-weight:500;">Reciente</span>`;
-    } else if (_cobranzaView === 'entrega') {
-      pill = `<span style="font-size:11px; padding:2px 8px; border-radius:99px; background:#FAEEDA; color:#854F0B; font-weight:500;">${o.status}</span>`;
-    } else {
-      const paidDate = o.payment_date ? new Date(o.payment_date).toLocaleDateString('es-MX', { day:'2-digit', month:'short' }) : '—';
-      pill = `<span style="font-size:11px; padding:2px 8px; border-radius:99px; background:#EAF3DE; color:#3B6D11; font-weight:500;">Pagada ${paidDate}</span>`;
-    }
-
-    const actionBtns = _cobranzaView === 'pendiente'
-      ? `<button onclick="openRegisterPayment(${o.id})" style="padding:4px 10px; border:1px solid #C0DD97; border-radius:var(--radius); background:none; font-size:12px; cursor:pointer; color:#3B6D11; font-family:inherit;">Registrar pago</button>`
-      : _cobranzaView === 'entrega'
-      ? `<button onclick="markDelivered(${o.id})" style="padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; font-size:12px; cursor:pointer; color:var(--text); font-family:inherit;">Marcar entregada</button>`
-      : '';
-
-    const metaLine = _cobranzaView === 'pagado' && o.payment_method
-      ? `${o.payment_method}${o.payment_note ? ' · ' + o.payment_note : ''}`
-      : `Creada ${dateStr} · Seller: ${seller}`;
-
-    return `<div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; margin-bottom:8px;">
-      <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:8px;">
-        <div>
-          <div style="font-size:13px; font-weight:600;">#${o.id} — ${client}</div>
-          <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${_cobranzaView==='entrega' ? 'Seller: ' + seller : 'Creada ' + dateStr + ' · Seller: ' + seller}</div>
-        </div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
-          <span style="font-size:15px; font-weight:600;">$${total}</span>
-          ${pill}
-        </div>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--border); padding-top:8px; margin-top:4px;">
-        <span style="font-size:11px; color:var(--text-faint);">${metaLine}</span>
-        <div style="display:flex; gap:6px;">
-          ${actionBtns}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function openRegisterPayment(orderId) {
-  const o = _cobranzaOrders.find(x => x.id === orderId);
-  if (!o) return;
-  const existing = document.getElementById('register-payment-modal');
-  if (existing) existing.remove();
-  const modal = document.createElement('div');
-  modal.id = 'register-payment-modal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;';
-  modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:400px;overflow:hidden;border:1px solid var(--border);">
-      <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:15px;font-weight:600;">Registrar pago — Orden #${o.id}</div>
-      <div style="padding:16px;">
-        <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">${o.customer_name||o.customer||'—'} · <strong style="color:var(--text);">$${parseFloat(o.total||0).toFixed(2)}</strong></div>
-        <div style="margin-bottom:12px;">
-          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Método de pago</label>
-          <select id="pay-method" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);">
-            <option>Efectivo</option><option>Zelle</option><option>Check</option><option>Tarjeta</option>
-          </select>
-        </div>
-        <div style="margin-bottom:12px;">
-          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Monto recibido</label>
-          <input type="number" id="pay-amount" value="${parseFloat(o.total||0).toFixed(2)}" step="0.01" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);">
-        </div>
-        <div style="margin-bottom:4px;">
-          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Referencia / Nota (opcional)</label>
-          <input type="text" id="pay-note" placeholder="Ej: confirmación Zelle #4821" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);">
-        </div>
-      </div>
-      <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">
-        <button onclick="document.getElementById('register-payment-modal').remove()" style="padding:7px 16px;border:1px solid var(--border);border-radius:var(--radius);background:none;font-size:13px;cursor:pointer;color:var(--text-muted);font-family:inherit;">Cancelar</button>
-        <button onclick="savePayment(${orderId})" style="padding:7px 16px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Confirmar pago</button>
-      </div>
-    </div>`;
-  document.body.appendChild(modal);
-}
-
-async function savePayment(orderId) {
-  const method = document.getElementById('pay-method').value;
-  const note = document.getElementById('pay-note').value.trim();
-  try {
-    await supabase(`orders?id=eq.${orderId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ payment_status: 'paid', payment_method: method, payment_date: new Date().toISOString(), payment_note: note || null })
-    });
-    document.getElementById('register-payment-modal').remove();
-    showToast('✓ Pago registrado');
-    await initCobranza();
-  } catch(e) { showToast('❌ Error al registrar pago'); }
-}
-
-async function markDelivered(orderId) {
-  if (!confirm('¿Marcar esta orden como Entregada?')) return;
-  try {
-    await supabase(`orders?id=eq.${orderId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: 'Entregada' })
-    });
-    showToast('✓ Orden marcada como entregada');
-    await initCobranza();
-  } catch(e) { showToast('❌ Error al actualizar'); }
-}
 
 // ── EDIT DRAFT PO ─────────────────────────────────────────────
 function openEditPO(id) {
