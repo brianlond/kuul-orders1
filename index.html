@@ -53,6 +53,9 @@
       <button class="tab" id="tab-suppliers-btn" onclick="showTab('suppliers')">
         🏭 Proveedores
       </button>
+      <button class="tab" id="tab-cobranza-btn" onclick="showTab('cobranza')" style="display:none;">
+        💳 Cobranza
+      </button>
       <button class="tab" id="tab-pos-btn" onclick="showTab('pos')">
         🏪 Caja
       </button>
@@ -354,6 +357,24 @@
         </div>
       </div>
       <div id="suppliers-container"></div>
+    </div>
+
+    <!-- COBRANZA -->
+    <div id="tab-cobranza" class="section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Cobranza</h2>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Órdenes entregadas pendientes de pago</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button onclick="showCobranzaView('pendiente')" id="cbr-btn-pendiente" style="padding:6px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">💳 Por cobrar</button>
+          <button onclick="showCobranzaView('entrega')" id="cbr-btn-entrega" style="padding:6px 16px; background:none; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; color:var(--text-muted); cursor:pointer; font-family:inherit;">🚚 Entregas pendientes</button>
+          <button onclick="showCobranzaView('pagado')" id="cbr-btn-pagado" style="padding:6px 16px; background:none; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; color:var(--text-muted); cursor:pointer; font-family:inherit;">✅ Historial</button>
+        </div>
+      </div>
+      <div id="cobranza-metrics" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;"></div>
+      <div id="cobranza-notifications" style="margin-bottom:16px;"></div>
+      <div id="cobranza-container"></div>
     </div>
 
     <!-- MI PROGRESO (seller view) -->
