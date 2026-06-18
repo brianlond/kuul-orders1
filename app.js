@@ -2720,6 +2720,7 @@ async function loadCustomers() {
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando clientes...</div>`;
   try {
     const customers = await dbFetchCustomers();
+    allCustomers = customers || [];
     renderCustomers(customers);
   } catch(e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando clientes</div>`;
