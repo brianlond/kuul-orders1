@@ -4679,6 +4679,7 @@ function openPODetail(id) {
         ${po.status === 'Borrador' ? `<button onclick="updatePOStatus(${po.id},'Enviada'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📤 Marcar enviada</button>` : ''}
         ${po.status === 'Enviada' ? `<button onclick="updatePOStatus(${po.id},'En camino'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:#2563eb; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🚚 Marcar en camino</button>` : ''}
         ${po.status === 'En camino' || po.status === 'Enviada' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openReceivePO(${po.id})" style="padding:8px 14px; background:#16a34a; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✅ Recibir pedido</button>` : ''}
+        ${po.status === 'Recibida parcial' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openReceivePendientes(${po.id})" style="padding:8px 14px; background:#d97706; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📦 Recibir pendientes</button>` : ''}
         ${po.status === 'Borrador' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openEditPO(${po.id})" style="padding:8px 14px; border:1px solid #2563eb; background:none; color:#2563eb; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✏️ Editar</button>` : ''}
         <button onclick="printPO(${po.id})" style="padding:8px 14px; border:1px solid var(--border); background:none; color:var(--text); border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🖨️ Imprimir</button>
         <button onclick="deletePOFromDetail(${po.id})" style="padding:8px 14px; border:1px solid #dc2626; background:none; color:#dc2626; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🗑 Eliminar</button>
@@ -4694,6 +4695,144 @@ async function updatePOStatus(id, status) {
     await initSuppliersTab();
     showToast('✓ Estado actualizado');
   } catch(e) { showToast('❌ Error'); }
+}
+
+function openReceivePendientes(id) {
+  const po = allPurchaseOrders.find(p => p.id === id);
+  if (!po) return;
+
+  // Only show lines with missing units
+  const pendingLines = (po.lines || []).filter(l => {
+    const received = l.received ?? 0;
+    return received < l.qty;
+  });
+
+  if (!pendingLines.length) {
+    showToast('✅ No hay productos pendientes');
+    return;
+  }
+
+  document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
+  <div id="receive-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:620px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+      <div style="padding:20px 24px; border-bottom:1px solid var(--border); flex-shrink:0;">
+        <div style="font-size:17px; font-weight:700;">📦 Recibir pendientes — OC-${String(po.id).padStart(4,'0')}</div>
+        <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">${po.supplier_name} · ${pendingLines.length} producto${pendingLines.length!==1?'s':''} con unidades faltantes</div>
+        <div style="margin-top:8px; background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:8px 12px; font-size:12px; color:#92400e;">
+          ⚠️ Solo se muestran los productos que llegaron incompletos en la recepción anterior
+        </div>
+      </div>
+      <div style="overflow-y:auto; flex:1; padding:16px 24px;">
+        ${pendingLines.map((l, idx) => {
+          const alreadyReceived = l.received ?? 0;
+          const stillNeeded = l.qty - alreadyReceived;
+          return `<div id="prec-row-${idx}" style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--surface-2);">
+            <input type="checkbox" id="prec-check-${idx}" onchange="updatePendingReceiveRow(${idx},${l.qty},${alreadyReceived})" style="width:18px; height:18px; cursor:pointer; accent-color:var(--gold);">
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:13px; font-weight:600;">${l.name}</div>
+              <div style="font-size:11px; color:var(--text-muted);">${l.brand} · Pedido: ${l.qty} units · Ya recibido: ${alreadyReceived} units</div>
+              <div style="font-size:12px; color:#d97706; font-weight:600; margin-top:2px;">Faltantes: ${stillNeeded} units</div>
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+              <input type="number" id="prec-qty-${idx}" value="${stillNeeded}" min="0" max="${stillNeeded}" disabled
+                style="width:70px; text-align:center; font-size:15px; font-weight:700; padding:6px; border:1px solid var(--border); border-radius:var(--radius); opacity:0.4; background:var(--surface);"
+                oninput="updatePendingReceiveRow(${idx},${l.qty},${alreadyReceived})">
+              <span id="prec-status-${idx}" style="font-size:16px; opacity:0.3;">✅</span>
+              <div id="prec-note-${idx}" style="font-size:10px; color:#d97706; display:none;"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:8px; flex-shrink:0;">
+        <button onclick="document.getElementById('receive-modal').remove()" class="cancel-btn" style="flex:1; padding:14px;">Cancelar</button>
+        <button onclick="confirmReceivePendientes(${po.id})" style="flex:2; padding:14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:14px; font-weight:700; cursor:pointer; font-family:inherit;">✅ Confirmar recepción</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+function updatePendingReceiveRow(idx, orderedQty, alreadyReceived) {
+  const check  = document.getElementById(`prec-check-${idx}`);
+  const input  = document.getElementById(`prec-qty-${idx}`);
+  const status = document.getElementById(`prec-status-${idx}`);
+  const note   = document.getElementById(`prec-note-${idx}`);
+  const row    = document.getElementById(`prec-row-${idx}`);
+  if (!check || !input) return;
+
+  input.disabled = !check.checked;
+  input.style.opacity = check.checked ? '1' : '0.4';
+  if (status) status.style.opacity = check.checked ? '1' : '0.3';
+
+  if (!check.checked) {
+    if (status) status.textContent = '✅';
+    if (note) note.style.display = 'none';
+    if (row) row.style.background = 'var(--surface-2)';
+    return;
+  }
+
+  const newlyReceived = parseInt(input.value) || 0;
+  const totalNow = alreadyReceived + newlyReceived;
+  const stillNeeded = orderedQty - alreadyReceived;
+
+  if (newlyReceived === stillNeeded) {
+    if (status) status.textContent = '✅';
+    if (note) note.style.display = 'none';
+    if (row) row.style.background = '#f0fdf4';
+  } else if (newlyReceived === 0) {
+    if (status) status.textContent = '❌';
+    if (note) { note.textContent = 'No recibido'; note.style.color = '#dc2626'; note.style.display = 'block'; }
+    if (row) row.style.background = '#fff5f5';
+  } else if (newlyReceived > stillNeeded) {
+    if (status) status.textContent = '⚠️';
+    if (note) { note.textContent = `${newlyReceived - stillNeeded} de más`; note.style.color = '#2563eb'; note.style.display = 'block'; }
+    if (row) row.style.background = '#eff6ff';
+  } else {
+    if (status) status.textContent = '⚠️';
+    if (note) { note.textContent = `Aún faltan ${stillNeeded - newlyReceived}`; note.style.color = '#d97706'; note.style.display = 'block'; }
+    if (row) row.style.background = '#fffbeb';
+  }
+}
+
+async function confirmReceivePendientes(id) {
+  const po = allPurchaseOrders.find(p => p.id === id);
+  if (!po) return;
+
+  const pendingLines = (po.lines || []).filter(l => (l.received ?? 0) < l.qty);
+  let pendingIdx = 0;
+
+  const updatedLines = (po.lines || []).map(l => {
+    const alreadyReceived = l.received ?? 0;
+    if (alreadyReceived >= l.qty) return l; // Already complete, no change
+
+    const check    = document.getElementById(`prec-check-${pendingIdx}`);
+    const qtyInput = document.getElementById(`prec-qty-${pendingIdx}`);
+    pendingIdx++;
+
+    if (!check?.checked) return l; // Not checked, keep as is
+
+    const newlyReceived = parseInt(qtyInput?.value) || 0;
+    const totalReceived = alreadyReceived + newlyReceived;
+    const diff = totalReceived - l.qty;
+    const recNote = totalReceived === l.qty ? null :
+      diff > 0 ? `Llegaron ${diff} unidades de más` :
+      `Faltaron ${Math.abs(diff)} unidades`;
+
+    return { ...l, received: totalReceived, receive_note: recNote };
+  });
+
+  const allReceived = updatedLines.every(l => (l.received ?? 0) >= l.qty);
+  const anyReceived = updatedLines.some(l => (l.received ?? 0) > 0);
+  const status = allReceived ? 'Recibida completa' : anyReceived ? 'Recibida parcial' : 'En camino';
+
+  try {
+    await supabase(`purchase_orders?id=eq.${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ lines: updatedLines, status, received_at: new Date().toISOString() })
+    });
+    document.getElementById('receive-modal')?.remove();
+    await initSuppliersTab();
+    showToast(allReceived ? '✅ Pedido completado' : '⚠️ Aún hay productos pendientes');
+  } catch(e) { showToast('❌ Error al confirmar'); }
 }
 
 // ── RECEIVE PO ────────────────────────────────────────────────
