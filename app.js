@@ -61,36 +61,14 @@ async function supabase(path, options = {}) {
 }
 
 async function dbFetchProducts() {
-  const [prods, altBarcodes] = await Promise.all([
-    supabase('products?select=*&active=eq.true'),
-    supabase('product_barcodes?select=product_id,barcode').catch(() => [])
-  ]);
-  // Attach alternate barcodes array to each product
-  const barcodeMap = {};
-  (altBarcodes || []).forEach(b => {
-    if (!barcodeMap[b.product_id]) barcodeMap[b.product_id] = [];
-    barcodeMap[b.product_id].push(b.barcode);
-  });
-  const result = prods.map(p => ({ ...p, alt_barcodes: barcodeMap[p.id] || [] }));
-  return result.sort((a, b) => {
+  const prods = await supabase('products?select=*&active=eq.true');
+  return prods.sort((a, b) => {
     if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
     const aCode = parseFloat(a.color_code) || 999;
     const bCode = parseFloat(b.color_code) || 999;
     if (aCode !== bCode) return aCode - bCode;
     return a.name.localeCompare(b.name);
   });
-}
-
-// Helper: find product by any barcode (primary or alternate)
-function findProductByBarcode(barcode) {
-  if (!barcode) return null;
-  const clean = s => String(s || '').replace(/\.0$/, '').trim();
-  const bc = clean(barcode);
-  if (!bc) return null;
-  return PRODUCTS.find(p =>
-    clean(p.barcode) === bc ||
-    (p.alt_barcodes || []).some(ab => clean(ab) === bc)
-  ) || null;
 }
 
 async function dbInsertOrder(order) {
@@ -178,7 +156,7 @@ function addProductLine(barcode = '', qty = 1) {
   div.className = 'product-row';
   div.id = 'line-' + id;
   div.dataset.barcode = barcode;
-  const product = findProductByBarcode(barcode);
+  const product = PRODUCTS.find(p => p.barcode === barcode);
   const price = product ? getPrice(product) : 0;
   const label = product ? `${product.brand} [${product.color_code || '—'}] ${product.name} — $${price.toFixed(2)}` : '';
   const priceLabel = price > 0 ? `$${price.toFixed(2)}` : '';
@@ -221,7 +199,7 @@ function toggleFree(id) {
   const row = document.getElementById('line-' + id);
   if (!row) return;
   const barcode = row.dataset.barcode;
-  const product = findProductByBarcode(barcode);
+  const product = PRODUCTS.find(p => p.barcode === barcode);
   if (freeCheck && freeCheck.checked) {
     if (priceLabel) { priceLabel.textContent = 'FREE'; priceLabel.style.color = '#16a34a'; }
     row.style.borderColor = '#bbf7d0';
@@ -263,7 +241,7 @@ function recalcTotal() {
     const qty = row.querySelector('input[type=number]');
     const barcode = row.dataset.barcode;
     if (barcode && qty) {
-      const product = findProductByBarcode(barcode);
+      const product = PRODUCTS.find(p => p.barcode === barcode);
       if (product) {
         const lineId = row.id.replace('line-', '');
         const freeCheck = document.getElementById(`free-${lineId}`);
@@ -276,7 +254,6 @@ function recalcTotal() {
   const hasTax = document.getElementById('tax-toggle').checked;
   const taxRate = parseFloat(document.getElementById('tax-rate').value) || 0;
   const shippingAmt = hasShipping ? SHIPPING : 0;
-  const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
 
   // Manual discount
   const discountType = document.getElementById('discount-type')?.value || 'pct';
@@ -284,7 +261,9 @@ function recalcTotal() {
   const discountAmt = discountType === 'pct' ? subtotal * (discountVal / 100) : Math.min(discountVal, subtotal);
   const discountReason = document.getElementById('discount-reason')?.value.trim() || '';
 
-  const total = Math.max(0, subtotal + shippingAmt + taxAmt - discountAmt);
+  const subtotalAfterDiscount = subtotal - discountAmt;
+  const taxAmt = hasTax ? subtotalAfterDiscount * (taxRate / 100) : 0;
+  const total = Math.max(0, subtotalAfterDiscount + shippingAmt + taxAmt);
 
   document.getElementById('sum-products').textContent = '$' + subtotal.toFixed(2);
   document.getElementById('sum-shipping-row').style.display = hasShipping ? 'flex' : 'none';
@@ -415,7 +394,6 @@ async function loadProfileAndApply(token, uid, errEl) {
   // Show Mi Progreso tab for sellers
   const miProgresoBtn = document.getElementById('tab-miprogreso-btn');
   if (miProgresoBtn) miProgresoBtn.style.display = currentRole === 'seller' ? '' : 'none';
-
 
   // Load products for all roles - await so they're ready when UI renders
   if (!PRODUCTS || PRODUCTS.length === 0) {
@@ -609,7 +587,7 @@ async function submitOrder() {
     const qty = row.querySelector('input[type=number]');
     const barcode = row.dataset.barcode;
     if (barcode && qty) {
-      const product = findProductByBarcode(barcode);
+      const product = PRODUCTS.find(p => p.barcode === barcode);
       const q = parseInt(qty.value) || 0;
       if (product && q > 0) {
         const freeCheck = row.querySelector('input[type=checkbox]');
@@ -638,12 +616,13 @@ async function submitOrder() {
   const hasTax      = document.getElementById('tax-toggle').checked;
   const taxRate     = parseFloat(document.getElementById('tax-rate').value) || 0;
   const shippingAmt = hasShipping ? SHIPPING : 0;
-  const taxAmt      = hasTax ? subtotal * (taxRate / 100) : 0;
   const discountType   = document.getElementById('discount-type')?.value || 'pct';
   const discountVal    = parseFloat(document.getElementById('discount-val')?.value) || 0;
   const discountAmt    = discountType === 'pct' ? subtotal * (discountVal / 100) : Math.min(discountVal, subtotal);
   const discountReason = document.getElementById('discount-reason')?.value.trim() || null;
-  const total       = Math.max(0, subtotal + shippingAmt + taxAmt - discountAmt);
+  const subtotalAfterDiscount = subtotal - discountAmt;
+  const taxAmt      = hasTax ? subtotalAfterDiscount * (taxRate / 100) : 0;
+  const total       = Math.max(0, subtotalAfterDiscount + shippingAmt + taxAmt);
 
   const btn = document.querySelector('.submit-btn');
   btn.disabled = true;
@@ -1121,8 +1100,6 @@ document.addEventListener('click', e => {
 
 // ── Catalog ───────────────────────────────────────────────────
 let editingProductId = null;
-let _altBarcodesOriginal = []; // barcodes already saved in DB
-let _altBarcodesPending  = []; // barcodes added this session (not yet saved)
 let catalogFilter = 'all';
 
 window.loadCatalog = async function loadCatalog() {
@@ -1130,21 +1107,11 @@ window.loadCatalog = async function loadCatalog() {
   if (!list) return;
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>`;
   try {
-    const [allProds, altBarcodes] = await Promise.all([
-      supabase('products?select=*&order=brand,category,name'),
-      supabase('product_barcodes?select=product_id,barcode').catch(() => [])
-    ]);
+    const allProds = await supabase('products?select=*&order=brand,category,name');
     if (!allProds || allProds.length === 0) {
       list.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div>No hay productos</div>`;
       return;
     }
-    // Attach alt_barcodes to each product
-    const bcMap = {};
-    (altBarcodes || []).forEach(b => {
-      if (!bcMap[b.product_id]) bcMap[b.product_id] = [];
-      bcMap[b.product_id].push(b.barcode);
-    });
-    allProds.forEach(p => { p.alt_barcodes = bcMap[p.id] || []; });
     allProds.sort((a,b) => a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name));
     window._catalogProducts = allProds;
     window._catalogBrand = '';
@@ -1216,8 +1183,7 @@ function renderCatalog(allProducts) {
   if (searchVal) filtered = filtered.filter(p =>
     (p.name || '').toLowerCase().includes(searchVal) ||
     (p.color_code || '').toLowerCase().includes(searchVal) ||
-    (p.barcode || '').toLowerCase().includes(searchVal) ||
-    (p.alt_barcodes || []).some(ab => ab.toLowerCase().includes(searchVal))
+    (p.barcode || '').toLowerCase().includes(searchVal)
   );
 
   if (countLabel) countLabel.textContent = `${filtered.length} productos`;
@@ -1311,8 +1277,6 @@ function editProduct(id) {
   const p = (window._catalogProducts || []).find(p => p.id === id);
   if (!p) return;
   editingProductId = id;
-  _altBarcodesOriginal = [...(p.alt_barcodes || [])];
-  _altBarcodesPending  = [];
   document.getElementById('product-modal-title').textContent = 'Editar producto';
   document.getElementById('pm-brand').value = p.brand || '';
   document.getElementById('pm-category').value = p.category || '';
@@ -1325,15 +1289,11 @@ function editProduct(id) {
   const wsPrice = p.price && p.discount_wholesale ? (p.price * (1 - p.discount_wholesale / 100)).toFixed(4) : '';
   document.getElementById('pm-price-wholesale').value = wsPrice ? parseFloat(wsPrice) : '';
   document.getElementById('pm-active').checked = p.active !== false;
-  document.getElementById('pm-alt-barcodes-section').style.display = 'block';
-  renderAltBarcodes();
   document.getElementById('product-modal').style.display = 'flex';
 }
 
 function openAddProduct() {
   editingProductId = null;
-  _altBarcodesOriginal = [];
-  _altBarcodesPending  = [];
   document.getElementById('product-modal-title').textContent = 'Nuevo producto';
   document.getElementById('pm-brand').value = '';
   document.getElementById('pm-category').value = '';
@@ -1346,7 +1306,6 @@ function openAddProduct() {
   document.getElementById('pm-discount-wholesale').value = '';
   document.getElementById('pm-active').value = 'true';
   document.getElementById('pm-error').textContent = '';
-  document.getElementById('pm-alt-barcodes-section').style.display = 'none';
   document.getElementById('product-modal').style.display = 'flex';
 }
 
@@ -1354,8 +1313,6 @@ function openEditProduct(id) {
   const p = PRODUCTS.find(x => x.id === id) || window._catalogProducts?.find(x => x.id === id);
   if (!p) return;
   editingProductId = id;
-  _altBarcodesOriginal = [...(p.alt_barcodes || [])];
-  _altBarcodesPending  = [];
   document.getElementById('product-modal-title').textContent = 'Editar producto';
   document.getElementById('pm-brand').value = p.brand;
   document.getElementById('pm-category').value = p.category || '';
@@ -1368,16 +1325,12 @@ function openEditProduct(id) {
   document.getElementById('pm-discount-wholesale').value = p.discount_wholesale || '';
   document.getElementById('pm-active').value = p.active ? 'true' : 'false';
   document.getElementById('pm-error').textContent = '';
-  document.getElementById('pm-alt-barcodes-section').style.display = 'block';
-  renderAltBarcodes();
   document.getElementById('product-modal').style.display = 'flex';
 }
 
 function closeProductModal() {
   document.getElementById('product-modal').style.display = 'none';
   editingProductId = null;
-  _altBarcodesOriginal = [];
-  _altBarcodesPending  = [];
 }
 
 function calcSalonPrice() {
@@ -1386,59 +1339,6 @@ function calcSalonPrice() {
   if (retail > 0 && discount > 0) {
     document.getElementById('pm-price').value = (retail * (1 - discount/100)).toFixed(2);
   }
-}
-
-function renderAltBarcodes() {
-  const list = document.getElementById('pm-alt-barcode-list');
-  if (!list) return;
-  const all = [
-    ..._altBarcodesOriginal.map(bc => ({ bc, saved: true })),
-    ..._altBarcodesPending.map(bc => ({ bc, saved: false }))
-  ];
-  if (!all.length) {
-    list.innerHTML = '<div style="padding:10px 12px; font-size:13px; color:var(--text-faint);">Sin barcodes alternativos aún</div>';
-    return;
-  }
-  list.innerHTML = all.map(({ bc, saved }) => `
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--border); font-size:13px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:11px; padding:2px 8px; border-radius:var(--radius); background:${saved ? '#EAF3DE' : '#E6F1FB'}; color:${saved ? '#27500A' : '#0C447C'};">${saved ? 'Guardado' : 'Nuevo'}</span>
-        <span style="font-family:monospace;">${bc}</span>
-      </div>
-      <button type="button" onclick="removeAltBarcode('${bc}',${saved})" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:18px; line-height:1; padding:2px 6px; border-radius:4px;" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='var(--text-muted)'">×</button>
-    </div>
-  `).join('');
-}
-
-function addAltBarcode() {
-  const input = document.getElementById('pm-new-barcode');
-  const bc = input.value.trim();
-  if (!bc) return;
-  const mainBarcode = document.getElementById('pm-barcode').value.trim();
-  if (bc === mainBarcode) { showToast('⚠️ Es el mismo que el barcode principal'); input.value = ''; return; }
-  if (_altBarcodesOriginal.includes(bc) || _altBarcodesPending.includes(bc)) {
-    showToast('⚠️ Ese barcode ya está en la lista'); input.value = ''; return;
-  }
-  _altBarcodesPending.push(bc);
-  input.value = '';
-  renderAltBarcodes();
-}
-
-async function removeAltBarcode(bc, isSaved) {
-  if (isSaved) {
-    if (!confirm(`¿Eliminar el barcode ${bc}? Los movimientos de inventario con este código quedarán sin nombre.`)) return;
-    try {
-      await supabase(`product_barcodes?product_id=eq.${editingProductId}&barcode=eq.${encodeURIComponent(bc)}`, { method: 'DELETE' });
-      _altBarcodesOriginal = _altBarcodesOriginal.filter(x => x !== bc);
-      // Update in-memory product too
-      const p = PRODUCTS.find(x => x.id === editingProductId);
-      if (p) p.alt_barcodes = p.alt_barcodes.filter(x => x !== bc);
-      showToast('✓ Barcode eliminado');
-    } catch(e) { showToast('❌ Error al eliminar'); return; }
-  } else {
-    _altBarcodesPending = _altBarcodesPending.filter(x => x !== bc);
-  }
-  renderAltBarcodes();
 }
 
 async function saveProduct() {
@@ -1479,16 +1379,6 @@ async function saveProduct() {
       await supabase(`products?id=eq.${editingProductId}`, { method: 'PATCH', body: JSON.stringify(data) });
     } else {
       await supabase('products', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(data) });
-    }
-    // Save any pending alt barcodes
-    if (_altBarcodesPending.length > 0) {
-      const pid = editingProductId || (await supabase('products?select=id&order=id.desc&limit=1').then(r => r[0]?.id));
-      if (pid) {
-        const rows = _altBarcodesPending.map(bc => ({ product_id: pid, barcode: bc }));
-        await supabase('product_barcodes', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(rows) }).catch(e => {
-          console.warn('Some alt barcodes could not be saved (may already exist):', e);
-        });
-      }
     }
     closeProductModal();
     showToast('✓ Producto guardado');
@@ -1611,7 +1501,7 @@ function renderPOSProducts(products) {
 }
 
 function posAddProduct(barcode) {
-  const product = findProductByBarcode(barcode);
+  const product = PRODUCTS.find(p => p.barcode === barcode);
   if (!product) return;
   const existing = posCart.find(c => c.barcode === barcode);
   if (existing) {
@@ -1632,7 +1522,7 @@ function posChangeQty(barcode, delta) {
   if (item.qty === 0) {
     posCart = posCart.filter(c => c.barcode !== barcode);
   } else {
-    const product = findProductByBarcode(barcode);
+    const product = PRODUCTS.find(p => p.barcode === barcode);
     item.price = product ? getPrice(product) : item.price;
     item.subtotal = item.is_free ? 0 : item.price * item.qty;
   }
@@ -1646,7 +1536,7 @@ function posSetQty(barcode, qty) {
   if (qty <= 0) { posCart = posCart.filter(c => c.barcode !== barcode); }
   else {
     item.qty = qty;
-    const product = findProductByBarcode(barcode);
+    const product = PRODUCTS.find(p => p.barcode === barcode);
     item.price = product ? getPrice(product) : item.price;
     item.subtotal = item.is_free ? 0 : item.price * item.qty;
   }
@@ -1811,7 +1701,7 @@ function posScanBarcode(e) {
   if (e.key !== 'Enter') return;
   const barcode = document.getElementById('pos-search').value.trim();
   document.getElementById('pos-search').value = '';
-  const product = findProductByBarcode(barcode);
+  const product = PRODUCTS.find(p => p.barcode === barcode);
   if (product) {
     posAddProduct(barcode);
     showToast(`✓ ${product.name} agregado`);
@@ -2252,7 +2142,6 @@ function printPackingSlip() {
   if (!pickingOrder) return;
   const o = pickingOrder;
   const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Empaque #${String(o.id).padStart(5,'0')}</title>
   <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>
   <style>
@@ -2720,7 +2609,6 @@ async function loadCustomers() {
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando clientes...</div>`;
   try {
     const customers = await dbFetchCustomers();
-    allCustomers = customers || [];
     renderCustomers(customers);
   } catch(e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando clientes</div>`;
@@ -2909,7 +2797,7 @@ function closeScanner() {
 }
 
 function handleScannedCode(barcode) {
-  const product = findProductByBarcode(barcode);
+  const product = PRODUCTS.find(p => p.barcode === barcode);
   if (!product) {
     showToast('⚠️ Producto no encontrado: ' + barcode);
     return;
@@ -4545,7 +4433,7 @@ function renderPOProductSelector() {
 }
 
 function addPOLine(barcode) {
-  const product = findProductByBarcode(barcode);
+  const product = PRODUCTS.find(p => p.barcode === barcode);
   if (!product) return;
   const existing = poLines.find(l => l.barcode === barcode);
   if (existing) { existing.qty++; existing.subtotal = existing.cost * existing.qty; }
@@ -4634,52 +4522,28 @@ function openPODetail(id) {
         </div>
         <span style="font-size:12px; font-weight:700; padding:4px 12px; border-radius:99px; background:${statusColors[po.status]}22; color:${statusColors[po.status]}; border:1px solid ${statusColors[po.status]}44;">${po.status}</span>
       </div>
-      ${(() => {
-        const lines = [...(po.lines||[])].sort((a,b) => {
-          if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
-          if ((a.code||'') !== (b.code||'')) return (a.code||'').localeCompare(b.code||'', undefined, { numeric: true });
-          return a.name.localeCompare(b.name);
-        });
-        const groups = {};
-        lines.forEach(l => { if (!groups[l.brand]) groups[l.brand] = []; groups[l.brand].push(l); });
-        const showReceived = po.status.includes('Recibida');
-        let rows = '';
-        Object.keys(groups).sort().forEach(brand => {
-          const bl = groups[brand];
-          const bt = bl.reduce((s,l) => s + l.qty, 0);
-          rows += `<tr><td colspan="${showReceived?3:2}" style="background:var(--surface-2); font-size:11px; font-weight:700; padding:6px 10px; border:1px solid var(--border); letter-spacing:0.03em;">${brand.toUpperCase()} · ${bl.length} producto${bl.length!==1?'s':''} · ${bt} units</td></tr>`;
-          bl.forEach(l => {
-            rows += `<tr>
-              <td style="padding:8px 10px; border:1px solid var(--border);">
-                <span style="font-size:11px; background:var(--surface-2); padding:1px 6px; border-radius:4px; margin-right:6px;">${l.code||'—'}</span>${l.name}
-                ${l.barcode ? `<div style="font-size:10px; color:var(--text-faint); font-family:monospace; margin-top:2px;">${l.barcode}</div>` : ''}
-              </td>
-              <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">
-                <span style="font-size:18px; font-weight:800;">${l.qty}</span>
-                <div style="font-size:9px; font-weight:700; color:var(--gold); text-transform:uppercase;">units</div>
-              </td>
-              ${showReceived ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">
-                <span style="color:${l.received > l.qty ? '#2563eb' : l.received >= l.qty ? '#16a34a' : '#d97706'}; font-weight:700;">${l.received ?? '—'} <span style="font-size:10px; font-weight:400;">units</span></span>
-                ${l.receive_note ? `<div style="font-size:10px; color:${l.received > l.qty ? '#2563eb' : '#d97706'}; margin-top:2px;">${l.receive_note}</div>` : ''}
-              </td>` : ''}
-            </tr>`;
-          });
-        });
-        return `<table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
-          <thead><tr style="background:var(--surface-2);">
-            <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>
-            <th style="text-align:center; padding:8px 10px; border:1px solid var(--border); width:80px;">Cantidad</th>
-            ${showReceived ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border); width:100px;">Recibido</th>' : ''}
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
-      })()}
+      <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
+        <thead><tr style="background:var(--surface-2);">
+          <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>
+          <th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Qty (units)</th>
+          ${po.status.includes('Recibida') ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Received (units)</th>' : ''}
+        </tr></thead>
+        <tbody>
+          ${(po.lines||[]).map(l => `<tr>
+            <td style="padding:8px 10px; border:1px solid var(--border);">${l.brand} [${l.code}] ${l.name}</td>
+            <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">${l.qty} <span style="font-size:10px; color:#888;">units</span></td>
+            ${po.status.includes('Recibida') ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">
+              <span style="color:${l.received > l.qty ? '#2563eb' : l.received >= l.qty ? '#16a34a' : '#d97706'}; font-weight:700;">${l.received ?? '—'} <span style="font-size:10px; font-weight:400;">units</span></span>
+              ${l.receive_note ? `<div style="font-size:10px; color:${l.received > l.qty ? '#2563eb' : '#d97706'}; margin-top:2px;">${l.receive_note}</div>` : ''}
+            </td>` : ''}
+          </tr>`).join('')}
+        </tbody>
+      </table>
       ${po.notes ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">📝 ${po.notes}</div>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         ${po.status === 'Borrador' ? `<button onclick="updatePOStatus(${po.id},'Enviada'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📤 Marcar enviada</button>` : ''}
         ${po.status === 'Enviada' ? `<button onclick="updatePOStatus(${po.id},'En camino'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:#2563eb; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🚚 Marcar en camino</button>` : ''}
         ${po.status === 'En camino' || po.status === 'Enviada' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openReceivePO(${po.id})" style="padding:8px 14px; background:#16a34a; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✅ Recibir pedido</button>` : ''}
-        ${po.status === 'Recibida parcial' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openReceivePendientes(${po.id})" style="padding:8px 14px; background:#d97706; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📦 Recibir pendientes</button>` : ''}
         ${po.status === 'Borrador' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openEditPO(${po.id})" style="padding:8px 14px; border:1px solid #2563eb; background:none; color:#2563eb; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✏️ Editar</button>` : ''}
         <button onclick="printPO(${po.id})" style="padding:8px 14px; border:1px solid var(--border); background:none; color:var(--text); border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🖨️ Imprimir</button>
         <button onclick="deletePOFromDetail(${po.id})" style="padding:8px 14px; border:1px solid #dc2626; background:none; color:#dc2626; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🗑 Eliminar</button>
@@ -4695,144 +4559,6 @@ async function updatePOStatus(id, status) {
     await initSuppliersTab();
     showToast('✓ Estado actualizado');
   } catch(e) { showToast('❌ Error'); }
-}
-
-function openReceivePendientes(id) {
-  const po = allPurchaseOrders.find(p => p.id === id);
-  if (!po) return;
-
-  // Only show lines with missing units
-  const pendingLines = (po.lines || []).filter(l => {
-    const received = l.received ?? 0;
-    return received < l.qty;
-  });
-
-  if (!pendingLines.length) {
-    showToast('✅ No hay productos pendientes');
-    return;
-  }
-
-  document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
-  <div id="receive-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px;">
-    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:620px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
-      <div style="padding:20px 24px; border-bottom:1px solid var(--border); flex-shrink:0;">
-        <div style="font-size:17px; font-weight:700;">📦 Recibir pendientes — OC-${String(po.id).padStart(4,'0')}</div>
-        <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">${po.supplier_name} · ${pendingLines.length} producto${pendingLines.length!==1?'s':''} con unidades faltantes</div>
-        <div style="margin-top:8px; background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:8px 12px; font-size:12px; color:#92400e;">
-          ⚠️ Solo se muestran los productos que llegaron incompletos en la recepción anterior
-        </div>
-      </div>
-      <div style="overflow-y:auto; flex:1; padding:16px 24px;">
-        ${pendingLines.map((l, idx) => {
-          const alreadyReceived = l.received ?? 0;
-          const stillNeeded = l.qty - alreadyReceived;
-          return `<div id="prec-row-${idx}" style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--surface-2);">
-            <input type="checkbox" id="prec-check-${idx}" onchange="updatePendingReceiveRow(${idx},${l.qty},${alreadyReceived})" style="width:18px; height:18px; cursor:pointer; accent-color:var(--gold);">
-            <div style="flex:1; min-width:0;">
-              <div style="font-size:13px; font-weight:600;">${l.name}</div>
-              <div style="font-size:11px; color:var(--text-muted);">${l.brand} · Pedido: ${l.qty} units · Ya recibido: ${alreadyReceived} units</div>
-              <div style="font-size:12px; color:#d97706; font-weight:600; margin-top:2px;">Faltantes: ${stillNeeded} units</div>
-            </div>
-            <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-              <input type="number" id="prec-qty-${idx}" value="${stillNeeded}" min="0" max="${stillNeeded}" disabled
-                style="width:70px; text-align:center; font-size:15px; font-weight:700; padding:6px; border:1px solid var(--border); border-radius:var(--radius); opacity:0.4; background:var(--surface);"
-                oninput="updatePendingReceiveRow(${idx},${l.qty},${alreadyReceived})">
-              <span id="prec-status-${idx}" style="font-size:16px; opacity:0.3;">✅</span>
-              <div id="prec-note-${idx}" style="font-size:10px; color:#d97706; display:none;"></div>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-      <div style="padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:8px; flex-shrink:0;">
-        <button onclick="document.getElementById('receive-modal').remove()" class="cancel-btn" style="flex:1; padding:14px;">Cancelar</button>
-        <button onclick="confirmReceivePendientes(${po.id})" style="flex:2; padding:14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:14px; font-weight:700; cursor:pointer; font-family:inherit;">✅ Confirmar recepción</button>
-      </div>
-    </div>
-  </div>`);
-}
-
-function updatePendingReceiveRow(idx, orderedQty, alreadyReceived) {
-  const check  = document.getElementById(`prec-check-${idx}`);
-  const input  = document.getElementById(`prec-qty-${idx}`);
-  const status = document.getElementById(`prec-status-${idx}`);
-  const note   = document.getElementById(`prec-note-${idx}`);
-  const row    = document.getElementById(`prec-row-${idx}`);
-  if (!check || !input) return;
-
-  input.disabled = !check.checked;
-  input.style.opacity = check.checked ? '1' : '0.4';
-  if (status) status.style.opacity = check.checked ? '1' : '0.3';
-
-  if (!check.checked) {
-    if (status) status.textContent = '✅';
-    if (note) note.style.display = 'none';
-    if (row) row.style.background = 'var(--surface-2)';
-    return;
-  }
-
-  const newlyReceived = parseInt(input.value) || 0;
-  const totalNow = alreadyReceived + newlyReceived;
-  const stillNeeded = orderedQty - alreadyReceived;
-
-  if (newlyReceived === stillNeeded) {
-    if (status) status.textContent = '✅';
-    if (note) note.style.display = 'none';
-    if (row) row.style.background = '#f0fdf4';
-  } else if (newlyReceived === 0) {
-    if (status) status.textContent = '❌';
-    if (note) { note.textContent = 'No recibido'; note.style.color = '#dc2626'; note.style.display = 'block'; }
-    if (row) row.style.background = '#fff5f5';
-  } else if (newlyReceived > stillNeeded) {
-    if (status) status.textContent = '⚠️';
-    if (note) { note.textContent = `${newlyReceived - stillNeeded} de más`; note.style.color = '#2563eb'; note.style.display = 'block'; }
-    if (row) row.style.background = '#eff6ff';
-  } else {
-    if (status) status.textContent = '⚠️';
-    if (note) { note.textContent = `Aún faltan ${stillNeeded - newlyReceived}`; note.style.color = '#d97706'; note.style.display = 'block'; }
-    if (row) row.style.background = '#fffbeb';
-  }
-}
-
-async function confirmReceivePendientes(id) {
-  const po = allPurchaseOrders.find(p => p.id === id);
-  if (!po) return;
-
-  const pendingLines = (po.lines || []).filter(l => (l.received ?? 0) < l.qty);
-  let pendingIdx = 0;
-
-  const updatedLines = (po.lines || []).map(l => {
-    const alreadyReceived = l.received ?? 0;
-    if (alreadyReceived >= l.qty) return l; // Already complete, no change
-
-    const check    = document.getElementById(`prec-check-${pendingIdx}`);
-    const qtyInput = document.getElementById(`prec-qty-${pendingIdx}`);
-    pendingIdx++;
-
-    if (!check?.checked) return l; // Not checked, keep as is
-
-    const newlyReceived = parseInt(qtyInput?.value) || 0;
-    const totalReceived = alreadyReceived + newlyReceived;
-    const diff = totalReceived - l.qty;
-    const recNote = totalReceived === l.qty ? null :
-      diff > 0 ? `Llegaron ${diff} unidades de más` :
-      `Faltaron ${Math.abs(diff)} unidades`;
-
-    return { ...l, received: totalReceived, receive_note: recNote };
-  });
-
-  const allReceived = updatedLines.every(l => (l.received ?? 0) >= l.qty);
-  const anyReceived = updatedLines.some(l => (l.received ?? 0) > 0);
-  const status = allReceived ? 'Recibida completa' : anyReceived ? 'Recibida parcial' : 'En camino';
-
-  try {
-    await supabase(`purchase_orders?id=eq.${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ lines: updatedLines, status, received_at: new Date().toISOString() })
-    });
-    document.getElementById('receive-modal')?.remove();
-    await initSuppliersTab();
-    showToast(allReceived ? '✅ Pedido completado' : '⚠️ Aún hay productos pendientes');
-  } catch(e) { showToast('❌ Error al confirmar'); }
 }
 
 // ── RECEIVE PO ────────────────────────────────────────────────
@@ -4959,95 +4685,111 @@ function printPO(id) {
   const supplier = allSuppliers.find(s => s.id === po.supplier_id);
   const date = new Date(po.created_at).toLocaleDateString('en-US', { day:'2-digit', month:'long', year:'numeric' });
 
-  // Build table using string concatenation (avoids nested backtick issues)
-  const sortedLines = [...(po.lines||[])].sort((a,b) => {
-    if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
-    if ((a.code||'') !== (b.code||'')) return (a.code||'').localeCompare(b.code||'', undefined, { numeric: true });
-    return a.name.localeCompare(b.name);
-  });
-  const groups = {};
-  sortedLines.forEach(l => { if (!groups[l.brand]) groups[l.brand] = []; groups[l.brand].push(l); });
-  const isReceived = po.status.includes('Recibida');
-  let counter = 1;
-  let rows = '';
-  Object.keys(groups).sort().forEach(brand => {
-    const bl = groups[brand];
-    const bt = bl.reduce((s,l) => s + l.qty, 0);
-    rows += '<tr><td colspan="4" style="background:#1a1a1a;color:#fff;font-size:12px;font-weight:700;padding:8px 12px;letter-spacing:0.04em;">' +
-      brand.toUpperCase() + ' \u2014 ' + bl.length + ' item' + (bl.length !== 1 ? 's' : '') + ' \xB7 ' + bt + ' units total</td></tr>';
-    bl.forEach(l => {
-      const recOK = (l.received || 0) >= l.qty;
-      const receivedCell = isReceived
-        ? '<td style="text-align:center;"><strong style="color:' + (recOK ? '#16a34a' : '#d97706') + ';font-size:16px;">' + (l.received !== undefined ? l.received : '\u2014') + '</strong><div style="font-size:10px;color:#888;">units</div></td>'
-        : '<td style="text-align:center;"><span style="font-size:22px;color:#ccc;">\u25A1</span></td>';
-      rows += '<tr>' +
-        '<td style="color:#888;width:32px;">' + (counter++) + '</td>' +
-        '<td><span style="font-size:11px;background:#f0f0f0;color:#444;padding:2px 7px;border-radius:4px;margin-right:6px;font-weight:600;">' + (l.code || '\u2014') + '</span>' +
-        l.name + '<div style="font-size:10px;color:#999;margin-top:2px;font-family:monospace;">' + (l.barcode || '') + '</div></td>' +
-        '<td style="text-align:center;"><span style="font-size:20px;font-weight:900;color:#1a1a1a;">' + l.qty + '</span><div style="font-size:10px;font-weight:700;color:#b8952a;text-transform:uppercase;letter-spacing:0.05em;">units</div></td>' +
-        receivedCell + '</tr>';
-    });
-  });
-  const receivedHeader = isReceived
-    ? '<th style="text-align:center;width:90px;">RECEIVED<br><span style="font-weight:400;font-size:9px;opacity:0.7;">(UNITS)</span></th>'
-    : '<th style="text-align:center;width:90px;">\u2713 CHECK</th>';
-  const tableHTML = '<table><thead><tr>' +
-    '<th style="width:32px;">#</th><th>Product</th>' +
-    '<th style="text-align:center;width:90px;">QTY<br><span style="font-weight:400;font-size:9px;opacity:0.7;">(UNITS)</span></th>' +
-    receivedHeader + '</tr></thead><tbody>' + rows + '</tbody></table>';
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>OC-${String(po.id).padStart(4,'0')}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #1a1a1a; padding: 32px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 3px solid #b8952a; padding-bottom: 16px; }
+    .company-name { font-size: 22px; font-weight: 700; color: #b8952a; }
+    .po-title { font-size: 28px; font-weight: 900; color: #1a1a1a; }
+    .po-number { font-size: 13px; color: #888; margin-top: 4px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .info-box { background: #f9f5ec; border: 1px solid #e8dfc8; border-radius: 8px; padding: 12px 16px; }
+    .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #b8952a; font-weight: 700; margin-bottom: 6px; }
+    .info-value { font-size: 14px; font-weight: 600; }
+    .info-sub { font-size: 12px; color: #666; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background: #1a1a1a; color: #fff; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; background: #fef9ee; color: #b8952a; border: 1px solid #e8dfc8; }
+    .footer { margin-top: 32px; border-top: 1px solid #eee; padding-top: 16px; font-size: 11px; color: #aaa; text-align: center; }
+    .notes-box { background: #fffbf0; border: 1px solid #e8dfc8; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; }
+    @media print { body { padding: 20px; } }
+    @page { margin-bottom: 32px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="company-name">LucyGlam Beauty</div>
+      <div style="font-size:12px; color:#888;">(818) 669-4493 · lucyglamshop@gmail.com</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="po-title">PURCHASE ORDER</div>
+      <div class="po-number">PO-${String(po.id).padStart(4,'0')} · <span class="status-badge">${po.status}</span></div>
+      <div style="font-size:12px; color:#888; margin-top:4px;">${date}</div>
+    </div>
+  </div>
 
-  const notesHTML = po.notes ? '<div class="notes-box">\uD83D\uDCDD <strong>Notes:</strong> ' + po.notes + '</div>' : '';
-  const supplierContact = (supplier?.contact ? '<div class="info-sub">\uD83D\uDC64 ' + supplier.contact + '</div>' : '') +
-    (supplier?.phone ? '<div class="info-sub">\uD83D\uDCDE ' + supplier.phone + '</div>' : '') +
-    (supplier?.email ? '<div class="info-sub">\u2709\uFE0F ' + supplier.email + '</div>' : '');
+  <div class="info-grid">
+    <div class="info-box">
+      <div class="info-label">Supplier</div>
+      <div class="info-value">${po.supplier_name}</div>
+      ${supplier?.contact ? `<div class="info-sub">👤 ${supplier.contact}</div>` : ''}
+      ${supplier?.phone ? `<div class="info-sub">📞 ${supplier.phone}</div>` : ''}
+      ${supplier?.email ? `<div class="info-sub">✉️ ${supplier.email}</div>` : ''}
+    </div>
+    <div class="info-box">
+      <div class="info-label">Order Info</div>
+      <div class="info-value">Created by: ${po.created_by || '—'}</div>
+      <div class="info-sub">Date: ${date}</div>
+      <div class="info-sub">Total products: ${(po.lines||[]).length}</div>
+      <div class="info-sub">Total units: ${(po.lines||[]).reduce((s,l)=>s+l.qty,0)}</div>
+    </div>
+  </div>
 
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>OC-' + String(po.id).padStart(4,'0') + '</title><style>' +
-    '* { margin:0; padding:0; box-sizing:border-box; }' +
-    'body { font-family: Arial, sans-serif; font-size: 13px; color: #1a1a1a; padding: 32px; }' +
-    '.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 3px solid #b8952a; padding-bottom: 16px; }' +
-    '.company-name { font-size: 22px; font-weight: 700; color: #b8952a; }' +
-    '.po-title { font-size: 28px; font-weight: 900; color: #1a1a1a; }' +
-    '.po-number { font-size: 13px; color: #888; margin-top: 4px; }' +
-    '.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }' +
-    '.info-box { background: #f9f5ec; border: 1px solid #e8dfc8; border-radius: 8px; padding: 12px 16px; }' +
-    '.info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #b8952a; font-weight: 700; margin-bottom: 6px; }' +
-    '.info-value { font-size: 14px; font-weight: 600; }' +
-    '.info-sub { font-size: 12px; color: #666; margin-top: 2px; }' +
-    'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
-    'th { background: #1a1a1a; color: #fff; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }' +
-    'td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }' +
-    '.status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; background: #fef9ee; color: #b8952a; border: 1px solid #e8dfc8; }' +
-    '.footer { margin-top: 32px; border-top: 1px solid #eee; padding-top: 16px; font-size: 11px; color: #aaa; text-align: center; }' +
-    '.notes-box { background: #fffbf0; border: 1px solid #e8dfc8; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; }' +
-    '@media print { body { padding: 20px; } }' +
-    '@page { margin-bottom: 32px; }' +
-    '</style></head><body>' +
-    '<div class="header"><div><div class="company-name">LucyGlam Beauty</div><div style="font-size:12px;color:#888;">(818) 669-4493 \xB7 lucyglamshop@gmail.com</div></div>' +
-    '<div style="text-align:right;"><div class="po-title">PURCHASE ORDER</div>' +
-    '<div class="po-number">PO-' + String(po.id).padStart(4,'0') + ' \xB7 <span class="status-badge">' + po.status + '</span></div>' +
-    '<div style="font-size:12px;color:#888;margin-top:4px;">' + date + '</div></div></div>' +
-    '<div class="info-grid">' +
-    '<div class="info-box"><div class="info-label">Supplier</div><div class="info-value">' + po.supplier_name + '</div>' + supplierContact + '</div>' +
-    '<div class="info-box"><div class="info-label">Order Info</div><div class="info-value">Created by: ' + (po.created_by || '\u2014') + '</div>' +
-    '<div class="info-sub">Date: ' + date + '</div>' +
-    '<div class="info-sub">Total products: ' + (po.lines||[]).length + '</div>' +
-    '<div class="info-sub">Total units: ' + (po.lines||[]).reduce((s,l) => s + l.qty, 0) + '</div></div></div>' +
-    notesHTML + tableHTML +
-    '<div class="footer">LucyGlam Beauty \xB7 PO-' + String(po.id).padStart(4,'0') + ' \xB7 ' + date + '</div>' +
-    '</body></html>';
+  ${po.notes ? `<div class="notes-box">📝 <strong>Notes:</strong> ${po.notes}</div>` : ''}
 
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Product</th>
+        <th style="text-align:center;">Qty (units)</th>
+        ${po.status.includes('Recibida') ? '<th style="text-align:center;">Received (units)</th>' : '<th style="text-align:center;">✓ Received</th>'}
+      </tr>
+    </thead>
+    <tbody>
+      ${(po.lines||[]).map((l, i) => `
+      <tr>
+        <td style="color:#888;">${i+1}</td>
+        <td><strong>${l.brand}</strong> [${l.code}] ${l.name}</td>
+        <td style="text-align:center; font-weight:700;">${l.qty} <span style="font-size:10px; color:#888; font-weight:400;">units</span></td>
+        <td style="text-align:center;">${po.status.includes('Recibida') ? `<strong style="color:${l.received>=l.qty?'#16a34a':'#d97706'}">${l.received??'—'} units</strong>` : '___'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    LucyGlam Beauty · PO-${String(po.id).padStart(4,'0')} · ${date}
+  </div>
+</body>
+</html>`;
+
+  // Show in modal instead of new tab
   const existing = document.getElementById('po-print-modal');
   if (existing) existing.remove();
+
   const modal = document.createElement('div');
   modal.id = 'po-print-modal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
-  modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:680px;margin:auto;overflow:hidden;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#1a1a1a;">' +
-    '<span style="color:#fff;font-weight:600;font-size:14px;">OC-' + String(po.id).padStart(4,'0') + ' \u2014 ' + po.supplier_name + '</span>' +
-    '<div style="display:flex;gap:8px;">' +
-    '<button onclick="document.getElementById(\'po-print-frame\').contentWindow.print()" style="padding:6px 14px;background:var(--gold);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">\uD83D\uDDA8\uFE0F Imprimir / PDF</button>' +
-    '<button onclick="document.getElementById(\'po-print-modal\').remove()" style="padding:6px 14px;background:none;border:1px solid #555;color:#fff;border-radius:6px;font-size:13px;cursor:pointer;">Cerrar</button>' +
-    '</div></div><iframe id="po-print-frame" style="width:100%;height:80vh;border:none;"></iframe></div>';
+  modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;';
+  modal.innerHTML = `
+    <div style="background:#fff; border-radius:12px; width:100%; max-width:680px; margin:auto; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:#1a1a1a;">
+        <span style="color:#fff; font-weight:600; font-size:14px;">OC-${String(po.id).padStart(4,'0')} — ${po.supplier_name}</span>
+        <div style="display:flex; gap:8px;">
+          <button onclick="document.getElementById('po-print-frame').contentWindow.print()" style="padding:6px 14px; background:var(--gold); color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">🖨️ Imprimir / PDF</button>
+          <button onclick="document.getElementById('po-print-modal').remove()" style="padding:6px 14px; background:none; border:1px solid #555; color:#fff; border-radius:6px; font-size:13px; cursor:pointer;">Cerrar</button>
+        </div>
+      </div>
+      <iframe id="po-print-frame" style="width:100%; height:80vh; border:none;" srcdoc=""></iframe>
+    </div>`;
+
   document.body.appendChild(modal);
   document.getElementById('po-print-frame').srcdoc = html;
 }
@@ -5061,8 +4803,6 @@ async function deletePOFromDetail(id) {
     showToast('✓ Orden de compra eliminada');
   } catch(e) { showToast('❌ Error al eliminar'); }
 }
-
-
 
 // ── EDIT DRAFT PO ─────────────────────────────────────────────
 function openEditPO(id) {
@@ -5410,9 +5150,6 @@ async function handleReorderFile(input) {
   resultsDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Analizando inventario...</div>';
 
   try {
-    // Always reload products fresh so alt_barcodes are up to date
-    PRODUCTS = await dbFetchProducts();
-
     // Read Excel with SheetJS
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data);
@@ -5447,7 +5184,7 @@ async function handleReorderFile(input) {
     const start = new Date(); start.setDate(start.getDate() - 30);
     const orders = await supabase(`orders?created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}&is_test=eq.false&status=neq.Cancelada&select=lines`).catch(() => []);
 
-    // Build sales map from orders (keyed by product id for accuracy across barcode changes)
+    // Build sales map from orders
     const salesMap = {};
     (orders || []).forEach(o => {
       (o.lines || []).forEach(l => {
@@ -5456,20 +5193,12 @@ async function handleReorderFile(input) {
         salesMap[key] += parseInt(l.qty || 0);
       });
     });
-    // Also build a product-id-keyed sales map to consolidate across barcode changes
-    const salesByProdId = {};
-    Object.keys(salesMap).forEach(bc => {
-      const prod = findProductByBarcode(bc);
-      if (prod) {
-        salesByProdId[prod.id] = (salesByProdId[prod.id] || 0) + salesMap[bc];
-      }
-    });
 
     // Cross-reference with PRODUCTS catalog
     const normalize = s => String(s || '').toLowerCase().replace(/\s+/g,' ').trim();
     const analyzed = inv.map(row => {
       // Find in catalog by barcode first, then by name
-      let prod = findProductByBarcode(row.barcode);
+      let prod = PRODUCTS.find(p => String(p.barcode).trim() === row.barcode);
       if (!prod && row.name) prod = PRODUCTS.find(p => normalize(p.name) === normalize(row.name));
 
       const brand    = prod?.brand || row.brand || '❓ Sin identificar';
@@ -5478,7 +5207,7 @@ async function handleReorderFile(input) {
       const barcode  = prod?.barcode || row.barcode;
 
       // Sales: prefer Excel data (actual sales), fallback to Supabase orders
-      const sold30   = row.sold30 > 0 ? row.sold30 : (prod ? (salesByProdId[prod.id] || salesMap[barcode] || 0) : (salesMap[barcode] || 0));
+      const sold30   = row.sold30 > 0 ? row.sold30 : (salesMap[barcode] || 0);
       const dailySales = sold30 / 30;
 
       // Lead time from supplier whose brands include this brand
@@ -5692,23 +5421,16 @@ async function createPOForSupplier(supplierId, supplierName) {
   const selected = (reorderResults || []).filter(r => r.supplierId === supplierId && reorderSelected.has(r.barcode) && r.orderQty > 0);
   if (!selected.length) return;
 
-  poLines = selected
-    .slice()
-    .sort((a, b) => {
-      if (a.brand !== b.brand) return a.brand.localeCompare(b.brand);
-      if ((a.code||'') !== (b.code||'')) return (a.code||'').localeCompare(b.code||'', undefined, { numeric: true });
-      return a.name.localeCompare(b.name);
-    })
-    .map(r => ({
-      barcode: r.barcode,
-      brand: r.brand,
-      code: r.code || '—',
-      name: r.name,
-      cost: 0,
-      qty: r.orderQty,
-      subtotal: 0,
-      received: 0
-    }));
+  poLines = selected.map(r => ({
+    barcode: r.barcode,
+    brand: r.brand,
+    code: r.code || '—',
+    name: r.name,
+    cost: 0,
+    qty: r.orderQty,
+    subtotal: 0,
+    received: 0
+  }));
 
   try {
     await supabase('purchase_orders', {
