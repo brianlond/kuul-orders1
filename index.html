@@ -798,6 +798,147 @@
 
   <!-- EDIT MODAL -->
   <div class="modal-overlay" id="edit-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+    <div class="modal" style="max-width:600px; width:100%; margin:auto;">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+        <div>
+          <div class="modal-title" style="margin:0;">Editar orden</div>
+          <div id="edit-order-id-label" style="font-size:12px; color:var(--text-muted); margin-top:2px;"></div>
+        </div>
+        <button onclick="closeEditModal()" style="width:32px;height:32px;border:none;background:var(--surface-2);border-radius:50%;font-size:18px;cursor:pointer;color:var(--text-muted);">×</button>
+      </div>
+
+      <div class="section-label" style="margin-bottom:10px;">👤 Cliente</div>
+      <div style="background:var(--surface-2); border-radius:var(--radius); padding:14px; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+          <label style="font-size:12px; color:var(--text-muted);">Nivel de precio:</label>
+          <select id="edit-level-select" onchange="setEditLevel(this.value)" style="padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; background:var(--surface);">
+            <option value="Retail">Retail</option>
+            <option value="Salon" selected>Salon</option>
+            <option value="Wholesale">Wholesale</option>
+          </select>
+          <span id="edit-level-badge" class="level-badge badge-lista">Salon</span>
+        </div>
+        <div class="row2">
+          <div class="field-group" style="margin-bottom:10px;">
+            <label>Nombre del cliente</label>
+            <input type="text" id="edit-client-name">
+          </div>
+          <div class="field-group" style="margin-bottom:10px;">
+            <label>Negocio</label>
+            <input type="text" id="edit-business-name">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field-group" style="margin-bottom:10px;">
+            <label>Teléfono</label>
+            <input type="tel" id="edit-phone">
+          </div>
+          <div class="field-group" style="margin-bottom:10px;">
+            <label>Seller Permit # <span class="optional">(opcional)</span></label>
+            <input type="text" id="edit-permit" oninput="onEditPermitChange()">
+          </div>
+        </div>
+        <div class="field-group" style="margin-bottom:10px;">
+          <label>Dirección</label>
+          <input type="text" id="edit-address">
+        </div>
+        <div class="row2">
+          <div class="field-group" style="margin-bottom:0;">
+            <label>Email <span class="optional">(opcional)</span></label>
+            <input type="email" id="edit-email">
+          </div>
+          <div class="field-group" style="margin-bottom:0;">
+            <label>Forma de pago</label>
+            <select id="edit-payment-method">
+              <option value="">— Sin especificar —</option>
+              <option value="Efectivo">Efectivo</option>
+              <option value="Zelle">Zelle</option>
+              <option value="Check">Check</option>
+              <option value="Tarjeta">Tarjeta</option>
+              <option value="Transferencia">Transferencia</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label" style="margin-bottom:10px;">📦 Productos</div>
+      <div id="edit-product-lines" style="margin-bottom:8px;"></div>
+      <button class="add-product-btn" onclick="openEditProductSearch()" style="margin-bottom:16px;">+ Agregar producto</button>
+
+      <div class="section-label" style="margin-bottom:10px;">🏷️ Descuento <span class="optional">(opcional)</span></div>
+      <div style="background:var(--surface-2); border-radius:var(--radius); padding:14px; margin-bottom:16px;">
+        <div class="row2">
+          <div class="field-group" style="margin-bottom:0;">
+            <label>Tipo</label>
+            <select id="edit-discount-type" onchange="recalcEditTotal()" style="background:var(--surface);">
+              <option value="pct">Porcentaje (%)</option>
+              <option value="fixed">Monto fijo ($)</option>
+            </select>
+          </div>
+          <div class="field-group" style="margin-bottom:0;">
+            <label>Valor</label>
+            <input type="number" id="edit-discount-val" value="0" min="0" step="0.01" oninput="recalcEditTotal()" placeholder="0">
+          </div>
+        </div>
+        <div class="field-group" style="margin-top:10px; margin-bottom:0;">
+          <label>Razón del descuento <span class="optional">(opcional)</span></label>
+          <input type="text" id="edit-discount-reason" placeholder="Ej: preferred pricing, promoción...">
+        </div>
+      </div>
+
+      <div class="section-label" style="margin-bottom:10px;">🚚 Envío y taxes</div>
+      <div style="background:var(--surface-2); border-radius:var(--radius); padding:14px; margin-bottom:16px;">
+        <div class="toggle-row" style="margin-bottom:10px;">
+          <input type="checkbox" id="edit-shipping-toggle" onchange="recalcEditTotal()">
+          <label for="edit-shipping-toggle">Cobrar envío <strong>$9.99</strong></label>
+        </div>
+        <div class="toggle-row" id="edit-tax-toggle-row">
+          <input type="checkbox" id="edit-tax-toggle" onchange="recalcEditTotal()">
+          <label for="edit-tax-toggle">Cobrar tax</label>
+        </div>
+        <div id="edit-tax-rate-row" style="display:none; margin-top:10px; margin-left:28px;">
+          <div class="tax-input-row">
+            <input type="number" id="edit-tax-rate" value="10.25" min="0" max="30" step="0.01" oninput="recalcEditTotal()" style="width:80px;">
+            <span class="tax-pct-label">% sobre subtotal (después de descuento)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-group" style="margin-bottom:16px;">
+        <label>📝 Notas <span class="optional">(opcional)</span></label>
+        <textarea id="edit-notes" rows="2" style="resize:vertical;"></textarea>
+      </div>
+
+      <div style="background:var(--surface-2); border-radius:var(--radius); padding:14px; margin-bottom:16px;">
+        <div class="section-label" style="margin-bottom:10px;">Resumen</div>
+        <div class="summary-table">
+          <div class="summary-row"><span>Subtotal</span><span id="edit-sum-products">$0.00</span></div>
+          <div class="summary-row" id="edit-sum-discount-row" style="display:none;"><span id="edit-sum-discount-label" style="color:#16a34a;">Descuento</span><span id="edit-sum-discount-amount" style="color:#16a34a;">-$0.00</span></div>
+          <div class="summary-row" id="edit-sum-shipping-row" style="display:none;"><span>Envío</span><span>$9.99</span></div>
+          <div class="summary-row" id="edit-sum-tax-row" style="display:none;"><span id="edit-sum-tax-label">Tax</span><span id="edit-sum-tax-amount">$0.00</span></div>
+          <div class="summary-row total"><span>Total</span><span id="edit-order-total">$0.00</span></div>
+        </div>
+      </div>
+
+      <div id="edit-error" style="font-size:13px; color:var(--danger); margin-bottom:8px;"></div>
+      <button class="submit-btn" id="edit-save-btn" onclick="saveEditOrder()">Guardar cambios →</button>
+      <button class="cancel-btn" onclick="closeEditModal()">Cancelar</button>
+    </div>
+  </div>
+
+    <div class="modal-overlay" id="customer-history-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
+    <div class="modal" style="max-width:560px; width:100%; margin:auto;">
+      <div class="modal-title" id="history-modal-title">Historial de compras</div>
+      <div id="history-modal-content">
+        <div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>
+      </div>
+      <button class="cancel-btn" style="margin-top:16px;" onclick="closeHistoryModal()">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- EDIT MODAL -->
+  <div class="modal-overlay" id="edit-modal" style="display:none; align-items:flex-start; padding:20px; overflow-y:auto;">
     <div class="modal" style="max-width:560px; width:100%; margin:auto;">
       <div class="modal-title" style="display:flex; align-items:center; justify-content:space-between;">Editar orden <span id="edit-level-indicator" style="font-size:13px; font-weight:600;"></span></div>
 

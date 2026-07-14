@@ -2120,13 +2120,38 @@ async function confirmPicking() {
     // Save adjusted qty info per line index
     Object.keys(adjustedQtys).forEach(idx => { picking[`qty_${idx}`] = adjustedQtys[idx]; });
 
+    // Recalculate totals based on actual dispatched quantities
+    const level = pickingOrder.level || 'Salon';
+    let newSubtotal = 0;
+    const finalLines = updatedLines.map(line => {
+      const qty = line.dispatched_qty !== undefined ? line.dispatched_qty : line.qty;
+      const lineSubtotal = parseFloat(line.price || 0) * qty;
+      newSubtotal += lineSubtotal;
+      return { ...line, qty, subtotal: lineSubtotal };
+    });
+
+    const discountAmt = parseFloat(pickingOrder.preferred_discount || 0);
+    const subtotalAfterDiscount = newSubtotal - discountAmt;
+    const taxRate = parseFloat(pickingOrder.tax_rate || 0);
+    const newTaxAmt = taxRate > 0 ? subtotalAfterDiscount * (taxRate / 100) : 0;
+    const shippingAmt = parseFloat(pickingOrder.shipping || 0);
+    const newTotal = Math.max(0, subtotalAfterDiscount + shippingAmt + newTaxAmt);
+
     await supabase(`orders?id=eq.${pickingOrder.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'Lista', picking, lines: updatedLines })
+      body: JSON.stringify({
+        status: 'Lista',
+        picking,
+        lines: finalLines,
+        subtotal: newSubtotal,
+        tax_amount: taxRate > 0 ? newTaxAmt : null,
+        total: newTotal
+      })
     });
 
     closePicking();
-    showToast('✓ Picking completo — orden marcada como Lista');
+    const hadAdjustments = Object.keys(adjustedQtys).length > 0;
+    showToast(hadAdjustments ? '✓ Picking completo — orden y totales actualizados' : '✓ Picking completo — orden marcada como Lista');
     await loadOrders();
   } catch(e) {
     showToast('❌ Error al confirmar picking');
@@ -2840,6 +2865,7 @@ async function openEditModal(id) {
   editingOrderId = id;
   editLineCount = 0;
 
+  document.getElementById('edit-order-id-label').textContent = 'Orden #' + order.id + ' · ' + new Date(order.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
   document.getElementById('edit-client-name').value = order.client;
   document.getElementById('edit-business-name').value = order.business;
   document.getElementById('edit-phone').value = order.phone;
@@ -2847,9 +2873,15 @@ async function openEditModal(id) {
   document.getElementById('edit-address').value = order.address;
   document.getElementById('edit-email').value = order.email || '';
   document.getElementById('edit-notes').value = order.notes || '';
+  document.getElementById('edit-payment-method').value = order.payment_method || '';
   document.getElementById('edit-shipping-toggle').checked = order.shipping !== null && order.shipping !== undefined;
   document.getElementById('edit-tax-toggle').checked = !!order.tax_rate;
   document.getElementById('edit-tax-rate').value = order.tax_rate || 10.25;
+  // Load discount
+  const hasSavedDiscount = order.preferred_discount && parseFloat(order.preferred_discount) > 0;
+  document.getElementById('edit-discount-type').value = 'fixed';
+  document.getElementById('edit-discount-val').value = hasSavedDiscount ? parseFloat(order.preferred_discount).toFixed(2) : '0';
+  document.getElementById('edit-discount-reason').value = order.discount_reason || '';
 
   // Get level from order first, then match customer by phone or name
   let editLevel = order.level || null;
@@ -3055,10 +3087,26 @@ function recalcEditTotal() {
   const hasTax = document.getElementById('edit-tax-toggle').checked;
   const taxRate = parseFloat(document.getElementById('edit-tax-rate').value) || 0;
   const shippingAmt = hasShipping ? SHIPPING : 0;
-  const taxAmt = hasTax ? subtotal * (taxRate / 100) : 0;
-  const total = subtotal + shippingAmt + taxAmt;
+
+  // Discount
+  const discountType = document.getElementById('edit-discount-type')?.value || 'pct';
+  const discountVal = parseFloat(document.getElementById('edit-discount-val')?.value) || 0;
+  const discountAmt = discountType === 'pct' ? subtotal * (discountVal / 100) : Math.min(discountVal, subtotal);
+  const discountReason = document.getElementById('edit-discount-reason')?.value.trim() || '';
+
+  const subtotalAfterDiscount = subtotal - discountAmt;
+  const taxAmt = hasTax ? subtotalAfterDiscount * (taxRate / 100) : 0;
+  const total = Math.max(0, subtotalAfterDiscount + shippingAmt + taxAmt);
 
   document.getElementById('edit-sum-products').textContent = '$' + subtotal.toFixed(2);
+
+  const discRow = document.getElementById('edit-sum-discount-row');
+  if (discRow) {
+    discRow.style.display = discountAmt > 0 ? 'flex' : 'none';
+    document.getElementById('edit-sum-discount-label').textContent = discountReason ? 'Descuento (' + discountReason + ')' : 'Descuento';
+    document.getElementById('edit-sum-discount-amount').textContent = '-$' + discountAmt.toFixed(2);
+  }
+
   document.getElementById('edit-sum-shipping-row').style.display = hasShipping ? 'flex' : 'none';
   document.getElementById('edit-sum-tax-row').style.display = hasTax ? 'flex' : 'none';
   document.getElementById('edit-sum-tax-label').textContent = 'Tax (' + taxRate.toFixed(2) + '%)';
@@ -3111,8 +3159,13 @@ async function saveEditOrder() {
   const hasTax      = document.getElementById('edit-tax-toggle').checked;
   const taxRate     = parseFloat(document.getElementById('edit-tax-rate').value) || 0;
   const shippingAmt = hasShipping ? SHIPPING : 0;
-  const taxAmt      = hasTax ? subtotal * (taxRate / 100) : 0;
-  const total       = subtotal + shippingAmt + taxAmt;
+  const discountType = document.getElementById('edit-discount-type')?.value || 'pct';
+  const discountVal  = parseFloat(document.getElementById('edit-discount-val')?.value) || 0;
+  const discountAmt  = discountType === 'pct' ? subtotal * (discountVal / 100) : Math.min(discountVal, subtotal);
+  const discountReason = document.getElementById('edit-discount-reason')?.value.trim() || null;
+  const subtotalAfterDiscount = subtotal - discountAmt;
+  const taxAmt      = hasTax ? subtotalAfterDiscount * (taxRate / 100) : 0;
+  const total       = Math.max(0, subtotalAfterDiscount + shippingAmt + taxAmt);
 
   const btn = document.getElementById('edit-save-btn');
   btn.disabled = true;
@@ -3121,7 +3174,7 @@ async function saveEditOrder() {
   try {
     await supabase(`orders?id=eq.${editingOrderId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ client, business, phone, permit, address, email, notes, lines, subtotal, shipping: hasShipping ? shippingAmt : null, tax_rate: hasTax ? taxRate : null, tax_amount: hasTax ? taxAmt : null, total, level: window._editOrderLevel || 'Salon', payment_method: document.getElementById('edit-payment-method')?.value || null })
+      body: JSON.stringify({ client, business, phone, permit, address, email, notes, lines, subtotal, preferred_discount: discountAmt > 0 ? discountAmt : null, discount_reason: discountReason || null, shipping: hasShipping ? shippingAmt : null, tax_rate: hasTax ? taxRate : null, tax_amount: hasTax ? taxAmt : null, total, level: window._editOrderLevel || 'Salon', payment_method: document.getElementById('edit-payment-method')?.value || null })
     });
     closeEditModal();
     showToast('✓ Orden actualizada');
