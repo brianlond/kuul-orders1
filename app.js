@@ -4631,23 +4631,45 @@ function openPODetail(id) {
         </div>
         <span style="font-size:12px; font-weight:700; padding:4px 12px; border-radius:99px; background:${statusColors[po.status]}22; color:${statusColors[po.status]}; border:1px solid ${statusColors[po.status]}44;">${po.status}</span>
       </div>
-      <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
-        <thead><tr style="background:var(--surface-2);">
-          <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>
-          <th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Qty (units)</th>
-          ${po.status.includes('Recibida') ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Received (units)</th>' : ''}
-        </tr></thead>
-        <tbody>
-          ${(po.lines||[]).map(l => `<tr>
-            <td style="padding:8px 10px; border:1px solid var(--border);">${l.brand} [${l.code}] ${l.name}</td>
-            <td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">${l.qty} <span style="font-size:10px; color:#888;">units</span></td>
-            ${po.status.includes('Recibida') ? `<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">
-              <span style="color:${l.received > l.qty ? '#2563eb' : l.received >= l.qty ? '#16a34a' : '#d97706'}; font-weight:700;">${l.received ?? '—'} <span style="font-size:10px; font-weight:400;">units</span></span>
-              ${l.receive_note ? `<div style="font-size:10px; color:${l.received > l.qty ? '#2563eb' : '#d97706'}; margin-top:2px;">${l.receive_note}</div>` : ''}
-            </td>` : ''}
-          </tr>`).join('')}
-        </tbody>
-      </table>
+      ${(() => {
+        const showReceived = po.status.includes('Recibida');
+        const totalCost = isAdmin ? (po.lines||[]).reduce((s,l) => {
+          const uc = l.unit_cost || l.cost || 0;
+          return s + uc * l.qty;
+        }, 0) : 0;
+        const totalUnits = (po.lines||[]).reduce((s,l) => s + l.qty, 0);
+        const rows = (po.lines||[]).map(l => {
+          const uc = l.unit_cost || l.cost || 0;
+          const ct = uc * l.qty;
+          return '<tr>' +
+            '<td style="padding:8px 10px; border:1px solid var(--border);">' + l.brand + ' [' + l.code + '] ' + l.name + '</td>' +
+            '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">' + l.qty + ' <span style="font-size:10px;color:#888;">units</span></td>' +
+            (isAdmin ? '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:var(--text-muted);">$' + uc.toFixed(2) + '</td>' +
+              '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); font-weight:600; color:#b45309;">$' + ct.toFixed(2) + '</td>' : '') +
+            (showReceived ? '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">' +
+              '<span style="color:' + (l.received > l.qty ? '#2563eb' : l.received >= l.qty ? '#16a34a' : '#d97706') + '; font-weight:700;">' + (l.received ?? '—') + ' <span style="font-size:10px; font-weight:400;">units</span></span>' +
+              (l.receive_note ? '<div style="font-size:10px; color:' + (l.received > l.qty ? '#2563eb' : '#d97706') + '; margin-top:2px;">' + l.receive_note + '</div>' : '') +
+            '</td>' : '') +
+          '</tr>';
+        }).join('');
+        const totalRow = '<tr style="background:var(--surface-2); font-weight:700;">' +
+          '<td style="padding:8px 10px; border:1px solid var(--border);">Total</td>' +
+          '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">' + totalUnits + ' units</td>' +
+          (isAdmin ? '<td style="padding:8px 10px; border:1px solid var(--border);"></td>' +
+            '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:#b45309;">$' + totalCost.toFixed(2) + '</td>' : '') +
+          (showReceived ? '<td style="padding:8px 10px; border:1px solid var(--border);"></td>' : '') +
+          '</tr>';
+        return '<table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">' +
+          '<thead><tr style="background:var(--surface-2);">' +
+          '<th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">Producto</th>' +
+          '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Cant.</th>' +
+          (isAdmin ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Costo/u</th>' +
+            '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Total costo</th>' : '') +
+          (showReceived ? '<th style="text-align:center; padding:8px 10px; border:1px solid var(--border);">Recibido</th>' : '') +
+          '</tr></thead>' +
+          '<tbody>' + rows + totalRow + '</tbody>' +
+          '</table>';
+      })()}
       ${po.notes ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">📝 ${po.notes}</div>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         ${po.status === 'Borrador' ? `<button onclick="updatePOStatus(${po.id},'Enviada'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📤 Marcar enviada</button>` : ''}
