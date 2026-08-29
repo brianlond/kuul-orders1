@@ -1289,6 +1289,10 @@ function editProduct(id) {
   const wsPrice = p.price && p.discount_wholesale ? (p.price * (1 - p.discount_wholesale / 100)).toFixed(4) : '';
   document.getElementById('pm-price-wholesale').value = wsPrice ? parseFloat(wsPrice) : '';
   document.getElementById('pm-active').checked = p.active !== false;
+  const costSection = document.getElementById('pm-cost-section');
+  if (costSection) costSection.style.display = isAdmin ? 'block' : 'none';
+  const costEl = document.getElementById('pm-cost');
+  if (costEl) costEl.value = p.cost || '';
   document.getElementById('product-modal').style.display = 'flex';
 }
 
@@ -1306,6 +1310,10 @@ function openAddProduct() {
   document.getElementById('pm-discount-wholesale').value = '';
   document.getElementById('pm-active').value = 'true';
   document.getElementById('pm-error').textContent = '';
+  const costSection = document.getElementById('pm-cost-section');
+  if (costSection) costSection.style.display = isAdmin ? 'block' : 'none';
+  const costEl = document.getElementById('pm-cost');
+  if (costEl) costEl.value = '';
   document.getElementById('product-modal').style.display = 'flex';
 }
 
@@ -1325,6 +1333,10 @@ function openEditProduct(id) {
   document.getElementById('pm-discount-wholesale').value = p.discount_wholesale || '';
   document.getElementById('pm-active').value = p.active ? 'true' : 'false';
   document.getElementById('pm-error').textContent = '';
+    const costSec = document.getElementById('pm-cost-section');
+  if (costSec) costSec.style.display = isAdmin ? 'block' : 'none';
+  const costInput = document.getElementById('pm-cost');
+  if (costInput) costInput.value = p.cost || '';
   document.getElementById('product-modal').style.display = 'flex';
 }
 
