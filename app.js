@@ -4633,30 +4633,46 @@ function openPODetail(id) {
       </div>
       ${(() => {
         const showReceived = po.status.includes('Recibida');
+        let missingCostCount = 0;
         const totalCost = isAdmin ? (po.lines||[]).reduce((s,l) => {
-          const uc = l.unit_cost || l.cost || 0;
-          return s + uc * l.qty;
+          const catalogProd = findProductByBarcode(l.barcode) || PRODUCTS.find(p => p.name === l.name);
+          if (!catalogProd || !catalogProd.cost) { missingCostCount++; return s; }
+          return s + parseFloat(catalogProd.cost) * l.qty;
         }, 0) : 0;
         const totalUnits = (po.lines||[]).reduce((s,l) => s + l.qty, 0);
         const rows = (po.lines||[]).map(l => {
-          const uc = l.unit_cost || l.cost || 0;
+          // Always prefer cost from current catalog (may have been updated after PO was saved)
+          const catalogProd = findProductByBarcode(l.barcode) || PRODUCTS.find(p => p.name === l.name);
+          const hasCatalogCost = catalogProd && catalogProd.cost > 0;
+          const uc = hasCatalogCost ? parseFloat(catalogProd.cost) : 0;
           const ct = uc * l.qty;
+          const costCell = hasCatalogCost
+            ? '$' + uc.toFixed(2)
+            : '<span style="color:#dc2626; font-weight:700; font-size:12px;">⚠️ Sin costo</span>';
+          const totalCell = hasCatalogCost
+            ? '$' + ct.toFixed(2)
+            : '<span style="color:#dc2626; font-size:11px;">Agregar costo<br>en catálogo</span>';
           return '<tr>' +
             '<td style="padding:8px 10px; border:1px solid var(--border);">' + l.brand + ' [' + l.code + '] ' + l.name + '</td>' +
             '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">' + l.qty + ' <span style="font-size:10px;color:#888;">units</span></td>' +
-            (isAdmin ? '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:var(--text-muted);">$' + uc.toFixed(2) + '</td>' +
-              '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); font-weight:600; color:#b45309;">$' + ct.toFixed(2) + '</td>' : '') +
+            (isAdmin ? '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:var(--text-muted);">' + costCell + '</td>' +
+              '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); font-weight:600; color:#b45309;">' + totalCell + '</td>' : '') +
             (showReceived ? '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">' +
               '<span style="color:' + (l.received > l.qty ? '#2563eb' : l.received >= l.qty ? '#16a34a' : '#d97706') + '; font-weight:700;">' + (l.received ?? '—') + ' <span style="font-size:10px; font-weight:400;">units</span></span>' +
               (l.receive_note ? '<div style="font-size:10px; color:' + (l.received > l.qty ? '#2563eb' : '#d97706') + '; margin-top:2px;">' + l.receive_note + '</div>' : '') +
             '</td>' : '') +
           '</tr>';
         }).join('');
+        const totalCostDisplay = isAdmin
+          ? (missingCostCount > 0
+            ? '$' + totalCost.toFixed(2) + ' <span style="font-size:10px; color:#dc2626; font-weight:400;">(' + missingCostCount + ' producto' + (missingCostCount>1?'s':'') + ' sin costo)</span>'
+            : '$' + totalCost.toFixed(2))
+          : '';
         const totalRow = '<tr style="background:var(--surface-2); font-weight:700;">' +
           '<td style="padding:8px 10px; border:1px solid var(--border);">Total</td>' +
           '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border);">' + totalUnits + ' units</td>' +
           (isAdmin ? '<td style="padding:8px 10px; border:1px solid var(--border);"></td>' +
-            '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:#b45309;">$' + totalCost.toFixed(2) + '</td>' : '') +
+            '<td style="text-align:center; padding:8px 10px; border:1px solid var(--border); color:#b45309;">' + totalCostDisplay + '</td>' : '') +
           (showReceived ? '<td style="padding:8px 10px; border:1px solid var(--border);"></td>' : '') +
           '</tr>';
         return '<table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">' +
