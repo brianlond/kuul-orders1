@@ -1367,6 +1367,7 @@ async function saveProduct() {
       if (ws && salon) return parseFloat(((1 - ws / salon) * 100).toFixed(4));
       return parseFloat(document.getElementById('pm-discount-wholesale').value) || null;
     })(),
+    cost: isAdmin ? (parseFloat(document.getElementById('pm-cost').value) || null) : undefined,
     active: document.getElementById('pm-active').value === 'true'
   };
 
@@ -4440,6 +4441,17 @@ function openNewPO(supplierId = null) {
   </div>`);
   if (supplierId) filterPOBrands();
   renderPOProductSelector();
+  // Inject cost total row dynamically for admin
+  if (isAdmin) {
+    const footer = document.querySelector('#po-modal > div > div:last-child');
+    if (footer && !document.getElementById('po-cost-total')) {
+      const costRow = document.createElement('div');
+      costRow.id = 'po-cost-total';
+      costRow.style.cssText = 'display:none; padding:8px 20px; background:#fef3c7; border-top:1px solid #fcd34d; justify-content:space-between; align-items:center; font-size:13px; color:#b45309; font-weight:600;';
+      costRow.innerHTML = '<span>💰 Costo estimado total:</span><span style="font-size:15px;font-weight:700;">$0.00</span>';
+      footer.parentElement.insertBefore(costRow, footer);
+    }
+  }
 }
 
 function filterPOBrands() {
@@ -4489,10 +4501,23 @@ function addPOLine(barcode) {
   const product = PRODUCTS.find(p => p.barcode === barcode);
   if (!product) return;
   const existing = poLines.find(l => l.barcode === barcode);
-  if (existing) { existing.qty++; existing.subtotal = existing.cost * existing.qty; }
-  else {
-    const cost = product.price * (1 - (product.discount_wholesale||0)/100);
-    poLines.push({ barcode, brand: product.brand, code: product.color_code||'—', name: product.name, cost: Math.round(cost*100)/100, qty: 1, subtotal: Math.round(cost*100)/100, received: 0 });
+  // Use real cost from catalog if available, otherwise estimate from wholesale price
+  const unitCost = product.cost
+    ? parseFloat(product.cost)
+    : Math.round(product.price * (1 - (product.discount_wholesale||0)/100) * 100) / 100;
+  if (existing) {
+    existing.qty++;
+    existing.unit_cost = unitCost;
+    existing.cost_total = Math.round(unitCost * existing.qty * 100) / 100;
+    existing.subtotal = existing.cost_total;
+  } else {
+    poLines.push({
+      barcode, brand: product.brand, code: product.color_code||'—', name: product.name,
+      cost: unitCost, unit_cost: unitCost,
+      cost_total: unitCost, subtotal: unitCost,
+      qty: 1, received: 0,
+      has_real_cost: !!product.cost
+    });
   }
   renderPOLines();
 }
@@ -4507,10 +4532,20 @@ function renderPOLines() {
     return;
   }
   const totalAmt = poLines.reduce((s, l) => s + l.subtotal, 0);
-  container.innerHTML = poLines.map((l, idx) => `
-    <div style="display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--border);">
+  const totalCostAmt = isAdmin ? poLines.reduce((s, l) => s + (l.cost_total || l.unit_cost * l.qty || 0), 0) : 0;
+  container.innerHTML = poLines.map((l, idx) => {
+    const unitCost = l.unit_cost || l.cost || 0;
+    const costTotal = Math.round(unitCost * l.qty * 100) / 100;
+    const costLabel = !l.has_real_cost && isAdmin
+      ? `<span style="font-size:10px;color:var(--text-muted);"> (est.)</span>` : '';
+    return `<div style="display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--border);">
       <div style="flex:1; min-width:0;">
         <div style="font-size:14px; font-weight:600; color:var(--text);">${l.brand} [${l.code}] ${l.name}</div>
+        ${isAdmin ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+          Costo: <strong style="color:var(--text);">$${unitCost.toFixed(2)}</strong>/u${costLabel}
+          &nbsp;·&nbsp; Total costo:
+          <strong style="color:#b45309;">$${costTotal.toFixed(2)}</strong>
+        </div>` : ''}
       </div>
       <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
         <button onclick="updatePOLineQty(${idx}, ${l.qty}-1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center;">−</button>
@@ -4518,14 +4553,23 @@ function renderPOLines() {
         <button onclick="updatePOLineQty(${idx}, ${l.qty}+1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center;">+</button>
       </div>
       <button onclick="removePOLine(${idx})" style="width:32px; height:32px; background:none; border:1px solid #dc262633; border-radius:var(--radius); color:#dc2626; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;">×</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   if (total) total.textContent = '$' + totalAmt.toFixed(2);
+  // Show estimated cost total for admin
+  const costEl = document.getElementById('po-cost-total');
+  if (costEl && isAdmin) {
+    costEl.style.display = 'flex';
+    costEl.querySelector('span').textContent = '$' + totalCostAmt.toFixed(2);
+  }
 }
 
 function updatePOLineQty(idx, val) {
   const qty = Math.max(1, parseInt(val) || 1);
   poLines[idx].qty = qty;
-  poLines[idx].subtotal = Math.round(poLines[idx].cost * qty * 100) / 100;
+  const unitCost = poLines[idx].unit_cost || poLines[idx].cost || 0;
+  poLines[idx].cost_total = Math.round(unitCost * qty * 100) / 100;
+  poLines[idx].subtotal = poLines[idx].cost_total;
   renderPOLines();
 }
 
