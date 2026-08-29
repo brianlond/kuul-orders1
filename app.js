@@ -4630,7 +4630,7 @@ function openPODetail(id) {
 
   const poTableRows = (po.lines||[]).map(l => {
     totalUnits += l.qty;
-    const catalogProd = findProductByBarcode(l.barcode) || PRODUCTS.find(p => p.name === l.name);
+    const catalogProd = PRODUCTS.find(p => String(p.barcode).trim() === String(l.barcode).trim()) || PRODUCTS.find(p => p.name === l.name);
     const hasCost = isAdmin && catalogProd && parseFloat(catalogProd.cost) > 0;
     if (isAdmin && (!catalogProd || !parseFloat(catalogProd.cost))) missingCostCount++;
     const uc = hasCost ? parseFloat(catalogProd.cost) : 0;
