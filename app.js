@@ -148,6 +148,74 @@ function buildOptions(selected, level) {
 
 // ── Add a product line ───────────────────────────────────────
 let lineCount = 0;
+const ORDER_DRAFT_KEY = 'lucyglam_order_draft';
+
+function saveOrderDraft() {
+  try {
+    const lines = [];
+    document.querySelectorAll('#product-lines .product-row').forEach(row => {
+      const qty = row.querySelector('input[type=number]');
+      const bc = row.dataset.barcode;
+      if (bc && qty && parseInt(qty.value) > 0) lines.push({ barcode: bc, qty: parseInt(qty.value) });
+    });
+    if (lines.length === 0) { localStorage.removeItem(ORDER_DRAFT_KEY); return; }
+    const draft = {
+      lines,
+      seller:   document.getElementById('seller-name')?.value || '',
+      client:   document.getElementById('client-name')?.value || '',
+      business: document.getElementById('business-name')?.value || '',
+      phone:    document.getElementById('phone')?.value || '',
+      address:  document.getElementById('address')?.value || '',
+      savedAt:  new Date().toISOString()
+    };
+    localStorage.setItem(ORDER_DRAFT_KEY, JSON.stringify(draft));
+  } catch(e) {}
+}
+
+function clearOrderDraft() {
+  localStorage.removeItem(ORDER_DRAFT_KEY);
+}
+
+function checkOrderDraft() {
+  try {
+    const raw = localStorage.getItem(ORDER_DRAFT_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    if (!draft?.lines?.length) return;
+    const savedAt = new Date(draft.savedAt).toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    // Show recovery banner
+    const banner = document.createElement('div');
+    banner.id = 'order-draft-banner';
+    banner.style.cssText = 'position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#1a1a1a; color:#fff; padding:12px 18px; border-radius:var(--radius-lg); font-size:13px; z-index:99; display:flex; align-items:center; gap:12px; box-shadow:0 8px 24px rgba(0,0,0,0.3); max-width:90vw;';
+    banner.innerHTML = `
+      <span>📋 Tienes una orden sin terminar del ${savedAt} (${draft.lines.length} producto${draft.lines.length>1?'s':''})</span>
+      <button onclick="recoverOrderDraft()" style="padding:6px 12px; background:var(--gold); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;">Recuperar</button>
+      <button onclick="document.getElementById('order-draft-banner').remove(); clearOrderDraft()" style="padding:6px 10px; background:none; border:1px solid #555; color:#aaa; border-radius:6px; font-size:12px; cursor:pointer;">Descartar</button>`;
+    document.body.appendChild(banner);
+  } catch(e) {}
+}
+
+async function recoverOrderDraft() {
+  try {
+    const raw = localStorage.getItem(ORDER_DRAFT_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    document.getElementById('order-draft-banner')?.remove();
+    // Fill client fields if present
+    if (draft.seller)   document.getElementById('seller-name').value = draft.seller;
+    if (draft.client)   document.getElementById('client-name').value = draft.client;
+    if (draft.business) document.getElementById('business-name').value = draft.business;
+    if (draft.phone)    document.getElementById('phone').value = draft.phone;
+    if (draft.address)  document.getElementById('address').value = draft.address;
+    // Restore products
+    document.getElementById('product-lines').innerHTML = '';
+    lineCount = 0;
+    for (const l of draft.lines) addProductLine(l.barcode, l.qty);
+    updateSummary();
+    showToast('✓ Orden recuperada');
+  } catch(e) { showToast('❌ Error al recuperar'); }
+}
+
 function addProductLine(barcode = '', qty = 1) {
   lineCount++;
   const id = lineCount;
@@ -2759,7 +2827,7 @@ function showTab(name) {
   document.getElementById('logout-btn').style.display = 'inline-block';
 
   // Tab-specific init
-  if (name === 'admin') loadOrders();
+  if (name === 'admin') { loadOrders(); setTimeout(checkOrderDraft, 800); }
   if (name === 'customers') loadCustomers();
   if (name === 'catalog') loadCatalog();
   if (name === 'inventory') loadInventory();
@@ -4406,6 +4474,7 @@ function setPOBrandFilter(brand) {
 
 function openNewPO(supplierId = null) {
   poLines = [];
+  _poAutoSaveId = null;
   document.body.style.overflow = 'hidden';
   const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
   document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
@@ -4414,6 +4483,7 @@ function openNewPO(supplierId = null) {
     <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;">
       <div>
         <div style="font-size:17px; font-weight:700;">Nueva Orden de Compra</div>
+        <div id="po-autosave-indicator" style="font-size:11px; color:#16a34a; opacity:0; transition:opacity 0.5s;">✓ Borrador guardado</div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Selecciona productos y cantidades</div>
       </div>
       <button onclick="document.getElementById('po-modal').remove(); document.body.style.overflow = '';" style="width:36px; height:36px; border:none; background:var(--surface-2); border-radius:50%; font-size:18px; cursor:pointer; color:var(--text);">×</button>
@@ -4574,6 +4644,36 @@ function confirmPOQty(barcode) {
   addPOLine(barcode, qty);
 }
 
+let _poAutoSaveTimer = null;
+let _poAutoSaveId = null; // id of existing draft PO being edited
+
+function autoSavePO() {
+  clearTimeout(_poAutoSaveTimer);
+  _poAutoSaveTimer = setTimeout(async () => {
+    const suppSel = document.getElementById('po-supplier');
+    const suppId = suppSel?.value;
+    if (!suppId || poLines.length === 0) return;
+    const suppName = suppSel?.options[suppSel.selectedIndex]?.text || '';
+    const total = poLines.reduce((s, l) => s + (l.subtotal || 0), 0);
+    const body = {
+      supplier_id: parseInt(suppId), supplier_name: suppName,
+      status: 'Borrador', lines: poLines, total,
+      notes: document.getElementById('po-notes')?.value.trim() || null,
+      created_by: currentUser?.name || ''
+    };
+    try {
+      if (_poAutoSaveId) {
+        await supabase(`purchase_orders?id=eq.${_poAutoSaveId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      } else {
+        const res = await supabase('purchase_orders', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(body) });
+        if (res?.[0]?.id) _poAutoSaveId = res[0].id;
+      }
+      const ind = document.getElementById('po-autosave-indicator');
+      if (ind) { ind.textContent = '✓ Borrador guardado'; ind.style.opacity = '1'; setTimeout(() => ind.style.opacity = '0', 2000); }
+    } catch(e) { console.warn('Auto-save PO failed:', e); }
+  }, 1500);
+}
+
 function renderPOLines() {
   const container = document.getElementById('po-lines-container');
   const total = document.getElementById('po-total');
@@ -4608,6 +4708,8 @@ function renderPOLines() {
     </div>`;
   }).join('');
   if (total) total.textContent = '$' + totalAmt.toFixed(2);
+  // Trigger auto-save
+  autoSavePO();
   // Show estimated cost total for admin
   const costEl = document.getElementById('po-cost-total');
   if (costEl && isAdmin) {
@@ -4999,6 +5101,7 @@ function openEditPO(id) {
   const po = allPurchaseOrders.find(p => p.id === id);
   if (!po || po.status !== 'Borrador') return;
   document.body.style.overflow = 'hidden';
+  _poAutoSaveId = id;
 
   // Load existing lines into poLines
   poLines = (po.lines || []).map(l => ({ ...l }));
