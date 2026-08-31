@@ -4406,16 +4406,17 @@ function setPOBrandFilter(brand) {
 
 function openNewPO(supplierId = null) {
   poLines = [];
+  document.body.style.overflow = 'hidden';
   const brands = PRODUCTS ? [...new Set(PRODUCTS.map(p => p.brand))].sort() : [];
   document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
   <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px;">
-    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:680px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:860px; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
     <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;">
       <div>
         <div style="font-size:17px; font-weight:700;">Nueva Orden de Compra</div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Selecciona productos y cantidades</div>
       </div>
-      <button onclick="document.getElementById('po-modal').remove()" style="width:36px; height:36px; border:none; background:var(--surface-2); border-radius:50%; font-size:18px; cursor:pointer; color:var(--text);">×</button>
+      <button onclick="document.getElementById('po-modal').remove(); document.body.style.overflow = '';" style="width:36px; height:36px; border:none; background:var(--surface-2); border-radius:50%; font-size:18px; cursor:pointer; color:var(--text);">×</button>
     </div>
     <div style="flex:1; overflow-y:auto; padding:16px 20px; background:var(--bg);">
       <div class="field-group" style="margin-bottom:12px;">
@@ -4509,29 +4510,68 @@ function renderPOProductSelector() {
       }).join('');
 }
 
-function addPOLine(barcode) {
+function addPOLine(barcode, qty = null) {
   const product = PRODUCTS.find(p => p.barcode === barcode);
   if (!product) return;
-  const existing = poLines.find(l => l.barcode === barcode);
-  // Use real cost from catalog if available, otherwise estimate from wholesale price
+
+  // If qty not provided, show mini modal to ask for quantity
+  if (qty === null) {
+    const existing = poLines.find(l => l.barcode === barcode);
+    const currentQty = existing ? existing.qty : 1;
+    // Remove any existing qty modal
+    document.getElementById('po-qty-modal')?.remove();
+    const mini = document.createElement('div');
+    mini.id = 'po-qty-modal';
+    mini.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;';
+    mini.innerHTML = `
+      <div style="background:var(--surface); border-radius:var(--radius-lg); padding:20px; width:100%; max-width:300px; box-shadow:0 16px 48px rgba(0,0,0,0.3);">
+        <div style="font-size:14px; font-weight:700; margin-bottom:4px;">${product.brand} [${product.color_code||'—'}]</div>
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">${product.name}</div>
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:6px;">Cantidad a ordenar</label>
+        <input id="po-qty-input" type="number" value="${currentQty}" min="1" step="1"
+          style="width:100%; padding:12px; font-size:22px; font-weight:700; text-align:center; border:2px solid var(--gold); border-radius:var(--radius); background:var(--surface); color:var(--text); margin-bottom:14px;"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();confirmPOQty('${barcode}');}">
+        <div style="display:flex; gap:8px;">
+          <button onclick="document.getElementById('po-qty-modal').remove()" style="flex:1; padding:10px; border:1px solid var(--border); border-radius:var(--radius); background:none; font-size:13px; cursor:pointer; color:var(--text-muted); font-family:inherit;">Cancelar</button>
+          <button onclick="confirmPOQty('${barcode}')" style="flex:2; padding:10px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:14px; font-weight:700; cursor:pointer; font-family:inherit;">✓ Agregar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mini);
+    setTimeout(() => { const inp = document.getElementById('po-qty-input'); if(inp){inp.focus();inp.select();} }, 50);
+    return;
+  }
+
   const unitCost = product.cost
     ? parseFloat(product.cost)
     : Math.round(product.price * (1 - (product.discount_wholesale||0)/100) * 100) / 100;
+  const existing = poLines.find(l => l.barcode === barcode);
   if (existing) {
-    existing.qty++;
+    existing.qty = qty;
     existing.unit_cost = unitCost;
-    existing.cost_total = Math.round(unitCost * existing.qty * 100) / 100;
+    existing.cost_total = Math.round(unitCost * qty * 100) / 100;
     existing.subtotal = existing.cost_total;
   } else {
-    poLines.push({
+    // Add to beginning of list
+    poLines.unshift({
       barcode, brand: product.brand, code: product.color_code||'—', name: product.name,
       cost: unitCost, unit_cost: unitCost,
-      cost_total: unitCost, subtotal: unitCost,
-      qty: 1, received: 0,
+      cost_total: Math.round(unitCost * qty * 100) / 100,
+      subtotal: Math.round(unitCost * qty * 100) / 100,
+      qty, received: 0,
       has_real_cost: !!product.cost
     });
   }
   renderPOLines();
+  // Scroll po-lines-container to top
+  const container = document.getElementById('po-lines-container');
+  if (container) container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function confirmPOQty(barcode) {
+  const input = document.getElementById('po-qty-input');
+  const qty = Math.max(1, parseInt(input?.value) || 1);
+  document.getElementById('po-qty-modal')?.remove();
+  addPOLine(barcode, qty);
 }
 
 function renderPOLines() {
@@ -4610,7 +4650,7 @@ async function savePO(status) {
         sent_at: status === 'Enviada' ? new Date().toISOString() : null
       })
     });
-    document.getElementById('po-modal')?.remove();
+    document.getElementById('po-modal')?.remove(); document.body.style.overflow = '';
     await initSuppliersTab();
     showToast('✓ Orden de compra guardada');
   } catch(e) { console.error(e); showToast('❌ Error al guardar'); }
@@ -4958,6 +4998,7 @@ async function deletePOFromDetail(id) {
 function openEditPO(id) {
   const po = allPurchaseOrders.find(p => p.id === id);
   if (!po || po.status !== 'Borrador') return;
+  document.body.style.overflow = 'hidden';
 
   // Load existing lines into poLines
   poLines = (po.lines || []).map(l => ({ ...l }));
@@ -4966,13 +5007,13 @@ function openEditPO(id) {
 
   document.getElementById('suppliers-container').insertAdjacentHTML('beforebegin', `
   <div id="po-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px;">
-    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:680px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+    <div style="background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:860px; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3);">
     <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;">
       <div>
         <div style="font-size:17px; font-weight:700;">Editar Orden de Compra</div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
       </div>
-      <button onclick="document.getElementById('po-modal').remove()" style="width:36px; height:36px; border:none; background:var(--surface-2); border-radius:50%; font-size:18px; cursor:pointer; color:var(--text);">×</button>
+      <button onclick="document.getElementById('po-modal').remove(); document.body.style.overflow = '';" style="width:36px; height:36px; border:none; background:var(--surface-2); border-radius:50%; font-size:18px; cursor:pointer; color:var(--text);">×</button>
     </div>
     <div style="flex:1; overflow-y:auto; padding:16px 20px; background:var(--bg);">
       <div style="margin-bottom:12px;">
@@ -5020,7 +5061,7 @@ async function updatePO(id, status) {
         sent_at: status === 'Enviada' ? new Date().toISOString() : null
       })
     });
-    document.getElementById('po-modal')?.remove();
+    document.getElementById('po-modal')?.remove(); document.body.style.overflow = '';
     await initSuppliersTab();
     showToast('✓ Orden de compra actualizada');
   } catch(e) { console.error(e); showToast('❌ Error al guardar'); }
