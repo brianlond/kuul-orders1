@@ -182,7 +182,7 @@ function checkOrderDraft() {
     if (!raw) return;
     const draft = JSON.parse(raw);
     if (!draft?.lines?.length) return;
-    const savedAt = new Date(draft.savedAt).toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    const savedAt = new Date(draft.savedAt).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
     // Show recovery banner
     const banner = document.createElement('div');
     banner.id = 'order-draft-banner';
@@ -571,7 +571,7 @@ function renderDeliveryOrders(orders) {
   if (routeBtn) routeBtn.style.display = orders.length > 0 ? 'inline-block' : 'none';
 
   list.innerHTML = orders.map((o, stopNum) => {
-    const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    const date = new Date(o.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
     const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.address)}&travelmode=driving`;
     return `
     <div class="order-card" style="border-left: 3px solid var(--gold);">
@@ -817,7 +817,7 @@ function renderOrders(orders) {
   badge.textContent = nuevas;
 
   list.innerHTML = orders.map(o => {
-    const date = new Date(o.created_at).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const date = new Date(o.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
     const statusOptions = STATUSES.map(s =>
       `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`
     ).join('');
@@ -2247,7 +2247,7 @@ async function confirmPicking() {
 function printPackingSlip() {
   if (!pickingOrder) return;
   const o = pickingOrder;
-  const date = new Date(o.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const date = new Date(o.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Empaque #${String(o.id).padStart(5,'0')}</title>
   <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>
   <style>
@@ -2603,7 +2603,7 @@ async function openHistoryModal(customerId) {
         <div class="summary-stat"><div class="stat-value">$${totalSpent.toFixed(2)}</div><div class="stat-label">Total comprado</div></div>
       </div>
       ${orders.map(o => {
-        const date = new Date(o.created_at).toLocaleDateString('es-MX');
+        const date = new Date(o.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
         return `<div style="border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:8px; cursor:pointer;" onclick="openOrderDetail(${o.id})" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="font-size:13px; font-weight:500;">${date} · ${o.seller}</div>
@@ -2643,7 +2643,7 @@ async function openOrderDetail(id) {
   currentDetailOrder = order;
   closeHistoryModal();
 
-  const date = new Date(order.created_at).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const date = new Date(order.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
   const statusOptions = STATUSES.map(s => `<option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>`).join('');
 
   document.getElementById('order-detail-title').textContent = `Orden #${String(order.id).padStart(5,'0')}`;
@@ -2733,7 +2733,7 @@ function renderCustomers(customers) {
   }
 
   list.innerHTML = customers.map(c => {
-    const lastOrder = c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('es-MX') : '—';
+    const lastOrder = c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
     const phone = c.phone.replace(/[^0-9]/g, '');
     const waLink = `https://wa.me/1${phone}`;
     const emailLink = c.email ? `mailto:${c.email}` : null;
@@ -2946,7 +2946,7 @@ async function openEditModal(id) {
   editingOrderId = id;
   editLineCount = 0;
 
-  document.getElementById('edit-order-id-label').textContent = 'Orden #' + order.id + ' · ' + new Date(order.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+  document.getElementById('edit-order-id-label').textContent = 'Orden #' + order.id + ' · ' + new Date(order.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
   document.getElementById('edit-client-name').value = order.client;
   document.getElementById('edit-business-name').value = order.business;
   document.getElementById('edit-phone').value = order.phone;
@@ -3282,8 +3282,8 @@ async function printOrder(id) {
     } catch(e) { console.error('printOrder fetch error:', e); }
   }
   if (!order) { showToast('❌ No se encontró la orden'); return; }
-  const date = new Date(order.created_at).toLocaleString('es-MX', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
+  const date = new Date(order.created_at).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   });
 
@@ -3623,7 +3623,7 @@ function initMonthPicker() {
 
 function updateMonthLabel(val) {
   const [y, m] = val.split('-').map(Number);
-  const label = new Date(y, m - 1, 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  const label = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   document.getElementById('sellers-month-label').textContent = label.charAt(0).toUpperCase() + label.slice(1);
 }
 
@@ -3687,7 +3687,7 @@ async function loadMonthlyReport() {
       return;
     }
 
-    const monthLabel = start.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+    const monthLabel = start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const totalSales = orders.reduce((s, o) => s + parseFloat(o.subtotal || 0), 0);
     const totalOrders = orders.length;
 
@@ -3832,7 +3832,7 @@ async function loadSellersReport() {
       sellers[seller].total += parseFloat(o.subtotal || 0);
     });
 
-    const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
+    const fmtDate = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
     const weekLabel = `${fmtDate(start)} – ${fmtDate(end)} ${start.getFullYear()}`;
     const sortedSellers = Object.values(sellers).sort((a,b) => b.total - a.total);
     const totalWeek = sortedSellers.reduce((s, sel) => s + sel.total, 0);
@@ -3856,7 +3856,7 @@ async function loadSellersReport() {
       const ordersHTML = sel.orders
         .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
         .map(o => {
-          const oDate = new Date(o.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+          const oDate = new Date(o.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
           const oCommission = parseFloat(o.subtotal) * COMMISSION_RATE;
           const oId = 'order_detail_' + o.id;
           const linesHTML = (o.lines || []).map(l => `
@@ -4009,7 +4009,7 @@ function setWeekValue(inputId, labelId, year, week) {
   if (input) input.value = val;
   if (label) {
     const { start, end } = getWeekRange(val);
-    const fmt = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
+    const fmt = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
     label.textContent = `${fmt(start)} – ${fmt(end)} ${year}`;
   }
   return val;
@@ -4074,7 +4074,7 @@ async function loadMiProgreso() {
   try {
     const orders = await supabase(`orders?created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}&seller=eq.${encodeURIComponent(sellerName)}&select=*&order=created_at.desc`);
 
-    const fmtDate = d => d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' });
+    const fmtDate = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
     const weekLabel = `${fmtDate(start)} – ${fmtDate(end)} ${start.getFullYear()}`;
     const total = (orders || []).reduce((s, o) => s + parseFloat(o.subtotal || 0), 0);
     const commission = total * COMMISSION_RATE;
@@ -4087,7 +4087,7 @@ async function loadMiProgreso() {
 
     // Build orders HTML (same style as Vendedores tab)
     const ordersHTML = (orders || []).map(o => {
-      const oDate = new Date(o.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+      const oDate = new Date(o.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
       const oCommission = parseFloat(o.subtotal) * COMMISSION_RATE;
       const oId = 'mp_order_' + o.id;
       const linesHTML = (o.lines || []).map(l => `
@@ -4342,7 +4342,7 @@ function renderPOList() {
         <div class="order-header">
           <div>
             <div class="order-name">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
-            <div class="order-business">${new Date(po.created_at).toLocaleDateString('es-MX')} · ${(po.lines||[]).length} productos </div>
+            <div class="order-business">${new Date(po.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })} · ${(po.lines||[]).length} productos </div>
           </div>
           <span class="status-badge ${statusColors[po.status]||''}">${po.status}</span>
         </div>
@@ -4826,7 +4826,7 @@ function openPODetail(id) {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <div>
           <div style="font-size:18px; font-weight:700;">OC-${String(po.id).padStart(4,'0')}</div>
-          <div style="font-size:13px; color:var(--text-muted);">${po.supplier_name} · ${new Date(po.created_at).toLocaleDateString('es-MX')}</div>
+          <div style="font-size:13px; color:var(--text-muted);">${po.supplier_name} · ${new Date(po.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}</div>
         </div>
         <span style="font-size:12px; font-weight:700; padding:4px 12px; border-radius:99px; background:${statusColors[po.status]}22; color:${statusColors[po.status]}; border:1px solid ${statusColors[po.status]}44;">${po.status}</span>
       </div>
