@@ -1324,6 +1324,63 @@ function renderCatalog(allProducts) {
   }).join('');
 }
 
+// ── Downloadable product catalog (PDF) ──────────────────────────
+function downloadCatalogPDF() {
+  if (!PRODUCTS || !PRODUCTS.length) { showToast('⚠️ Catálogo no cargado todavía'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { showToast('❌ No se pudo cargar el generador de PDF'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 40;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Catálogo de productos', margin, 40);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text(`Generado ${new Date().toLocaleDateString('es-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, margin, 56);
+  doc.setTextColor(0);
+
+  const brands = [...new Set(PRODUCTS.map(p => p.brand))];
+  let y = 75;
+
+  brands.forEach(brand => {
+    if (y > pageHeight - 90) { doc.addPage(); y = 40; }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(184, 149, 42);
+    doc.text(brand, margin, y);
+    doc.setTextColor(0);
+    y += 8;
+
+    const rows = PRODUCTS.filter(p => p.brand === brand).map(p => {
+      const salon = parseFloat(p.price) || 0;
+      const retail = parseFloat(p.price_retail) || salon;
+      const wholesale = Math.round(salon * (1 - (parseFloat(p.discount_wholesale) || 0) / 100) * 100) / 100;
+      return [p.color_code || '—', p.name, `$${retail.toFixed(2)}`, `$${salon.toFixed(2)}`, `$${wholesale.toFixed(2)}`];
+    });
+
+    doc.autoTable({
+      startY: y,
+      head: [['Código', 'Producto', 'Retail', 'Salon', 'Wholesale']],
+      body: rows,
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 4 },
+      headStyles: { fillColor: [245, 237, 218], textColor: [28, 26, 22], fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 45 }, 2: { cellWidth: 55, halign: 'right' }, 3: { cellWidth: 55, halign: 'right' }, 4: { cellWidth: 65, halign: 'right' } },
+      margin: { left: margin, right: margin }
+    });
+    y = doc.lastAutoTable.finalY + 20;
+  });
+
+  doc.save(`catalogo-productos-${new Date().toISOString().slice(0, 10)}.pdf`);
+  showToast('✓ Catálogo descargado');
+}
+
 function setCatalogBrand(brand) {
   window._catalogBrand = window._catalogBrand === brand ? '' : brand;
   window._catalogCat = ''; // reset category when switching brand
