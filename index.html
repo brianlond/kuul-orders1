@@ -8,6 +8,8 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/css/shepherd.css">
   <script src="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/js/shepherd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   </head>
 <body>
 
@@ -65,6 +67,8 @@
         🧪 MODO PRUEBA ACTIVO — Esta orden se guardará como prueba y puede borrarse
         <button onclick="toggleTestMode()" style="margin-left:auto; padding:4px 12px; background:#d97706; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit;">Desactivar</button>
       </div>
+
+      <button class="submit-btn" style="width:auto; margin:0 0 16px; padding:9px 16px; font-size:13px;" onclick="downloadCatalogPDF()">📄 Descargar catálogo (PDF)</button>
 
       <div class="section-label">Datos del vendedor</div>
       <div class="field-group">
@@ -271,6 +275,7 @@
           <span id="catalog-count-label" class="order-count">0 productos</span>
           <div style="display:flex; gap:8px;">
             <button class="clear-btn" onclick="loadCatalog()">🔄 Actualizar</button>
+            <button class="clear-btn" onclick="downloadCatalogPDF()">📄 Catálogo PDF</button>
             <button class="submit-btn" style="width:auto; margin:0; padding:8px 16px; font-size:13px;" onclick="openAddProduct()">+ Nuevo producto</button>
           </div>
         </div>
