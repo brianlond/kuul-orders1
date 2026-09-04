@@ -91,8 +91,42 @@ async function dbUpdateStatus(id, status) {
 }
 
 
+// ── Customer follow-up tracking ─────────────────────────────
+const FOLLOWUP_DAYS = 15;
+
+function normalizePhone(p) {
+  return (p || '').replace(/[^0-9]/g, '');
+}
+
+function daysSinceOrder(dateStr) {
+  if (!dateStr) return null;
+  const ms = Date.now() - new Date(dateStr).getTime();
+  return Math.floor(ms / 86400000);
+}
+
+function needsFollowUp(c) {
+  const days = daysSinceOrder(c.last_order_at);
+  return days !== null && days >= FOLLOWUP_DAYS;
+}
+
+function updateCustomersBadge(customers) {
+  const badge = document.getElementById('customers-badge-count');
+  if (!badge) return;
+  const count = (customers || []).filter(needsFollowUp).length;
+  badge.style.display = count > 0 ? '' : 'none';
+  badge.textContent = count;
+}
+
 async function dbUpsertCustomer(order) {
-  const existing = await supabase(`customers?phone=eq.${encodeURIComponent(order.phone)}&select=id,order_count`);
+  const normalized = normalizePhone(order.phone);
+  let existing = await supabase(`customers?phone=eq.${encodeURIComponent(order.phone)}&select=id,order_count`);
+  if ((!existing || existing.length === 0) && normalized) {
+    // Fallback: match by digits-only phone in case formatting differs from a prior order
+    // (e.g. "555-1234" vs "5551234"), so we update the same customer instead of creating a duplicate.
+    const all = await supabase(`customers?select=id,phone,order_count`);
+    const match = (all || []).find(c => normalizePhone(c.phone) === normalized);
+    if (match) existing = [match];
+  }
   if (existing && existing.length > 0) {
     const c = existing[0];
     await supabase(`customers?id=eq.${c.id}`, {
@@ -527,8 +561,9 @@ function showAdminView() {
   const helpBtn = document.getElementById('help-btn');
   if (helpBtn) helpBtn.style.display = 'inline-block';
   showTab('vendedor');
-  // Preload orders in background
+  // Preload orders and customer follow-up badge in background
   loadOrders();
+  loadCustomers();
 }
 
 // ── Delivery view ────────────────────────────────────────────
@@ -2710,32 +2745,51 @@ function renderDaySummary(orders) {
 }
 
 // ── Customers ─────────────────────────────────────────────────
+let customersFilter = 'all';
+
 async function loadCustomers() {
   const list = document.getElementById('customers-list');
   list.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Cargando clientes...</div>`;
   try {
-    const customers = await dbFetchCustomers();
-    renderCustomers(customers);
+    allCustomers = await dbFetchCustomers();
+    updateCustomersBadge(allCustomers);
+    renderCustomers(allCustomers);
   } catch(e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando clientes</div>`;
     console.error(e);
   }
 }
 
+function filterCustomers(mode, btn) {
+  customersFilter = mode;
+  document.querySelectorAll('#customers-filter-bar .filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCustomers(allCustomers);
+}
+
 function renderCustomers(customers) {
   const list = document.getElementById('customers-list');
   const countLabel = document.getElementById('customer-count-label');
-  countLabel.textContent = customers.length + ' cliente' + (customers.length !== 1 ? 's' : '');
+  updateCustomersBadge(customers);
 
-  if (customers.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div>No hay clientes todavía</div>`;
+  const shown = customersFilter === 'followup'
+    ? customers.filter(needsFollowUp).sort((a, b) => daysSinceOrder(b.last_order_at) - daysSinceOrder(a.last_order_at))
+    : customers;
+
+  countLabel.textContent = shown.length + ' cliente' + (shown.length !== 1 ? 's' : '');
+
+  if (shown.length === 0) {
+    list.innerHTML = customersFilter === 'followup'
+      ? `<div class="empty-state"><div class="empty-icon">🎉</div>Ningún cliente lleva ${FOLLOWUP_DAYS}+ días sin ordenar</div>`
+      : `<div class="empty-state"><div class="empty-icon">👥</div>No hay clientes todavía</div>`;
     return;
   }
 
-  list.innerHTML = customers.map(c => {
+  list.innerHTML = shown.map(c => {
     const lastOrder = c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
     const phone = c.phone.replace(/[^0-9]/g, '');
     const waLink = `https://wa.me/1${phone}`;
+    const telLink = `tel:+1${phone}`;
     const emailLink = c.email ? `mailto:${c.email}` : null;
     const levelColors = { Retail: 'badge-nueva', Salon: 'badge-lista', Wholesale: 'badge-proceso' };
     const levelColor = levelColors[c.level] || 'badge-nueva';
@@ -2749,8 +2803,12 @@ function renderCustomers(customers) {
     const prefExpired = isPreferred && prefUntil && prefUntil < today;
     const prefUntilStr = prefUntil ? prefUntil.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '';
 
+    // Follow-up logic (no order in FOLLOWUP_DAYS+ days)
+    const daysSince = daysSinceOrder(c.last_order_at);
+    const followUp = needsFollowUp(c);
+
     return `
-    <div class="order-card" style="${isPreferred ? 'border-left: 3px solid var(--gold);' : ''}">
+    <div class="order-card" style="${isPreferred ? 'border-left: 3px solid var(--gold);' : followUp ? 'border-left: 3px solid var(--warning);' : ''}">
       <div class="order-header">
         <div>
           <div class="order-name">${c.name} ${isPreferred ? '<span style="font-size:12px; color:var(--gold);">⭐ Preferred</span>' : ''}</div>
@@ -2770,6 +2828,11 @@ function renderCustomers(customers) {
       <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:6px; padding:8px 12px; margin-bottom:6px; font-size:12px; color:#92400e;">
         ⏰ Special pricing expired on ${prefUntilStr} — still a Preferred Customer
       </div>` : ''}
+      ${followUp ? `
+      <div class="followup-alert">
+        <span>📞 Lleva <strong>${daysSince} días</strong> sin ordenar — considera llamarle</span>
+        <a href="${telLink}" class="contact-btn call-btn">📞 Llamar</a>
+      </div>` : ''}
       <div class="order-meta">
         📞 ${c.phone}
         ${c.email ? ` · ✉️ ${c.email}` : ''}
@@ -2779,7 +2842,7 @@ function renderCustomers(customers) {
         ${c.permit ? ` · Permit: ${c.permit}` : ''}
       </div>
       <div class="order-meta">
-        🛒 ${c.order_count} orden${c.order_count !== 1 ? 'es' : ''} · Última: ${lastOrder}
+        🛒 ${c.order_count} orden${c.order_count !== 1 ? 'es' : ''} · Última: ${lastOrder}${daysSince !== null ? ` (hace ${daysSince} día${daysSince !== 1 ? 's' : ''})` : ''}
       </div>
       <div class="order-meta" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
         <a href="${waLink}" target="_blank" class="contact-btn wa-btn">💬 WhatsApp</a>

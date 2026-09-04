@@ -36,7 +36,7 @@
         🔒 Admin <span id="badge-count" class="badge-count" style="display:none;"></span>
       </button>
       <button class="tab" id="tab-customers-btn" onclick="showTab('customers')">
-        👥 Clientes
+        👥 Clientes <span id="customers-badge-count" class="badge-count" style="display:none;"></span>
       </button>
       <button class="tab" id="tab-catalog-btn" onclick="showTab('catalog')">
         📦 Catálogo
@@ -251,6 +251,10 @@
     <div id="tab-customers" class="section">
       <div class="admin-bar">
         <span id="customer-count-label" class="order-count">0 clientes</span>
+      </div>
+      <div class="filter-bar" id="customers-filter-bar">
+        <button class="filter-chip active" onclick="filterCustomers('all', this)">Todos</button>
+        <button class="filter-chip" onclick="filterCustomers('followup', this)">📞 Necesitan seguimiento</button>
       </div>
       <div id="customers-list">
         <div class="empty-state">
