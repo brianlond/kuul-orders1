@@ -190,7 +190,17 @@ function saveOrderDraft() {
     document.querySelectorAll('#product-lines .product-row').forEach(row => {
       const qty = row.querySelector('input[type=number]');
       const bc = row.dataset.barcode;
-      if (bc && qty && parseInt(qty.value) > 0) lines.push({ barcode: bc, qty: parseInt(qty.value) });
+      if (bc && qty && parseInt(qty.value) > 0) {
+        const lineId = row.id.replace('line-', '');
+        const freeInput = document.getElementById(`free-qty-${lineId}`);
+        const discInput = document.getElementById(`discount-pct-${lineId}`);
+        lines.push({
+          barcode: bc,
+          qty: parseInt(qty.value),
+          freeQty: freeInput ? parseInt(freeInput.value) || 0 : 0,
+          discountPct: discInput ? parseFloat(discInput.value) || 0 : 0
+        });
+      }
     });
     if (lines.length === 0) { localStorage.removeItem(ORDER_DRAFT_KEY); return; }
     const draft = {
@@ -244,13 +254,13 @@ async function recoverOrderDraft() {
     // Restore products
     document.getElementById('product-lines').innerHTML = '';
     lineCount = 0;
-    for (const l of draft.lines) addProductLine(l.barcode, l.qty);
-    updateSummary();
+    for (const l of draft.lines) addProductLine(l.barcode, l.qty, l.freeQty || 0, l.discountPct || 0);
+    recalcTotal();
     showToast('✓ Orden recuperada');
   } catch(e) { showToast('❌ Error al recuperar'); }
 }
 
-function addProductLine(barcode = '', qty = 1) {
+function addProductLine(barcode = '', qty = 1, freeQty = 0, discountPct = 0) {
   lineCount++;
   const id = lineCount;
   const container = document.getElementById('product-lines');
@@ -262,6 +272,7 @@ function addProductLine(barcode = '', qty = 1) {
   const price = product ? getPrice(product) : 0;
   const label = product ? `${product.brand} [${product.color_code || '—'}] ${product.name} — $${price.toFixed(2)}` : '';
   const priceLabel = price > 0 ? `$${price.toFixed(2)}` : '';
+  const hasAdjust = freeQty > 0 || discountPct > 0;
   div.innerHTML = `
     <div class="product-row-top">
       <div class="product-line-label">${label.replace(/ — \$[\d.]+/, '')}</div>
@@ -271,14 +282,22 @@ function addProductLine(barcode = '', qty = 1) {
       <button onclick="changeQty(${id}, -1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text);">−</button>
       <input type="number" id="qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcTotal()">
       <button onclick="changeQty(${id}, 1)" style="width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text);">+</button>
-      <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:#16a34a; cursor:pointer; margin-left:4px;">
-        <input type="checkbox" id="free-${id}" onchange="toggleFree(${id})" style="accent-color:#16a34a; width:16px; height:16px;"> Gratis
-      </label>
+      <button type="button" class="line-adjust-btn" id="adjust-btn-${id}" onclick="toggleLineAdjust(${id})" title="Dar unidades gratis o descuento en este producto">🏷️</button>
       <button class="remove-btn" onclick="removeLine(${id})" aria-label="Eliminar" style="margin-left:auto;">×</button>
+    </div>
+    <div class="product-line-adjust" id="adjust-${id}" style="display:${hasAdjust ? 'flex' : 'none'};">
+      <label>🎁 Gratis <input type="number" id="free-qty-${id}" value="${freeQty}" min="0" max="${qty}" step="1" oninput="recalcTotal()"> uds</label>
+      <label>🏷️ Descuento <input type="number" id="discount-pct-${id}" value="${discountPct}" min="0" max="100" step="1" oninput="recalcTotal()"> %</label>
     </div>
   `;
   container.appendChild(div);
   recalcTotal();
+}
+
+function toggleLineAdjust(id) {
+  const panel = document.getElementById(`adjust-${id}`);
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
 }
 
 function removeLine(id) {
@@ -295,24 +314,42 @@ function changeQty(id, delta) {
   recalcTotal();
 }
 
-function toggleFree(id) {
-  const freeCheck = document.getElementById('free-' + id);
-  const priceLabel = document.getElementById('price-label-' + id);
-  const row = document.getElementById('line-' + id);
-  if (!row) return;
-  const barcode = row.dataset.barcode;
-  const product = PRODUCTS.find(p => p.barcode === barcode);
-  if (freeCheck && freeCheck.checked) {
-    if (priceLabel) { priceLabel.textContent = 'FREE'; priceLabel.style.color = '#16a34a'; }
-    row.style.borderColor = '#bbf7d0';
-    row.style.background = '#f0fdf4';
-  } else {
-    const price = product ? getPrice(product) : 0;
-    if (priceLabel) { priceLabel.textContent = '$' + price.toFixed(2); priceLabel.style.color = 'var(--gold)'; }
-    row.style.borderColor = '';
-    row.style.background = '';
+// Reads and clamps the free-units/discount inputs for a product line,
+// syncing the free-units input's value/max to the current quantity.
+function getLineAdjust(lineId, qty) {
+  const freeInput = document.getElementById(`free-qty-${lineId}`);
+  const discInput = document.getElementById(`discount-pct-${lineId}`);
+  const freeQty = freeInput ? Math.max(0, Math.min(qty, parseInt(freeInput.value) || 0)) : 0;
+  const discountPct = discInput ? Math.max(0, Math.min(100, parseFloat(discInput.value) || 0)) : 0;
+  if (freeInput) {
+    freeInput.max = qty;
+    if (parseInt(freeInput.value) !== freeQty) freeInput.value = freeQty;
   }
-  recalcTotal();
+  return { freeQty, discountPct };
+}
+
+function updateLineDisplay(lineId, qty, price, freeQty, discountPct) {
+  const priceLabel = document.getElementById(`price-label-${lineId}`);
+  const row = document.getElementById(`line-${lineId}`);
+  const adjustBtn = document.getElementById(`adjust-btn-${lineId}`);
+  const hasAdjust = freeQty > 0 || discountPct > 0;
+  const fullyFree = qty > 0 && freeQty >= qty;
+
+  if (priceLabel) {
+    if (fullyFree) { priceLabel.textContent = 'GRATIS'; priceLabel.style.color = '#16a34a'; }
+    else { priceLabel.textContent = price > 0 ? '$' + price.toFixed(2) : ''; priceLabel.style.color = 'var(--gold)'; }
+  }
+  if (row) {
+    row.style.borderColor = hasAdjust ? '#bbf7d0' : '';
+    row.style.background = hasAdjust ? '#f0fdf4' : '';
+  }
+  if (adjustBtn) {
+    const parts = [];
+    if (freeQty > 0) parts.push(fullyFree ? 'GRATIS' : `${freeQty} gratis`);
+    if (discountPct > 0) parts.push(`-${discountPct}%`);
+    adjustBtn.textContent = parts.length ? '🏷️ ' + parts.join(' · ') : '🏷️';
+    adjustBtn.classList.toggle('active', hasAdjust);
+  }
 }
 
 // ── Permit change ────────────────────────────────────────────
@@ -340,15 +377,19 @@ function onPermitChange() {
 function recalcTotal() {
   let subtotal = 0;
   document.querySelectorAll('#product-lines .product-row').forEach(row => {
-    const qty = row.querySelector('input[type=number]');
+    const qtyInput = row.querySelector('input[type=number]');
     const barcode = row.dataset.barcode;
-    if (barcode && qty) {
+    if (barcode && qtyInput) {
       const product = PRODUCTS.find(p => p.barcode === barcode);
       if (product) {
         const lineId = row.id.replace('line-', '');
-        const freeCheck = document.getElementById(`free-${lineId}`);
-        const isFree = freeCheck && freeCheck.checked;
-        subtotal += isFree ? 0 : getPrice(product) * (parseInt(qty.value) || 0);
+        const qty = parseInt(qtyInput.value) || 0;
+        const price = getPrice(product);
+        const { freeQty, discountPct } = getLineAdjust(lineId, qty);
+        const billableQty = Math.max(0, qty - freeQty);
+        const lineSubtotal = billableQty * price * (1 - discountPct / 100);
+        subtotal += lineSubtotal;
+        updateLineDisplay(lineId, qty, price, freeQty, discountPct);
       }
     }
   });
@@ -517,8 +558,6 @@ async function loadProfileAndApply(token, uid, errEl) {
     if (helpBtnSeller) helpBtnSeller.style.display = 'inline-block';
     showTab('vendedor');
   }
-  // Auto-start tutorial on first login
-  if (currentRole !== 'delivery') checkAndStartTour();
 }
 
 async function checkSession() {
@@ -687,16 +726,17 @@ async function submitOrder() {
   const lines = [];
   let subtotal = 0;
   document.querySelectorAll('#product-lines .product-row').forEach(row => {
-    const qty = row.querySelector('input[type=number]');
+    const qtyInput = row.querySelector('input[type=number]');
     const barcode = row.dataset.barcode;
-    if (barcode && qty) {
+    if (barcode && qtyInput) {
       const product = PRODUCTS.find(p => p.barcode === barcode);
-      const q = parseInt(qty.value) || 0;
+      const q = parseInt(qtyInput.value) || 0;
       if (product && q > 0) {
-        const freeCheck = row.querySelector('input[type=checkbox]');
-        const isFree = freeCheck && freeCheck.checked;
-        const price = isFree ? 0 : getPrice(product);
-        const lineSubtotal = price * q;
+        const lineId = row.id.replace('line-', '');
+        const { freeQty, discountPct } = getLineAdjust(lineId, q);
+        const price = getPrice(product);
+        const billableQty = Math.max(0, q - freeQty);
+        const lineSubtotal = Math.round(billableQty * price * (1 - discountPct / 100) * 100) / 100;
         lines.push({
           barcode: product.barcode,
           brand: product.brand,
@@ -705,8 +745,10 @@ async function submitOrder() {
           price,
           level: currentLevel,
           qty: q,
+          free_qty: freeQty,
+          discount_pct: discountPct,
           subtotal: lineSubtotal,
-          is_free: isFree
+          is_free: freeQty >= q
         });
         subtotal += lineSubtotal;
       }
@@ -1132,7 +1174,7 @@ function duplicateOrder(id) {
     resetSteppedSelector();
 
     // Add products from original order
-    order.lines.forEach(l => addProductLine(l.barcode, l.qty));
+    order.lines.forEach(l => addProductLine(l.barcode, l.qty, l.free_qty || 0, l.discount_pct || 0));
     recalcTotal();
     showToast('✓ Orden duplicada — revisa y envía');
   }, 100);
@@ -3410,16 +3452,21 @@ async function printOrder(id) {
   const linesHTML = order.lines.map(l => {
     const isAdjusted = l.dispatched_qty !== undefined && l.dispatched_qty < l.qty;
     const isFree = l.is_free || l.price === 0;
+    const hasPartialAdjust = !isFree && ((l.free_qty || 0) > 0 || (l.discount_pct || 0) > 0);
+    // When dispatched_qty differs from the ordered qty, fall back to price×qty since the
+    // stored subtotal reflects the full ordered quantity, not what was actually dispatched.
+    const lineTotal = isAdjusted ? parseFloat(l.price) * l.dispatched_qty : parseFloat(l.subtotal);
     return `
     <tr>
       <td>
         ${l.brand} [${l.code}] ${l.name}
         ${isFree ? `<span style="display:inline-block; margin-left:6px; background:#16a34a; color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px; letter-spacing:0.05em;">FREE</span>` : ''}
+        ${hasPartialAdjust ? `<div style="font-size:10px; color:#16a34a; margin-top:2px;">${l.free_qty > 0 ? `🎁 ${l.free_qty} gratis` : ''}${l.free_qty > 0 && l.discount_pct > 0 ? ' · ' : ''}${l.discount_pct > 0 ? `🏷️ -${l.discount_pct}%` : ''}</div>` : ''}
         ${isAdjusted ? `<div style="font-size:10px; color:#d97706; margin-top:2px;">⚠ Quantity adjusted: ${l.qty} ordered, ${l.dispatched_qty} dispatched</div>` : ''}
       </td>
       <td style="text-align:center;">${isAdjusted ? l.dispatched_qty : l.qty}</td>
       <td style="text-align:right;">${isFree ? '<span style="color:#16a34a; font-weight:700;">FREE</span>' : '$' + parseFloat(l.price).toFixed(2)}</td>
-      <td style="text-align:right;">${isFree ? '$0.00' : '$' + (parseFloat(l.price) * (isAdjusted ? l.dispatched_qty : l.qty)).toFixed(2)}</td>
+      <td style="text-align:right;">${isFree ? '$0.00' : '$' + lineTotal.toFixed(2)}</td>
     </tr>
   `}).join('');
 
@@ -5435,10 +5482,7 @@ function startAdminTour() {
     buttons: lastStep(tour)
   });
 
-  tour.on('complete', () => {
-    localStorage.setItem('lucyglam_tour_done_admin', '1');
-    activeTour = null;
-  });
+  tour.on('complete', () => { activeTour = null; });
   tour.on('cancel', () => { activeTour = null; });
 
   tour.start();
@@ -5515,22 +5559,10 @@ function startSellerTour() {
     buttons: lastStep(tour)
   });
 
-  tour.on('complete', () => {
-    localStorage.setItem('lucyglam_tour_done_seller', '1');
-    activeTour = null;
-    showTab('vendedor');
-  });
+  tour.on('complete', () => { activeTour = null; showTab('vendedor'); });
   tour.on('cancel', () => { activeTour = null; showTab('vendedor'); });
 
   tour.start();
-}
-
-// Auto-start on first login
-function checkAndStartTour() {
-  const key = isAdmin ? 'lucyglam_tour_done_admin' : 'lucyglam_tour_done_seller';
-  if (!localStorage.getItem(key)) {
-    setTimeout(() => startTour(), 800);
-  }
 }
 
 // ── ANÁLISIS DE REPOSICIÓN ────────────────────────────────────

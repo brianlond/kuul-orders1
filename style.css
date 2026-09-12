@@ -137,6 +137,13 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .product-row input[type=number] { text-align: center; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 15px; font-weight: 600; width: 64px; }
 .product-line-label { font-size: 13px; color: var(--text); font-weight: 500; line-height: 1.4; }
 .product-line-price { font-size: 14px; font-weight: 700; color: var(--gold); font-family: var(--font-display); white-space: nowrap; }
+
+.line-adjust-btn { height: 34px; border: 1px solid var(--border); border-radius: var(--radius); background: none; cursor: pointer; font-size: 12px; font-family: var(--font-sans); white-space: nowrap; padding: 0 8px; color: var(--text-muted); transition: all 0.15s; }
+.line-adjust-btn:hover { border-color: var(--gold); color: var(--gold); }
+.line-adjust-btn.active { border-color: #16a34a; background: #f0fdf4; color: #16a34a; font-weight: 600; }
+.product-line-adjust { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 2px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.product-line-adjust label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); margin: 0; }
+.product-line-adjust input[type=number] { width: 52px !important; padding: 5px 6px !important; font-size: 13px !important; }
 .product-line-free { font-size: 11px; font-weight: 700; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 2px 8px; border-radius: 99px; }
 .remove-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--text-faint); font-size: 16px; width: 36px; height: 34px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
 .remove-btn:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-bg); }
