@@ -342,3 +342,12 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .brand-chip.active { border-color: var(--gold); background: var(--gold-pale); box-shadow: var(--shadow-sm); }
 .brand-chip.active span { color: var(--gold); }
 
+/* Printing an invoice/packing slip: #print-host is filled with that document's
+   own markup and shown, everything else in the app is hidden. This keeps
+   printing on the current tab/page instead of a popup or iframe, which is the
+   only approach that scopes correctly on every browser including iOS Safari. */
+@media print {
+  body > *:not(#print-host) { display: none !important; }
+  #print-host { display: block !important; }
+}
+
