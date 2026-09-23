@@ -3665,19 +3665,40 @@ function closeInvoice() {
   document.getElementById('invoice-frame').srcdoc = '';
 }
 
+// iPadOS 13+ reports itself as "Macintosh" in the user agent, so it can't be
+// told apart from a real Mac by UA alone — checking for touch support too
+// is the standard way to catch it.
+function isIOSDevice() {
+  const ua = navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function openInvoiceInNewTab() {
+  const frame = document.getElementById('invoice-frame');
+  const html = frame.srcdoc;
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 function printInvoiceFrame() {
   const frame = document.getElementById('invoice-frame');
+  if (isIOSDevice()) {
+    // iOS Safari can't scope window.print() to just this iframe — it silently
+    // prints the whole app screen behind it instead of throwing, so the
+    // catch-based fallback below never runs. Always use the new-tab route on
+    // iOS, where the document's own print button (or Share → Print) prints
+    // only the invoice, matching what desktop shows.
+    openInvoiceInNewTab();
+    return;
+  }
   try {
-    // Try iframe print first (works on desktop and most mobile)
+    // Works on desktop and most non-iOS mobile browsers.
     frame.contentWindow.focus();
     frame.contentWindow.print();
   } catch(e) {
-    // Safari iPad fallback: open in new tab so user can use share → print
-    const html = frame.srcdoc;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    openInvoiceInNewTab();
   }
 }
 
