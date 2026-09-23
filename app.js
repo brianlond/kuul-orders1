@@ -3665,20 +3665,33 @@ function closeInvoice() {
   document.getElementById('invoice-frame').srcdoc = '';
 }
 
+// Printing an invoice/packing slip: rather than asking the browser to print
+// only the preview iframe (frame.contentWindow.print()) — which iOS Safari
+// fails to scope correctly, silently printing the whole app screen behind it
+// instead of the iframe — we copy that same document's markup into
+// #print-host (in a Shadow DOM, so its CSS can't leak into or collide with
+// the app's own styles) and print the current page itself, with #print-host
+// the only thing left visible (see the @media print rule in style.css).
+// This never leaves the tab, and behaves the same on every browser since it
+// doesn't depend on cross-frame print scoping at all.
+let printHostShadow = null;
+
 function printInvoiceFrame() {
   const frame = document.getElementById('invoice-frame');
-  try {
-    // Try iframe print first (works on desktop and most mobile)
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
-  } catch(e) {
-    // Safari iPad fallback: open in new tab so user can use share → print
-    const html = frame.srcdoc;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
+  const host = document.getElementById('print-host');
+  if (!frame || !host || !frame.srcdoc) return;
+
+  const parsed = new DOMParser().parseFromString(frame.srcdoc, 'text/html');
+  // The template's own "body { ... }" rule wouldn't match anything inside a
+  // shadow root (there's no <body> element in there), so retarget it to the
+  // wrapper div we render the content into below.
+  const styleText = (parsed.querySelector('style')?.textContent || '')
+    .replace(/\bbody\b(?=\s*[,{])/g, '.print-doc');
+
+  if (!printHostShadow) printHostShadow = host.attachShadow({ mode: 'open' });
+  printHostShadow.innerHTML = `<style>${styleText}</style><div class="print-doc">${parsed.body.innerHTML}</div>`;
+
+  window.print();
 }
 
 window.addEventListener('load', async () => {
