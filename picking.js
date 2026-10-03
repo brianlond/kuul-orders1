@@ -117,15 +117,14 @@ async function handleFileUpload(e) {
     orders = [];
     for (let labelPage = 1; labelPage < totalPages; labelPage += 2) {
       const slipPage = labelPage + 1;
-      const rawText = await getPageText(slipPage);
-      const parsed = parsePackingSlipText(rawText);
+      const parsed = await parsePackingSlipPage(slipPage);
       orders.push({
         index: orders.length,
         labelPageNum: labelPage,
         slipPageNum: slipPage,
         orderId: parsed.orderId,
         tracking: parsed.tracking,
-        rawText,
+        rawText: parsed.rawText,
         lines: parsed.lines,
         complete: false
       });
@@ -147,51 +146,118 @@ async function handleFileUpload(e) {
   }
 }
 
-async function getPageText(pageNum) {
+// Parses a TikTok Shop packing-slip page using each text fragment's real
+// (x, y) position, not just the concatenated string.
+//
+// Why: pdf.js (like most PDF text extraction) returns fragments in the
+// order they were drawn, not visual reading order. On an actual exported
+// packing slip, that means every row's "Product Name" lines come out
+// first, then every row's "SKU" lines, then every row's "Qty" — a
+// column-major dump instead of row-by-row. A simple "SKU: ... Qty: ..."
+// regex over that joined text pairs the wrong SKU with the wrong Qty (or
+// finds nothing at all, since there's no "SKU:"/"Qty:" label at all — the
+// labels are a one-time header row above the table).
+//
+// This was verified against a real TikTok Shop "Shipping label/Packing
+// slip" export: each packing-slip page has a header row with "Product
+// Name", "SKU", "Seller SKU" and "Qty" column labels, and each product row
+// below it wraps across 2-4 lines per column (long names/SKUs), with the
+// Qty value appearing once on the row's first line. The "SKU" column
+// (not "Seller SKU", which this seller leaves blank) holds the real
+// per-shade identifier, e.g. "RED VIOLET - Reflects" — that's what's used
+// as tiktok_sku here.
+//
+// Algorithm: find the three column header items to get each column's X
+// position, then for every text item below the header row (and above
+// "Qty Total:"), bucket it into the nearest column by X, and into a row by
+// Y — using each Qty-column item's Y as that row's anchor, since Qty never
+// wraps across lines while Product Name/SKU do. Every other item in a
+// column is assigned to the nearest row anchor at or above it.
+async function parsePackingSlipPage(pageNum) {
   const page = await pdfDoc.getPage(pageNum);
   const content = await page.getTextContent();
-  return content.items.map(it => it.str).join(' ');
-}
+  const items = content.items
+    .filter(it => it.str && it.str.trim())
+    .map(it => ({ str: it.str.trim(), x: it.transform[4], y: it.transform[5] }));
 
-// Best-effort text parser for a TikTok Shop packing-slip page.
-//
-// IMPORTANT: this was written without a real TikTok Shop export to test
-// against, so these patterns are a reasonable guess at common "Order ID /
-// Tracking / SKU / Qty" labels, not a verified parser. pdf.js also doesn't
-// guarantee text comes out in visual reading order, which can scramble
-// table-like layouts. Use the "Texto extraído" panel on a real order to see
-// exactly what was pulled from the PDF, and adjust the regexes below to
-// match it — the rest of the picking flow (scanning, sets, printing)
-// doesn't depend on this parser being perfect; it just needs orderId/
-// tracking/lines to come out reasonably close.
-function parsePackingSlipText(text) {
-  const orderIdMatch = text.match(/Order\s*ID[:\s]+([A-Z0-9-]+)/i);
-  const trackingMatch = text.match(/Tracking\s*(?:ID|Number|No\.?)?[:\s]+([A-Z0-9]+)/i);
+  const rawText = items.map(it => it.str).join(' ');
+  const orderIdMatch = rawText.match(/Order\s*ID[:\s]+(\d+)/i);
+  const trackingMatch = rawText.match(/Tracking\s*number[:\s]*([A-Za-z0-9]+)/i);
 
-  const lines = [];
-  // Primary pattern: "SKU: <value> ... Qty: <n>" with the SKU and quantity
-  // reasonably close together.
-  const skuQtyRegex = /SKU[:\s]+([^\n]+?)\s*(?:Qty|Quantity)[:\s]+(\d+)/gi;
-  let m;
-  while ((m = skuQtyRegex.exec(text)) !== null) {
-    const sku = m[1].trim();
-    if (sku) lines.push({ tiktok_sku: sku, qty: parseInt(m[2], 10) || 1 });
-  }
-
-  // Fallback: no Qty found near a SKU — grab bare "SKU: ..." occurrences
-  // with quantity defaulted to 1, so picking can still proceed.
-  if (lines.length === 0) {
-    const bareSkuRegex = /SKU[:\s]+([^\n]+?)(?=\s*SKU[:\s]|$)/gi;
-    while ((m = bareSkuRegex.exec(text)) !== null) {
-      const sku = m[1].trim();
-      if (sku) lines.push({ tiktok_sku: sku, qty: 1 });
+  // headerY is anchored only to these three — they share one text line.
+  // The price header ("SKU Price" / "(Unit)") wraps onto its own, higher
+  // line, so it's located separately below and kept out of the headerY/
+  // table-top calculation; it's only here so price text doesn't get
+  // misclassified into the Qty column (it sits close enough on the X axis
+  // to fall inside the classifier's tolerance otherwise), corrupting both
+  // the row count (duplicate rows) and the parsed Qty value.
+  const headerLabels = { productName: 'Product Name', sku: 'SKU', qty: 'Qty' };
+  const headerX = {};
+  let headerY = -Infinity;
+  items.forEach(it => {
+    for (const [key, label] of Object.entries(headerLabels)) {
+      if (it.str === label) { headerX[key] = it.x; headerY = Math.max(headerY, it.y); }
     }
+  });
+  const priceHeaderItem = items.find(it => it.str === 'SKU Price');
+  if (priceHeaderItem) headerX.price = priceHeaderItem.x;
+
+  // No recognizable table header on this page — can't locate the columns,
+  // so return just the order-level fields with no line items rather than
+  // guessing further.
+  if (headerX.productName === undefined || headerX.sku === undefined || headerX.qty === undefined) {
+    return { orderId: orderIdMatch ? orderIdMatch[1] : null, tracking: trackingMatch ? trackingMatch[1] : null, lines: [], rawText };
   }
+
+  const totalMarker = items.find(it => /Qty Total/i.test(it.str));
+  const tableBottomY = totalMarker ? totalMarker.y : -Infinity;
+  const tableItems = items.filter(it => it.y < headerY - 1 && it.y > tableBottomY);
+
+  const COL_TOLERANCE = 30; // points; the real columns are ~40-160pt apart
+  function classifyColumn(x) {
+    const dists = Object.entries(headerX).map(([key, hx]) => [key, Math.abs(x - hx)]);
+    dists.sort((a, b) => a[1] - b[1]);
+    return dists[0][1] <= COL_TOLERANCE ? dists[0][0] : null;
+  }
+
+  const rowAnchors = tableItems
+    .filter(it => classifyColumn(it.x) === 'qty')
+    .map(it => it.y)
+    .sort((a, b) => b - a); // top to bottom
+
+  function anchorFor(y) {
+    let best = null;
+    for (const a of rowAnchors) if (a >= y - 0.5 && (best === null || a < best)) best = a;
+    return best;
+  }
+
+  const rows = new Map();
+  rowAnchors.forEach(a => rows.set(a, { product: [], sku: [], qty: '' }));
+
+  tableItems.forEach(it => {
+    const col = classifyColumn(it.x);
+    const anchor = anchorFor(it.y);
+    if (!col || anchor === null || !rows.has(anchor)) return;
+    const row = rows.get(anchor);
+    if (col === 'productName') row.product.push(it.str);
+    else if (col === 'sku') row.sku.push(it.str);
+    else if (col === 'qty') row.qty += it.str;
+  });
+
+  const lines = rowAnchors
+    .map(a => {
+      const row = rows.get(a);
+      const sku = row.sku.join(' ').replace(/\s+/g, ' ').trim();
+      const productName = row.product.join(' ').replace(/\s+/g, ' ').trim();
+      return { tiktok_sku: sku || productName, product_name_hint: productName, qty: parseInt(row.qty, 10) || 1 };
+    })
+    .filter(l => l.tiktok_sku);
 
   return {
     orderId: orderIdMatch ? orderIdMatch[1] : null,
     tracking: trackingMatch ? trackingMatch[1] : null,
-    lines
+    lines,
+    rawText
   };
 }
 
@@ -259,16 +325,20 @@ function renderOrderLines(order) {
     return;
   }
   container.innerHTML = order.lines.map(line => {
+    const nameHint = line.product_name_hint && line.product_name_hint !== line.tiktok_sku
+      ? `<div style="font-size:11px; color:var(--text-faint);">${escapeHtml(line.product_name_hint)}</div>` : '';
     if (!line.components || line.components.length === 0) {
       return `
       <div class="pk-order-line pk-line-missing">
         <div class="pk-line-sku">${escapeHtml(line.tiktok_sku)}${line.qty > 1 ? ` × ${line.qty}` : ''}</div>
+        ${nameHint}
         <div style="font-size:12px; color:#d97706;">⚠️ SKU sin código de barras registrado — regístralo abajo</div>
       </div>`;
     }
     return `
     <div class="pk-order-line">
       <div class="pk-line-sku">${escapeHtml(line.tiktok_sku)}${line.qty > 1 ? ` × ${line.qty}` : ''}</div>
+      ${nameHint}
       <div class="pk-components">
         ${line.components.map(c => {
           const done = c.scannedCount >= line.qty;
@@ -293,16 +363,19 @@ function checkForUnresolvedLine(order) {
     pendingRegistration = null;
     return;
   }
-  pendingRegistration = { tiktokSku: missing.tiktok_sku, collected: [] };
+  pendingRegistration = { tiktokSku: missing.tiktok_sku, productNameHint: missing.product_name_hint, collected: [] };
   renderRegistrationPanel();
 }
 
 function renderRegistrationPanel() {
   const panel = document.getElementById('pk-new-sku-panel');
   panel.style.display = 'block';
+  const hint = pendingRegistration.productNameHint && pendingRegistration.productNameHint !== pendingRegistration.tiktokSku
+    ? `<div style="font-size:11px; color:var(--text-faint); margin-bottom:4px;">${escapeHtml(pendingRegistration.productNameHint)}</div>` : '';
   panel.innerHTML = `
     <div style="font-size:13px; font-weight:600; margin-bottom:6px; color:#92400e;">⚠️ SKU nuevo — regístralo</div>
     <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; word-break:break-word;">"${escapeHtml(pendingRegistration.tiktokSku)}"</div>
+    ${hint}
     <div style="font-size:12px; margin-bottom:10px;">
       Escanea el producto físico para asociarlo${pendingRegistration.collected.length ? ` (componente ${pendingRegistration.collected.length + 1}, si este SKU es un set)` : ''}.
     </div>
