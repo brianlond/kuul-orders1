@@ -1,0 +1,39 @@
+/* Packing station — TikTok Shop
+   Page-specific styles only. Shared tokens, fonts, buttons, modal and toast
+   styles come from style.css (linked alongside this file in packing.html). */
+
+.pk-main { max-width: 640px; margin: 0 auto; padding: 24px 20px 60px; }
+
+.pk-gate { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
+.pk-gate-box { text-align: center; max-width: 320px; }
+
+.pk-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
+
+.pk-scan-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 2px solid var(--gold-border); border-radius: var(--radius-lg); padding: 12px 16px; margin-bottom: 16px; position: sticky; top: 12px; box-shadow: var(--shadow-md); z-index: 5; }
+.pk-scan-icon { font-size: 20px; flex-shrink: 0; }
+#pk-scan-input { flex: 1; border: none; outline: none; font-size: 16px; font-family: var(--font-sans); background: none; color: var(--text); }
+#pk-scan-input.pk-flash-ok { animation: pk-flash-green 0.4s; }
+#pk-scan-input.pk-flash-err { animation: pk-flash-red 0.4s; }
+@keyframes pk-flash-green { 0%, 100% { background: none; } 30% { background: var(--success-bg); } }
+@keyframes pk-flash-red { 0%, 100% { background: none; } 30% { background: var(--danger-bg); } }
+
+.pk-queue-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding: 10px 0; }
+.pk-queue-item:first-child { border-top: none; padding-top: 0; }
+.pk-queue-order { font-size: 13px; font-weight: 600; color: var(--text); }
+.pk-queue-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.pk-queue-count { font-size: 11px; background: var(--gold-pale); color: var(--gold); border-radius: 99px; padding: 2px 10px; font-weight: 600; flex-shrink: 0; }
+
+.pk-last-action { font-size: 13px; border-radius: var(--radius); padding: 10px 14px; margin-bottom: 16px; }
+.pk-last-action.ok { background: var(--success-bg); color: var(--success); }
+.pk-last-action.err { background: var(--danger-bg); color: var(--danger); }
+
+/* Printing uses #print-host and the @media print rule already defined in
+   style.css (linked above), the same mechanism picking.html and the main
+   app's print flow rely on. */
+@media print {
+  #print-host img { width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .pk-main { padding: 16px 12px 48px; }
+}
