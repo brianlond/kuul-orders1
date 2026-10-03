@@ -70,6 +70,21 @@ async function supabase(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+// Supabase/PostgREST error bodies are JSON like
+// {"code":"42P01","message":"relation \"public.tiktok_skus\" does not exist"}
+// — the shared supabase() wrapper throws an Error whose .message is that
+// raw body text. Pull out something a non-developer can act on instead of
+// showing raw JSON (or, worse, a guessed-wrong generic message).
+function describeSupabaseError(e) {
+  try {
+    const parsed = JSON.parse(e.message);
+    if (parsed.code === '42P01') return 'la tabla "tiktok_skus" no existe todavía en Supabase — hay que crearla primero.';
+    if (parsed.code === '23505') return 'ese código ya estaba registrado para este SKU.';
+    if (parsed.message) return parsed.message;
+  } catch (_) { /* not JSON — fall through to the raw message below */ }
+  return (e && e.message) || String(e);
+}
+
 function checkAuthGate() {
   const hasToken = !!localStorage.getItem('sb_token');
   document.getElementById('pk-auth-gate').style.display = hasToken ? 'none' : 'flex';
@@ -266,6 +281,8 @@ async function parsePackingSlipPage(pageNum) {
 // product, several for a set (one tiktok_sku can map to multiple barcode
 // rows, per the tiktok_skus(tiktok_sku, barcode) unique index). Checks the
 // hardcoded demo list first, then Supabase, merging and caching the result.
+let dbWarningShown = false;
+
 async function resolveSku(tiktokSku) {
   if (skuCache.has(tiktokSku)) return skuCache.get(tiktokSku);
 
@@ -279,6 +296,13 @@ async function resolveSku(tiktokSku) {
     dbMatches = (rows || []).map(r => ({ barcode: r.barcode, product_name: r.product_name, is_set: r.is_set }));
   } catch (e) {
     console.error('resolveSku: error consultando tiktok_skus', e);
+    // Surface this once instead of failing silently — a missing table or
+    // bad RLS policy here looks exactly like "no barcode registered yet"
+    // otherwise, which is confusing to debug.
+    if (!dbWarningShown) {
+      dbWarningShown = true;
+      showToast('⚠️ No se pudo consultar tiktok_skus en Supabase: ' + describeSupabaseError(e), 6000);
+    }
   }
 
   const merged = [...demoMatches];
@@ -403,7 +427,7 @@ async function handleRegistrationScan(code) {
     showToast('✓ Código registrado');
   } catch (e) {
     console.error(e);
-    showToast('❌ Error al registrar el código (¿ya existe esa combinación SKU+código?)');
+    showToast('❌ No se pudo registrar: ' + describeSupabaseError(e), 5000);
     pendingRegistration.collected.pop();
     focusScanInput();
     return;
