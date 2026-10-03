@@ -319,6 +319,61 @@ async function resolveSku(tiktokSku) {
   return merged;
 }
 
+// Some TikTok SKUs are shorthand for a color + developer combo, e.g.
+// "Red Violet Reflects, 10 Vol" — two separate physical products (a color
+// tube and a developer bottle), each with its own barcode. Splitting them
+// and resolving/registering each one under its own name (instead of under
+// the full combo string) means a developer volume registered once (e.g.
+// "10 Vol") is recognized for every color that uses it, instead of asking
+// to re-register both barcodes for every new color/developer combination.
+function splitKitSku(tiktokSku) {
+  const m = /^(.+?),\s*(\d+)\s*(?:vol(?:ume)?)\.?\s*$/i.exec((tiktokSku || '').trim());
+  if (!m) return null;
+  const color = m[1].trim();
+  if (!color) return null;
+  return { color, developer: `${m[2]} Vol` };
+}
+
+// Resolves the barcode(s) a line needs, trying in order:
+//  1. Kit pattern (color + developer) with BOTH parts already registered
+//     under their own name — the common case once a color and a developer
+//     volume have each been seen before, in any combination.
+//  2. Kit pattern with only one part registered — surfaced as unresolved
+//     (components: []) but foundRoles records which part is already known,
+//     so the registration flow below only asks for the missing one.
+//  3. Legacy fallback — a combo registered the old way, as one barcode set
+//     under the full combo string, before this split existed.
+//  4. Not a kit pattern at all — resolved as a single plain product, same
+//     as before this feature existed.
+async function resolveLineComponents(line) {
+  const parts = splitKitSku(line.tiktok_sku);
+
+  if (parts) {
+    const [colorMatches, devMatches] = await Promise.all([
+      resolveSku(parts.color),
+      resolveSku(parts.developer)
+    ]);
+    if (colorMatches.length && devMatches.length) {
+      const components = [
+        ...colorMatches.map(m => ({ ...m, role: 'color', key: parts.color, scannedCount: 0 })),
+        ...devMatches.map(m => ({ ...m, role: 'developer', key: parts.developer, scannedCount: 0 }))
+      ];
+      return { components, kitParts: parts, foundRoles: null };
+    }
+    if (colorMatches.length || devMatches.length) {
+      const foundRoles = colorMatches.length ? { color: colorMatches } : { developer: devMatches };
+      return { components: [], kitParts: parts, foundRoles };
+    }
+  }
+
+  const legacyMatches = await resolveSku(line.tiktok_sku);
+  if (legacyMatches.length) {
+    return { components: legacyMatches.map(m => ({ ...m, scannedCount: 0 })), kitParts: parts, foundRoles: null };
+  }
+
+  return { components: [], kitParts: parts, foundRoles: null };
+}
+
 // ── Rendering the current order ──────────────────────────────
 async function loadOrderIntoView(idx) {
   currentOrderIdx = idx;
@@ -330,8 +385,10 @@ async function loadOrderIntoView(idx) {
 
   for (const line of order.lines) {
     if (!line.components) {
-      const resolved = await resolveSku(line.tiktok_sku);
-      line.components = resolved.map(c => ({ ...c, scannedCount: 0 }));
+      const { components, kitParts, foundRoles } = await resolveLineComponents(line);
+      line.components = components;
+      line.kitParts = kitParts;
+      line.kitFoundRoles = foundRoles;
     }
   }
 
@@ -374,7 +431,10 @@ function renderOrderLines(order) {
         ${line.components.map(c => {
           const done = c.scannedCount >= line.qty;
           const countLabel = line.qty > 1 ? ` (${c.scannedCount}/${line.qty})` : '';
-          return `<span class="pk-chip ${done ? 'pk-chip-done' : ''}">${done ? '✅' : '⬜'} ${escapeHtml(c.product_name || c.barcode)}${countLabel}</span>`;
+          const label = c.role === 'color' ? `Color: ${c.product_name || c.key}`
+            : c.role === 'developer' ? `Developer: ${c.product_name || c.key}`
+            : (c.product_name || c.barcode);
+          return `<span class="pk-chip ${done ? 'pk-chip-done' : ''}">${done ? '✅' : '⬜'} ${escapeHtml(label)}${countLabel}</span>`;
         }).join('')}
       </div>
     </div>`;
@@ -388,19 +448,54 @@ function escapeHtml(s) {
 // ── New-SKU registration (SKU with no barcode on file yet) ──────
 function checkForUnresolvedLine(order) {
   const panel = document.getElementById('pk-new-sku-panel');
-  const missing = order.lines.find(l => !l.components || l.components.length === 0);
-  if (!missing) {
+  const line = order.lines.find(l => !l.components || l.components.length === 0);
+  if (!line) {
     panel.style.display = 'none';
     pendingRegistration = null;
     return;
   }
-  pendingRegistration = { tiktokSku: missing.tiktok_sku, productNameHint: missing.product_name_hint, collected: [] };
+
+  if (line.kitParts) {
+    // Kit pattern (color + developer): ask only for whichever named
+    // part(s) aren't already on file — foundRoles was set by
+    // resolveLineComponents() when just one of the two was known.
+    const need = ['color', 'developer'].filter(role => !(line.kitFoundRoles && line.kitFoundRoles[role]));
+    pendingRegistration = {
+      mode: 'kit',
+      tiktokSku: line.tiktok_sku,
+      productNameHint: line.product_name_hint,
+      kitParts: line.kitParts,
+      foundRoles: line.kitFoundRoles || {},
+      need,
+      justScanned: {}
+    };
+  } else {
+    pendingRegistration = { mode: 'generic', tiktokSku: line.tiktok_sku, productNameHint: line.product_name_hint, collected: [] };
+  }
   renderRegistrationPanel();
 }
 
 function renderRegistrationPanel() {
   const panel = document.getElementById('pk-new-sku-panel');
   panel.style.display = 'block';
+
+  if (pendingRegistration.mode === 'kit') {
+    const { color, developer } = pendingRegistration.kitParts;
+    const doneRoles = new Set([...Object.keys(pendingRegistration.foundRoles || {}), ...Object.keys(pendingRegistration.justScanned)]);
+    const nextRole = pendingRegistration.need[0];
+    const nextLabel = nextRole === 'color' ? `el color: ${color}` : `el developer: ${developer}`;
+    panel.innerHTML = `
+      <div style="font-size:13px; font-weight:600; margin-bottom:6px; color:#92400e;">⚠️ SKU nuevo — set (color + developer)</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; word-break:break-word;">"${escapeHtml(pendingRegistration.tiktokSku)}"</div>
+      <div style="font-size:12px; margin-bottom:10px;">
+        ${doneRoles.has('color') ? '✅' : '⬜'} Color: ${escapeHtml(color)}<br>
+        ${doneRoles.has('developer') ? '✅' : '⬜'} Developer: ${escapeHtml(developer)}
+      </div>
+      <div style="font-size:12px;">Escanea ${nextLabel}.</div>
+    `;
+    return;
+  }
+
   const hint = pendingRegistration.productNameHint && pendingRegistration.productNameHint !== pendingRegistration.tiktokSku
     ? `<div style="font-size:11px; color:var(--text-faint); margin-bottom:4px;">${escapeHtml(pendingRegistration.productNameHint)}</div>` : '';
   panel.innerHTML = `
@@ -417,6 +512,34 @@ function renderRegistrationPanel() {
 }
 
 async function handleRegistrationScan(code) {
+  if (pendingRegistration.mode === 'kit') {
+    const role = pendingRegistration.need[0];
+    const key = pendingRegistration.kitParts[role];
+    try {
+      await supabase('tiktok_skus', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=representation' },
+        body: JSON.stringify({ tiktok_sku: key, barcode: code, product_name: null, is_set: false, set_parent_sku: null })
+      });
+      skuCache.delete(key); // force a fresh resolve once finished
+      pendingRegistration.justScanned[role] = code;
+      pendingRegistration.need.shift();
+      showToast('✓ Código registrado');
+    } catch (e) {
+      console.error(e);
+      showToast('❌ No se pudo registrar: ' + describeSupabaseError(e), 5000);
+      focusScanInput();
+      return;
+    }
+    if (pendingRegistration.need.length === 0) {
+      await finishRegistration();
+    } else {
+      renderRegistrationPanel();
+    }
+    focusScanInput();
+    return;
+  }
+
   pendingRegistration.collected.push(code);
   try {
     await supabase('tiktok_skus', {
@@ -447,11 +570,16 @@ async function finishRegistration() {
   const order = orders[currentOrderIdx];
   const line = order.lines.find(l => l.tiktok_sku === pendingRegistration.tiktokSku);
   if (line) {
-    const resolved = await resolveSku(pendingRegistration.tiktokSku);
+    const { components, kitParts, foundRoles } = await resolveLineComponents(line);
+    line.components = components;
+    line.kitParts = kitParts;
+    line.kitFoundRoles = foundRoles;
     // Credit the barcode(s) just scanned during registration as already
     // picked — no need to make the picker scan them a second time.
-    const justRegistered = new Set(pendingRegistration.collected);
-    line.components = resolved.map(c => ({ ...c, scannedCount: justRegistered.has(c.barcode) ? 1 : 0 }));
+    const justRegistered = new Set(
+      pendingRegistration.mode === 'kit' ? Object.values(pendingRegistration.justScanned) : pendingRegistration.collected
+    );
+    line.components.forEach(c => { if (justRegistered.has(c.barcode)) c.scannedCount = 1; });
   }
   pendingRegistration = null;
   document.getElementById('pk-new-sku-panel').style.display = 'none';
