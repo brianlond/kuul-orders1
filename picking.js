@@ -66,7 +66,12 @@ async function supabase(path, options = {}) {
     }
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.status === 204 ? null : res.json();
+  // Prefer: return=minimal (used when saving a picked order) comes back
+  // with an empty body on a status that isn't always exactly 204 — read as
+  // text and only parse if there's actually something there, instead of
+  // assuming any non-204 response has a JSON body.
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 // Supabase/PostgREST error bodies are JSON like
@@ -513,10 +518,21 @@ async function renderPageToDataUrl(pageNum, scale) {
   return canvas.toDataURL('image/png');
 }
 
+// Waits for the image to actually finish loading/decoding before printing —
+// calling window.print() right after setting innerHTML can fire before the
+// browser has painted the image, producing a blank printed page even
+// though the <img> tag is there in the DOM.
 function printDataUrl(dataUrl) {
-  const host = document.getElementById('print-host');
-  host.innerHTML = `<img src="${dataUrl}" alt="">`;
-  window.print();
+  return new Promise(resolve => {
+    const host = document.getElementById('print-host');
+    host.innerHTML = '';
+    const img = new Image();
+    img.onload = () => { window.print(); resolve(); };
+    img.onerror = () => resolve(); // don't hang the flow if the image failed to render
+    img.alt = '';
+    host.appendChild(img);
+    img.src = dataUrl;
+  });
 }
 
 // Saves the order (its lines + a rendered image of its shipping-label page)
@@ -554,7 +570,7 @@ async function completeOrderAndAdvance(order) {
       })
     });
 
-    printDataUrl(slipDataUrl);
+    await printDataUrl(slipDataUrl);
     showToast('✓ Lista para empacar — hoja impresa');
   } catch (e) {
     console.error('Error guardando/imprimiendo la orden recogida', e);
