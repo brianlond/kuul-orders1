@@ -29,7 +29,11 @@ async function supabase(path, options = {}) {
     }
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.status === 204 ? null : res.json();
+  // Empty-body responses (e.g. Prefer: return=minimal) aren't always
+  // exactly status 204 — read as text and only parse if there's something
+  // there, instead of assuming any non-204 response has a JSON body.
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 // Supabase/PostgREST error bodies are JSON like
@@ -68,6 +72,23 @@ function flashScanResult(ok) {
 function focusScanInput() {
   const input = document.getElementById('pk-scan-input');
   if (input) setTimeout(() => input.focus(), 50);
+}
+
+// Waits for the image to actually finish loading/decoding before printing —
+// calling window.print() right after setting innerHTML can fire before the
+// browser has painted the image, producing a blank printed page even
+// though the <img> tag is there in the DOM.
+function printDataUrl(dataUrl) {
+  return new Promise(resolve => {
+    const host = document.getElementById('print-host');
+    host.innerHTML = '';
+    const img = new Image();
+    img.onload = () => { window.print(); resolve(); };
+    img.onerror = () => resolve(); // don't hang the flow if the image failed to render
+    img.alt = '';
+    host.appendChild(img);
+    img.src = dataUrl;
+  });
 }
 
 function escapeHtml(s) {
@@ -143,9 +164,7 @@ async function handleScan(code) {
     flashScanResult(true);
 
     // Print immediately — no click, not even to acknowledge the scan.
-    const host = document.getElementById('print-host');
-    host.innerHTML = `<img src="${order.label_image}" alt="">`;
-    window.print();
+    await printDataUrl(order.label_image);
 
     await supabase(`tiktok_picked_orders?order_id=eq.${encodeURIComponent(order.order_id)}`, {
       method: 'PATCH',
