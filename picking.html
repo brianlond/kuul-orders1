@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Picking TikTok Shop — Kuul Orders</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="picking.css">
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-text">Picking <span>TikTok Shop</span></div>
+      </div>
+      <a href="index.html" class="logout-btn" style="text-decoration:none; display:inline-block;">← Volver a Kuul Orders</a>
+    </div>
+  </header>
+
+  <main class="pk-main">
+
+    <!-- Shown when there's no sb_token in localStorage yet -->
+    <div id="pk-auth-gate" class="pk-gate" style="display:none;">
+      <div class="pk-gate-box">
+        <div style="font-size:40px; margin-bottom:12px;">🔒</div>
+        <div style="font-size:16px; font-weight:600; margin-bottom:8px;">Inicia sesión primero</div>
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Esta página usa tu sesión de la app principal. Abre Kuul Orders, inicia sesión como admin, y vuelve a esta pestaña.</div>
+        <a href="index.html" class="submit-btn" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px;">Ir a Kuul Orders</a>
+      </div>
+    </div>
+
+    <!-- Main picking app, shown once logged in -->
+    <div id="pk-app" style="display:none;">
+
+      <div id="pk-upload-section" class="pk-card">
+        <div class="section-label">Cargar packing slips de TikTok Shop</div>
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
+          Sube el PDF exportado de TikTok Shop. Se espera que alterne una página de etiqueta de envío y una página de packing slip por cada orden (etiqueta, packing slip, etiqueta, packing slip...).
+        </div>
+        <input type="file" id="pk-file-input" accept="application/pdf">
+        <div id="pk-upload-status" style="margin-top:10px; font-size:13px; color:var(--text-muted);"></div>
+      </div>
+
+      <div id="pk-order-area" style="display:none;">
+        <div class="pk-progress-bar">
+          <span id="pk-progress-label">Orden 1 de 1</span>
+          <button class="clear-btn" onclick="skipToNextOrder()">Saltar orden →</button>
+        </div>
+
+        <div class="pk-card">
+          <div id="pk-order-header"></div>
+          <div id="pk-order-lines"></div>
+        </div>
+
+        <div id="pk-new-sku-panel" class="pk-card" style="display:none; border-color:#d97706;"></div>
+
+        <div class="pk-scan-row">
+          <span class="pk-scan-icon">📷</span>
+          <input type="text" id="pk-scan-input" placeholder="Escanea un código de barras..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+        </div>
+
+        <details class="pk-debug">
+          <summary>Texto extraído de esta orden (para revisar si algo no se detectó bien)</summary>
+          <pre id="pk-debug-text"></pre>
+        </details>
+      </div>
+
+      <div id="pk-done-state" class="pk-card" style="display:none; text-align:center;">
+        <div style="font-size:40px; margin-bottom:10px;">🎉</div>
+        <div style="font-size:16px; font-weight:600;">¡Todas las órdenes completadas!</div>
+        <button class="submit-btn" style="width:auto; margin-top:16px; padding:10px 20px;" onclick="location.reload()">Cargar otro PDF</button>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- PRINT MODAL -->
+  <div id="pk-print-modal" class="modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-title">✅ Orden completa — imprimir etiqueta</div>
+      <div id="pk-label-preview" class="pk-label-preview"></div>
+      <button class="submit-btn" onclick="printLabelAndAdvance()">🖨️ Imprimir y continuar</button>
+      <button class="cancel-btn" onclick="advanceToNextOrder()">Continuar sin imprimir</button>
+    </div>
+  </div>
+
+  <!-- Hidden print target — reuses the same id and @media print rule from
+       style.css (linked above) that the main app's print flow relies on,
+       so there's no second/conflicting print rule to keep in sync. -->
+  <div id="print-host" style="display:none;"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="picking.js"></script>
+</body>
+</html>

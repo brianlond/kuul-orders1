@@ -1,0 +1,50 @@
+/* Picking & Packing — TikTok Shop
+   Page-specific styles only. Shared tokens, fonts, buttons, modal and toast
+   styles come from style.css (linked alongside this file in picking.html). */
+
+.pk-main { max-width: 640px; margin: 0 auto; padding: 24px 20px 60px; }
+
+.pk-gate { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
+.pk-gate-box { text-align: center; max-width: 320px; }
+
+.pk-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
+
+#pk-file-input { font-size: 13px; }
+
+.pk-progress-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+
+.pk-order-line { border-top: 1px solid var(--border); padding: 10px 0; }
+.pk-order-line:first-child { border-top: none; padding-top: 0; }
+.pk-line-sku { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.pk-line-missing .pk-line-sku { color: #92400e; }
+
+.pk-components { display: flex; flex-wrap: wrap; gap: 6px; }
+.pk-chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); }
+.pk-chip-done { background: var(--success-bg); border-color: #bbf7d0; color: var(--success); font-weight: 600; }
+
+.pk-scan-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 2px solid var(--gold-border); border-radius: var(--radius-lg); padding: 12px 16px; margin-bottom: 16px; position: sticky; bottom: 12px; box-shadow: var(--shadow-md); }
+.pk-scan-icon { font-size: 20px; flex-shrink: 0; }
+#pk-scan-input { flex: 1; border: none; outline: none; font-size: 16px; font-family: var(--font-sans); background: none; color: var(--text); }
+#pk-scan-input.pk-flash-ok { animation: pk-flash-green 0.4s; }
+#pk-scan-input.pk-flash-err { animation: pk-flash-red 0.4s; }
+@keyframes pk-flash-green { 0%, 100% { background: none; } 30% { background: var(--success-bg); } }
+@keyframes pk-flash-red { 0%, 100% { background: none; } 30% { background: var(--danger-bg); } }
+
+.pk-debug { font-size: 12px; color: var(--text-faint); margin-bottom: 24px; }
+.pk-debug summary { cursor: pointer; padding: 6px 0; }
+.pk-debug pre { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 11px; }
+
+.pk-label-preview { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; max-height: 50vh; overflow-y: auto; }
+.pk-label-preview img { width: 100%; display: block; }
+
+/* Printing uses #print-host and the @media print rule already defined in
+   style.css (linked above), the same mechanism the main app's print flow
+   relies on — see printLabelAndAdvance() in picking.js. Only the image's
+   own sizing is page-specific enough to belong here. */
+@media print {
+  #print-host img { width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .pk-main { padding: 16px 12px 48px; }
+}
