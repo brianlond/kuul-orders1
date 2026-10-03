@@ -84,6 +84,9 @@ function describeSupabaseError(e) {
     const parsed = JSON.parse(e.message);
     if (parsed.code === '42P01') return 'la tabla "tiktok_skus" no existe todavía en Supabase — hay que crearla primero.';
     if (parsed.code === '23505') return 'ese código ya estaba registrado para este SKU.';
+    if (parsed.code === 'PGRST301' || /jwt expired/i.test(parsed.message || '')) {
+      return 'tu sesión expiró — cierra sesión y vuelve a iniciar sesión en Kuul Orders, luego recarga esta página.';
+    }
     if (parsed.message) return parsed.message;
   } catch (_) { /* not JSON — fall through to the raw message below */ }
   return (e && e.message) || String(e);
@@ -523,12 +526,13 @@ async function renderPageToDataUrl(pageNum, scale) {
 // browser has painted the image, producing a blank printed page even
 // though the <img> tag is there in the DOM.
 function printDataUrl(dataUrl) {
+  if (!dataUrl) return Promise.resolve(false);
   return new Promise(resolve => {
     const host = document.getElementById('print-host');
     host.innerHTML = '';
     const img = new Image();
-    img.onload = () => { window.print(); resolve(); };
-    img.onerror = () => resolve(); // don't hang the flow if the image failed to render
+    img.onload = () => { window.print(); resolve(true); };
+    img.onerror = () => resolve(false); // don't hang the flow if the image failed to render
     img.alt = '';
     host.appendChild(img);
     img.src = dataUrl;
@@ -570,8 +574,10 @@ async function completeOrderAndAdvance(order) {
       })
     });
 
-    await printDataUrl(slipDataUrl);
-    showToast('✓ Lista para empacar — hoja impresa');
+    const printed = await printDataUrl(slipDataUrl);
+    showToast(printed
+      ? '✓ Lista para empacar — hoja impresa'
+      : '⚠️ Orden guardada, pero la hoja de packing slip no se pudo imprimir — reimprímela desde el PDF original si la necesitas.');
   } catch (e) {
     console.error('Error guardando/imprimiendo la orden recogida', e);
     showToast('❌ No se pudo guardar la orden para empacar: ' + describeSupabaseError(e), 6000);

@@ -43,6 +43,9 @@ function describeSupabaseError(e) {
   try {
     const parsed = JSON.parse(e.message);
     if (parsed.code === '42P01') return 'la tabla "tiktok_picked_orders" no existe todavía en Supabase — hay que crearla primero.';
+    if (parsed.code === 'PGRST301' || /jwt expired/i.test(parsed.message || '')) {
+      return 'tu sesión expiró — cierra sesión y vuelve a iniciar sesión en Kuul Orders, luego recarga esta página.';
+    }
     if (parsed.message) return parsed.message;
   } catch (_) { /* not JSON — fall through to the raw message below */ }
   return (e && e.message) || String(e);
@@ -77,14 +80,19 @@ function focusScanInput() {
 // Waits for the image to actually finish loading/decoding before printing —
 // calling window.print() right after setting innerHTML can fire before the
 // browser has painted the image, producing a blank printed page even
-// though the <img> tag is there in the DOM.
+// though the <img> tag is there in the DOM. Resolves true/false so callers
+// can tell whether printing actually happened before treating the order as
+// handled (e.g. marking it packed) — silently resolving either way here
+// previously let an order get marked packed_at even when the image failed
+// to load and nothing printed.
 function printDataUrl(dataUrl) {
+  if (!dataUrl) return Promise.resolve(false);
   return new Promise(resolve => {
     const host = document.getElementById('print-host');
     host.innerHTML = '';
     const img = new Image();
-    img.onload = () => { window.print(); resolve(); };
-    img.onerror = () => resolve(); // don't hang the flow if the image failed to render
+    img.onload = () => { window.print(); resolve(true); };
+    img.onerror = () => resolve(false); // don't hang the flow if the image failed to render
     img.alt = '';
     host.appendChild(img);
     img.src = dataUrl;
@@ -164,7 +172,14 @@ async function handleScan(code) {
     flashScanResult(true);
 
     // Print immediately — no click, not even to acknowledge the scan.
-    await printDataUrl(order.label_image);
+    const printed = await printDataUrl(order.label_image);
+    if (!printed) {
+      const msg = `⚠️ La orden ${order.order_id} se encontró, pero no se pudo imprimir la etiqueta (imagen no disponible) — no se marcó como empacada, puedes volver a escanearla.`;
+      setLastAction(false, msg);
+      showToast(msg, 6000);
+      focusScanInput();
+      return;
+    }
 
     await supabase(`tiktok_picked_orders?order_id=eq.${encodeURIComponent(order.order_id)}`, {
       method: 'PATCH',
