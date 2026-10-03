@@ -10,6 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/js/shepherd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   </head>
 <body>
 
@@ -27,7 +28,8 @@
   </header>
 
   <main class="main">
-    <div class="tabs">
+    <div class="tabs-wrap">
+    <div class="tabs" id="tabs-bar" onscroll="updateTabsFade()">
       <button class="tab active" id="tab-vendedor-btn" onclick="showTab('vendedor')">
         ➕ Nueva orden
       </button>
@@ -58,6 +60,12 @@
       <button class="tab" id="tab-pos-btn" onclick="showTab('pos')">
         🏪 Caja
       </button>
+      <button class="tab" id="tab-stats-btn" onclick="showTab('stats')">
+        💹 Estadísticas
+      </button>
+    </div>
+    <div class="tabs-fade tabs-fade-left" id="tabs-fade-left"></div>
+    <div class="tabs-fade tabs-fade-right" id="tabs-fade-right"></div>
     </div>
 
     <!-- VENDEDOR -->
@@ -232,6 +240,7 @@
         <button class="filter-chip" onclick="filterOrders('Lista', this)">Lista</button>
         <button class="filter-chip" onclick="filterOrders('Entregada', this)">Entregada</button>
         <button class="filter-chip" onclick="filterOrders('PendientePago', this)">💰 Pendientes de pago</button>
+        <button class="filter-chip" onclick="filterOrders('ConTax', this)">🧾 Con impuestos</button>
       </div>
       <div id="test-mode-banner" style="display:none;" class="test-mode-banner">
         🧪 MODO PRUEBA ACTIVO — Las órdenes se guardarán como prueba
@@ -500,6 +509,45 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- STATISTICS -->
+    <div id="tab-stats" class="section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Estadísticas</h2>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Unidades vendidas, costo, margen de ganancia, envíos e impuestos cobrados</div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button id="stats-view-week-btn" onclick="setStatsView('week')" style="padding:6px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">Semana</button>
+          <button id="stats-view-month-btn" onclick="setStatsView('month')" style="padding:6px 16px; background:none; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; color:var(--text-muted); cursor:pointer; font-family:inherit;">Mes</button>
+          <button id="stats-view-all-btn" onclick="setStatsView('all')" style="padding:6px 16px; background:none; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; color:var(--text-muted); cursor:pointer; font-family:inherit;">Todo</button>
+        </div>
+      </div>
+
+      <div id="stats-week-controls" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+        <label style="font-size:13px; color:var(--text-muted);">Semana:</label>
+        <button onclick="statsWeekPrev()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">◀</button>
+        <span id="stats-week-label" style="font-size:13px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); min-width:160px; text-align:center; display:inline-block;">—</span>
+        <input type="hidden" id="stats-week">
+        <button onclick="statsWeekNext()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">▶</button>
+        <button onclick="loadStatsReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
+      </div>
+
+      <div id="stats-month-controls" style="display:none; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+        <label style="font-size:13px; color:var(--text-muted);">Mes:</label>
+        <button onclick="statsMonthPrev()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">◀</button>
+        <span id="stats-month-label" style="font-size:13px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); min-width:160px; text-align:center; display:inline-block;">—</span>
+        <input type="hidden" id="stats-month">
+        <button onclick="statsMonthNext()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">▶</button>
+        <button onclick="loadStatsReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
+      </div>
+
+      <div id="stats-all-controls" style="display:none; margin-bottom:16px;">
+        <button onclick="loadStatsReport()" style="padding:8px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans);">🔄 Actualizar</button>
+      </div>
+
+      <div id="stats-report"></div>
     </div>
   </main>
 

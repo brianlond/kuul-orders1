@@ -47,9 +47,15 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 
 .main { max-width: 900px; margin: 0 auto; padding: 28px 20px 60px; }
 
-.tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 28px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; cursor: grab; }
+.tabs-wrap { position: relative; margin-bottom: 28px; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; cursor: grab; }
 .tabs:active { cursor: grabbing; }
 .tabs::-webkit-scrollbar { display: none; }
+/* Fades at the scrollable edges of the tab bar hint that there are more
+   tabs off-screen; toggled by updateTabsFade() based on scroll position. */
+.tabs-fade { position: absolute; top: 0; bottom: 1px; width: 28px; pointer-events: none; opacity: 0; transition: opacity 0.15s; }
+.tabs-fade-left { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
+.tabs-fade-right { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
 .tab { padding: 10px 16px; font-size: 13px; cursor: pointer; border: none; background: none; color: var(--text-muted); border-bottom: 2px solid transparent; font-family: var(--font-sans); transition: color 0.15s; white-space: nowrap; }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--gold); border-bottom-color: var(--gold); font-weight: 500; }
@@ -265,6 +271,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   .pos-wrap { grid-template-columns: 1fr; height: auto; }
   .pos-left { height: 55vh; }
   .pos-right { height: 45vh; }
+  .stats-charts-grid { grid-template-columns: 1fr; }
 }
 
 /* POS MOBILE FAB */

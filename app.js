@@ -905,7 +905,13 @@ function renderOrders(orders) {
   const list       = document.getElementById('orders-list');
   const badge      = document.getElementById('badge-count');
   const countLabel = document.getElementById('order-count-label');
-  countLabel.textContent = orders.length + ' orden' + (orders.length !== 1 ? 'es' : '');
+  let countText = orders.length + ' orden' + (orders.length !== 1 ? 'es' : '');
+  if (currentFilter === 'ConTax' && orders.length > 0) {
+    const taxSum = orders.reduce((s, o) => s + parseFloat(o.tax_amount || 0), 0);
+    const totalSum = orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+    countText += ` · Impuestos cobrados: $${taxSum.toFixed(2)} · Total: $${totalSum.toFixed(2)}`;
+  }
+  countLabel.textContent = countText;
 
   if (orders.length === 0) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div>No hay órdenes todavía</div>`;
@@ -2862,6 +2868,7 @@ let allOrders = [];
 function applyOrderFilter(orders, filter) {
   return filter === 'all' ? orders
     : filter === 'PendientePago' ? orders.filter(o => o.payment_status !== 'Pagado')
+    : filter === 'ConTax' ? orders.filter(o => parseFloat(o.tax_amount || 0) > 0)
     : orders.filter(o => o.status === filter);
 }
 
@@ -3016,7 +3023,7 @@ function showTab(name) {
   // All tabs require login
   if (!currentRole) { showLoginModal(); return; }
   // Role-based access
-  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers') && !isAdmin) { return; }
+  if ((name === 'admin' || name === 'customers' || name === 'catalog' || name === 'inventory' || name === 'sellers' || name === 'stats') && !isAdmin) { return; }
   if (name === 'miprogreso' && currentRole !== 'seller') { return; }
   if (name === 'delivery' && !isDelivery && !isAdmin) { return; }
   if (name === 'pos' && currentRole === 'delivery') { return; }
@@ -3036,6 +3043,7 @@ function showTab(name) {
   if (name === 'inventory') loadInventory();
   if (name === 'pos') initPOS();
   if (name === 'sellers') initSellersTab();
+  if (name === 'stats') initStatsTab();
   if (name === 'miprogreso') initMiProgreso();
   if (name === 'suppliers') initSuppliersTab();
   if (name === 'vendedor' && (!PRODUCTS || PRODUCTS.length === 0)) {
@@ -3043,7 +3051,21 @@ function showTab(name) {
   }
   if (name === 'delivery') loadDeliveryOrders();
   if (name === 'delivery' && isAdmin) document.getElementById('tab-delivery-btn').style.display = '';
+  updateTabsFade();
 }
+
+// Shows/hides the edge fades on the scrollable tab bar depending on how far
+// it's scrolled, so it's clear when there are more tabs off-screen.
+function updateTabsFade() {
+  const bar = document.getElementById('tabs-bar');
+  const left = document.getElementById('tabs-fade-left');
+  const right = document.getElementById('tabs-fade-right');
+  if (!bar || !left || !right) return;
+  const maxScroll = bar.scrollWidth - bar.clientWidth;
+  left.style.opacity = bar.scrollLeft > 4 ? '1' : '0';
+  right.style.opacity = bar.scrollLeft < maxScroll - 4 ? '1' : '0';
+}
+window.addEventListener('resize', updateTabsFade);
 
 // ── Init — load products from Supabase then boot the form ────
 async function init() {
@@ -4227,6 +4249,290 @@ function initDragScroll(el) {
     const x = e.pageX - el.offsetLeft;
     el.scrollLeft = scrollLeft - (x - startX);
   });
+}
+
+// ── ESTADÍSTICAS (units sold, cost, margin, shipping & tax collected) ──
+let statsView = 'week';
+let statsChartBrand = null;
+let statsChartComposition = null;
+
+function initStatsTab() {
+  const input = document.getElementById('stats-week');
+  if (!input) return;
+  if (!input.value) {
+    const { year, week } = currentWeekValue();
+    setWeekValue('stats-week', 'stats-week-label', year, week);
+  }
+  loadStatsReport();
+}
+
+function setStatsView(view) {
+  statsView = view;
+  const weekControls  = document.getElementById('stats-week-controls');
+  const monthControls = document.getElementById('stats-month-controls');
+  const allControls    = document.getElementById('stats-all-controls');
+  const weekBtn  = document.getElementById('stats-view-week-btn');
+  const monthBtn = document.getElementById('stats-view-month-btn');
+  const allBtn   = document.getElementById('stats-view-all-btn');
+
+  [weekControls, monthControls].forEach(el => el.style.display = 'none');
+  allControls.style.display = 'none';
+  [weekBtn, monthBtn, allBtn].forEach(btn => { btn.style.background = 'none'; btn.style.color = 'var(--text-muted)'; btn.style.border = '1px solid var(--border)'; });
+  const activeBtn = view === 'week' ? weekBtn : view === 'month' ? monthBtn : allBtn;
+  activeBtn.style.background = 'var(--gold)'; activeBtn.style.color = '#fff'; activeBtn.style.border = 'none';
+
+  if (view === 'week') {
+    weekControls.style.display = 'flex';
+    if (!document.getElementById('stats-week').value) { const { year, week } = currentWeekValue(); setWeekValue('stats-week', 'stats-week-label', year, week); }
+  } else if (view === 'month') {
+    monthControls.style.display = 'flex';
+    if (!document.getElementById('stats-month').value) {
+      const now = new Date();
+      const val = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}`;
+      document.getElementById('stats-month').value = val;
+      updateStatsMonthLabel(val);
+    }
+  } else {
+    allControls.style.display = 'block';
+  }
+  loadStatsReport();
+}
+
+function updateStatsMonthLabel(val) {
+  const [y, m] = val.split('-').map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  document.getElementById('stats-month-label').textContent = label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function statsWeekPrev() {
+  const input = document.getElementById('stats-week');
+  if (!input || !input.value) { initStatsTab(); return; }
+  const { start } = getWeekRange(input.value);
+  const prev = new Date(start);
+  prev.setDate(prev.getDate() - 7);
+  setWeekValue('stats-week', 'stats-week-label', prev.getFullYear(), getWeekNumber(prev));
+  loadStatsReport();
+}
+
+function statsWeekNext() {
+  const input = document.getElementById('stats-week');
+  if (!input || !input.value) { initStatsTab(); return; }
+  const { start } = getWeekRange(input.value);
+  const next = new Date(start);
+  next.setDate(next.getDate() + 7);
+  setWeekValue('stats-week', 'stats-week-label', next.getFullYear(), getWeekNumber(next));
+  loadStatsReport();
+}
+
+function statsMonthPrev() {
+  const input = document.getElementById('stats-month');
+  if (!input.value) { const now = new Date(); input.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`; }
+  const [y, m] = input.value.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`;
+  input.value = val;
+  updateStatsMonthLabel(val);
+  loadStatsReport();
+}
+
+function statsMonthNext() {
+  const input = document.getElementById('stats-month');
+  if (!input.value) { const now = new Date(); input.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`; }
+  const [y, m] = input.value.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`;
+  input.value = val;
+  updateStatsMonthLabel(val);
+  loadStatsReport();
+}
+
+async function loadStatsReport() {
+  const container = document.getElementById('stats-report');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Cargando...</div>';
+
+  let query = 'orders?is_test=eq.false&status=neq.Cancelada&select=*';
+  if (statsView === 'week') {
+    const weekVal = document.getElementById('stats-week')?.value;
+    if (!weekVal) { initStatsTab(); return; }
+    const { start, end } = getWeekRange(weekVal);
+    query += `&created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}`;
+  } else if (statsView === 'month') {
+    const monthVal = document.getElementById('stats-month')?.value;
+    if (!monthVal) return;
+    const [y, m] = monthVal.split('-').map(Number);
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m, 0, 23, 59, 59, 999);
+    query += `&created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}`;
+  }
+  // 'all' → no date filter, every non-test non-cancelled order ever placed
+
+  try {
+    const orders = await supabase(query);
+    renderStatsReport(orders || []);
+  } catch(e) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Error cargando estadísticas</div>';
+    console.error(e);
+  }
+}
+
+function renderStatsReport(orders) {
+  const container = document.getElementById('stats-report');
+  if (!orders.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin órdenes en este período</div>';
+    if (statsChartBrand) { statsChartBrand.destroy(); statsChartBrand = null; }
+    if (statsChartComposition) { statsChartComposition.destroy(); statsChartComposition = null; }
+    return;
+  }
+
+  let unitsSold = 0, missingCostUnits = 0;
+  let productRevenue = 0, costOfGoods = 0;
+  const byBrand = {};
+
+  orders.forEach(o => {
+    (o.lines || []).forEach(l => {
+      const billableQty = Math.max(0, (l.qty || 0) - (l.free_qty || 0));
+      const lineRevenue = parseFloat(l.subtotal || 0);
+      unitsSold += billableQty;
+      productRevenue += lineRevenue;
+
+      // Look up cost fresh from the live catalog every time, so filling in
+      // a missing cost in Catálogo is reflected here the next time this
+      // tab loads — nothing needs to be re-entered or migrated.
+      const product = PRODUCTS.find(p => p.barcode === l.barcode);
+      const hasCost = product && product.cost !== null && product.cost !== undefined && product.cost !== '';
+      const unitCost = hasCost ? parseFloat(product.cost) : 0;
+      if (!hasCost) missingCostUnits += billableQty;
+      else costOfGoods += billableQty * unitCost;
+
+      const brand = l.brand || 'Otra';
+      if (!byBrand[brand]) byBrand[brand] = { units: 0, revenue: 0, cost: 0 };
+      byBrand[brand].units += billableQty;
+      byBrand[brand].revenue += lineRevenue;
+      if (hasCost) byBrand[brand].cost += billableQty * unitCost;
+    });
+  });
+
+  const shippingTotal = orders.reduce((s,o) => s + parseFloat(o.shipping || 0), 0);
+  const taxTotal = orders.reduce((s,o) => s + parseFloat(o.tax_amount || 0), 0);
+  const grandTotal = orders.reduce((s,o) => s + parseFloat(o.total || 0), 0);
+  const profit = productRevenue - costOfGoods;
+  const marginPct = productRevenue > 0 ? (profit / productRevenue * 100) : 0;
+
+  const statCard = (label, value, color) => `
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; flex:1; min-width:150px;">
+      <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:4px;">${label}</div>
+      <div style="font-size:22px; font-weight:700; color:${color || 'var(--text)'}; font-family:var(--font-display);">${value}</div>
+    </div>`;
+
+  const brandRows = Object.entries(byBrand).sort((a, b) => b[1].revenue - a[1].revenue);
+
+  container.innerHTML = `
+    ${missingCostUnits > 0 ? `
+    <div style="background:var(--warning-bg); border:1px solid #fde68a; border-radius:var(--radius); padding:10px 14px; margin-bottom:16px; font-size:13px; color:var(--warning);">
+      ⚠️ ${missingCostUnits} unidad${missingCostUnits !== 1 ? 'es' : ''} vendida${missingCostUnits !== 1 ? 's' : ''} de producto${missingCostUnits !== 1 ? 's' : ''} sin costo registrado no se incluyeron en el costo ni la ganancia de abajo. Agrégales el costo en <strong>Catálogo</strong> cuando puedas — en cuanto lo hagas, esta tabla queda correcta la próxima vez que la abras o le des 🔄 Actualizar, sin nada más que hacer.
+    </div>` : ''}
+
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+      ${statCard('Unidades vendidas', unitsSold.toLocaleString('en-US'))}
+      ${statCard('Ingresos por productos', '$' + productRevenue.toFixed(2))}
+      ${statCard('Costo de productos', '$' + costOfGoods.toFixed(2))}
+      ${statCard('Ganancia', '$' + profit.toFixed(2) + ' (' + marginPct.toFixed(1) + '%)', profit >= 0 ? '#16a34a' : '#dc2626')}
+    </div>
+
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px;">
+      ${statCard('Envíos cobrados', '$' + shippingTotal.toFixed(2), 'var(--info)')}
+      ${statCard('Impuestos cobrados', '$' + taxTotal.toFixed(2), 'var(--info)')}
+      ${statCard('Total cobrado', '$' + grandTotal.toFixed(2))}
+    </div>
+
+    <div class="stats-charts-grid" style="display:grid; grid-template-columns:1.4fr 1fr; gap:16px; margin-bottom:24px;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
+        <div style="font-size:13px; font-weight:600; margin-bottom:10px;">Ingresos, costo y ganancia por marca</div>
+        <div style="position:relative; height:240px;"><canvas id="stats-chart-brand"></canvas></div>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
+        <div style="font-size:13px; font-weight:600; margin-bottom:10px;">Composición de lo cobrado</div>
+        <div style="position:relative; height:240px;"><canvas id="stats-chart-composition"></canvas></div>
+      </div>
+    </div>
+
+    <div style="font-size:13px; font-weight:600; margin-bottom:10px;">Desglose por marca</div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border); text-align:left; color:var(--text-muted); font-size:11px; text-transform:uppercase; letter-spacing:0.04em;">
+            <th style="padding:6px 8px;">Marca</th>
+            <th style="padding:6px 8px; text-align:right;">Unidades</th>
+            <th style="padding:6px 8px; text-align:right;">Ingresos</th>
+            <th style="padding:6px 8px; text-align:right;">Costo</th>
+            <th style="padding:6px 8px; text-align:right;">Ganancia</th>
+            <th style="padding:6px 8px; text-align:right;">Margen</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${brandRows.map(([brand, d]) => {
+            const p = d.revenue - d.cost;
+            const m = d.revenue > 0 ? (p / d.revenue * 100) : 0;
+            return `<tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:6px 8px; font-weight:600;">${brand}</td>
+              <td style="padding:6px 8px; text-align:right;">${d.units}</td>
+              <td style="padding:6px 8px; text-align:right;">$${d.revenue.toFixed(2)}</td>
+              <td style="padding:6px 8px; text-align:right;">$${d.cost.toFixed(2)}</td>
+              <td style="padding:6px 8px; text-align:right; color:${p >= 0 ? '#16a34a' : '#dc2626'};">$${p.toFixed(2)}</td>
+              <td style="padding:6px 8px; text-align:right;">${m.toFixed(1)}%</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  renderStatsCharts(brandRows, { productRevenue, shippingTotal, taxTotal });
+}
+
+function renderStatsCharts(brandRows, totals) {
+  if (typeof Chart === 'undefined') return;
+  if (statsChartBrand) { statsChartBrand.destroy(); statsChartBrand = null; }
+  if (statsChartComposition) { statsChartComposition.destroy(); statsChartComposition = null; }
+
+  const brandCtx = document.getElementById('stats-chart-brand');
+  if (brandCtx) {
+    const top = brandRows.slice(0, 8);
+    statsChartBrand = new Chart(brandCtx, {
+      type: 'bar',
+      data: {
+        labels: top.map(([brand]) => brand),
+        datasets: [
+          { label: 'Ingresos', data: top.map(([, d]) => d.revenue), backgroundColor: '#b8952a' },
+          { label: 'Costo', data: top.map(([, d]) => d.cost), backgroundColor: '#d1cfc7' },
+          { label: 'Ganancia', data: top.map(([, d]) => d.revenue - d.cost), backgroundColor: '#16a34a' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } } }
+      }
+    });
+  }
+
+  const compCtx = document.getElementById('stats-chart-composition');
+  if (compCtx) {
+    statsChartComposition = new Chart(compCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Productos', 'Envío', 'Impuestos'],
+        datasets: [{ data: [totals.productRevenue, totals.shippingTotal, totals.taxTotal], backgroundColor: ['#b8952a', '#1e3a8a', '#92400e'] }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }
+      }
+    });
+  }
 }
 
 // ── MI PROGRESO (seller view) ────────────────────────────────
