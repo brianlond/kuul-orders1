@@ -885,9 +885,15 @@ async function updateStatus(id, status) {
 async function togglePaymentStatus(id, newStatus) {
   try {
     await dbUpdatePaymentStatus(id, newStatus);
+    // Update just this order in place instead of refetching/re-rendering the
+    // whole list — a full reload was dropping the active filter (it didn't
+    // know about the "Pendientes de pago" chip) and made the list flash
+    // empty, which looked like every order had disappeared.
+    const o = allOrders.find(x => x.id === id);
+    if (o) o.payment_status = newStatus;
+    renderOrders(applyOrderFilter(allOrders, currentFilter));
     showToast(newStatus === 'Pagado' ? '💰 Orden marcada como pagada' : '⏳ Orden marcada como pendiente de pago');
-    await loadOrders();
-    if (currentDetailOrder && currentDetailOrder.id === id) await openOrderDetail(id);
+    if (currentDetailOrder && currentDetailOrder.id === id) openOrderDetail(id);
   } catch(e) {
     showToast('❌ Error al actualizar el pago');
     console.error(e);
@@ -997,8 +1003,7 @@ async function loadOrders() {
   try {
     allOrders = await dbFetchOrders();
     renderDaySummary(allOrders);
-    const filtered = currentFilter === 'all' ? allOrders : allOrders.filter(o => o.status === currentFilter);
-    renderOrders(filtered);
+    renderOrders(applyOrderFilter(allOrders, currentFilter));
   } catch (e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>Error cargando órdenes</div>`;
     console.error(e);
@@ -2851,14 +2856,20 @@ function printFromDetail() {
 let currentFilter = 'all';
 let allOrders = [];
 
+// Shared by filterOrders() and loadOrders() so a reload (e.g. after toggling
+// payment status) can't drift out of sync with what a filter chip means and
+// wipe out the list it's supposed to be showing.
+function applyOrderFilter(orders, filter) {
+  return filter === 'all' ? orders
+    : filter === 'PendientePago' ? orders.filter(o => o.payment_status !== 'Pagado')
+    : orders.filter(o => o.status === filter);
+}
+
 function filterOrders(status, btn) {
   currentFilter = status;
   document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  const filtered = status === 'all' ? allOrders
-    : status === 'PendientePago' ? allOrders.filter(o => o.payment_status !== 'Pagado')
-    : allOrders.filter(o => o.status === status);
-  renderOrders(filtered);
+  renderOrders(applyOrderFilter(allOrders, status));
 }
 
 // ── Day summary ───────────────────────────────────────────────
