@@ -90,6 +90,13 @@ async function dbUpdateStatus(id, status) {
   });
 }
 
+async function dbUpdatePaymentStatus(id, payment_status) {
+  return supabase(`orders?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ payment_status })
+  });
+}
+
 
 // ── Customer follow-up tracking ─────────────────────────────
 const FOLLOWUP_DAYS = 15;
@@ -787,6 +794,7 @@ async function submitOrder() {
       level: currentLevel || 'Salon',
       is_test: isTestMode,
       payment_method: document.getElementById('payment-method')?.value || null,
+      payment_status: 'Pendiente',
       status: 'Nueva'
     });
     resetForm();
@@ -819,7 +827,6 @@ function resetForm() {
   document.getElementById('tax-toggle-row').style.pointerEvents = 'auto';
   lineCount = 0;
   recalcTotal();
-  addProductLine();
 }
 
 // ── Status badge class ───────────────────────────────────────
@@ -875,6 +882,18 @@ async function updateStatus(id, status) {
   }
 }
 
+async function togglePaymentStatus(id, newStatus) {
+  try {
+    await dbUpdatePaymentStatus(id, newStatus);
+    showToast(newStatus === 'Pagado' ? '💰 Orden marcada como pagada' : '⏳ Orden marcada como pendiente de pago');
+    await loadOrders();
+    if (currentDetailOrder && currentDetailOrder.id === id) await openOrderDetail(id);
+  } catch(e) {
+    showToast('❌ Error al actualizar el pago');
+    console.error(e);
+  }
+}
+
 // ── Render orders ────────────────────────────────────────────
 function renderOrders(orders) {
   const list       = document.getElementById('orders-list');
@@ -898,9 +917,10 @@ function renderOrders(orders) {
     const statusOptions = STATUSES.map(s =>
       `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`
     ).join('');
+    const isPaid = o.payment_status === 'Pagado';
     return `
     <div class="order-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:22px; font-weight:700; color:var(--gold); letter-spacing:0.02em; flex-shrink:0;">#${String(o.id).padStart(5,'0')}</span>
           <div>
@@ -908,10 +928,13 @@ function renderOrders(orders) {
             <div class="order-business">${o.business}</div>
           </div>
         </div>
-  <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)" style="flex-shrink:0;">
-          ${statusOptions}
-        </select>
-        ${(o.is_test === true || o.is_test === 'true') ? '<span class="status-badge badge-test">🧪 Prueba</span>' : ''}
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)" style="flex-shrink:0;">
+            ${statusOptions}
+          </select>
+          <button type="button" class="status-badge ${isPaid ? 'badge-lista' : 'badge-proceso'}" style="border:none; cursor:pointer; font-family:inherit;" onclick="togglePaymentStatus(${o.id}, '${isPaid ? 'Pendiente' : 'Pagado'}')" title="Tocar para marcar como ${isPaid ? 'pendiente de pago' : 'pagada'}">${isPaid ? '💰 Pagado' : '⏳ Pendiente'}</button>
+          ${(o.is_test === true || o.is_test === 'true') ? '<span class="status-badge badge-test">🧪 Prueba</span>' : ''}
+        </div>
       </div>
       <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; margin-bottom:10px; display:flex; gap:16px; flex-wrap:wrap;">
         <div style="display:flex; align-items:center; gap:6px;">
@@ -2027,7 +2050,8 @@ async function confirmCobrar() {
       tax_rate: hasTax ? taxRate : null,
       tax_amount: hasTax ? taxAmt2 : null,
       total: total2,
-      status: 'Entregada'
+      status: 'Entregada',
+      payment_status: 'Pagado'
     };
 
     const inserted = await dbInsertOrder(orderData);
@@ -2779,15 +2803,19 @@ async function openOrderDetail(id) {
 
   const date = new Date(order.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
   const statusOptions = STATUSES.map(s => `<option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>`).join('');
+  const isPaidDetail = order.payment_status === 'Pagado';
 
   document.getElementById('order-detail-title').textContent = `Orden #${String(order.id).padStart(5,'0')}`;
   document.getElementById('order-detail-content').innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:8px; flex-wrap:wrap;">
       <div>
         <div style="font-size:15px; font-weight:600;">${order.client}</div>
         <div style="font-size:13px; color:var(--text-muted);">${order.business}</div>
       </div>
-      <select class="status-select ${statusClass(order.status)}" onchange="updateStatus(${order.id}, this.value); currentDetailOrder.status=this.value;">${statusOptions}</select>
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <select class="status-select ${statusClass(order.status)}" onchange="updateStatus(${order.id}, this.value); currentDetailOrder.status=this.value;">${statusOptions}</select>
+        <button type="button" class="status-badge ${isPaidDetail ? 'badge-lista' : 'badge-proceso'}" style="border:none; cursor:pointer; font-family:inherit;" onclick="togglePaymentStatus(${order.id}, '${isPaidDetail ? 'Pendiente' : 'Pagado'}')">${isPaidDetail ? '💰 Pagado' : '⏳ Pendiente'}</button>
+      </div>
     </div>
     <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">🕐 ${date} · 👤 ${order.seller} · 📞 ${order.phone}</div>
     <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">📍 ${order.address}${order.permit ? ` · Permit: ${order.permit}` : ''}</div>
@@ -2827,7 +2855,9 @@ function filterOrders(status, btn) {
   currentFilter = status;
   document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  const filtered = status === 'all' ? allOrders : allOrders.filter(o => o.status === status);
+  const filtered = status === 'all' ? allOrders
+    : status === 'PendientePago' ? allOrders.filter(o => o.payment_status !== 'Pagado')
+    : allOrders.filter(o => o.status === status);
   renderOrders(filtered);
 }
 
@@ -3682,6 +3712,13 @@ function printInvoiceFrame() {
   if (!frame || !host || !frame.srcdoc) return;
 
   const parsed = new DOMParser().parseFromString(frame.srcdoc, 'text/html');
+  // The template's own in-document "🖨️ Imprimir" button relies on an
+  // `@media print { display: none }` rule to hide itself, which isn't
+  // reliably honored inside a dynamically-built Shadow DOM on iOS Safari —
+  // it was showing up as a stray empty box that pushed the content onto a
+  // second page. Drop it outright instead of depending on that rule, since
+  // the real print trigger is the toolbar button outside the preview.
+  parsed.querySelectorAll('.print-btn').forEach(el => el.remove());
   // The template's own "body { ... }" rule wouldn't match anything inside a
   // shadow root (there's no <body> element in there), so retarget it to the
   // wrapper div we render the content into below.
