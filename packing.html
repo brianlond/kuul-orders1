@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Empaque TikTok Shop — Kuul Orders</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="packing.css">
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-text">Empaque <span>TikTok Shop</span></div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <a href="picking.html" class="logout-btn" style="text-decoration:none; display:inline-block;">← Ir a Picking</a>
+        <a href="index.html" class="logout-btn" style="text-decoration:none; display:inline-block;">Kuul Orders</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="pk-main">
+
+    <!-- Shown when there's no sb_token in localStorage yet -->
+    <div id="pk-auth-gate" class="pk-gate" style="display:none;">
+      <div class="pk-gate-box">
+        <div style="font-size:40px; margin-bottom:12px;">🔒</div>
+        <div style="font-size:16px; font-weight:600; margin-bottom:8px;">Inicia sesión primero</div>
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Esta página usa tu sesión de la app principal. Abre Kuul Orders, inicia sesión como admin, y vuelve a esta pestaña.</div>
+        <a href="index.html" class="submit-btn" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px;">Ir a Kuul Orders</a>
+      </div>
+    </div>
+
+    <!-- Main packing app, shown once logged in -->
+    <div id="pk-app" style="display:none;">
+
+      <div class="pk-scan-row">
+        <span class="pk-scan-icon">📷</span>
+        <input type="text" id="pk-scan-input" placeholder="Escanea el código de la hoja de packing slip..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+
+      <div id="pk-last-action"></div>
+
+      <div class="pk-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div class="section-label" style="margin:0;">Pendientes de empacar</div>
+          <button class="clear-btn" onclick="loadQueue()">🔄 Actualizar</button>
+        </div>
+        <div id="pk-queue-list">
+          <div class="empty-state"><div class="empty-icon">⏳</div>Cargando...</div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Hidden print target — reuses the same id and @media print rule from
+       style.css (linked above) that picking.html's print flow also relies
+       on, so there's no second/conflicting print rule to keep in sync. -->
+  <div id="print-host" style="display:none;"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="packing.js"></script>
+</body>
+</html>

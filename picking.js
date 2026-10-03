@@ -52,7 +52,6 @@ let orders = [];                // [{ index, labelPageNum, slipPageNum, orderId,
 let currentOrderIdx = -1;
 const skuCache = new Map();     // tiktok_sku -> [{ barcode, product_name, is_set }]
 let pendingRegistration = null; // { tiktokSku, collected: [barcode,...] } while registering a new SKU
-let currentLabelDataUrl = null; // last rendered label image, used by the print modal
 
 // ── Supabase (same project/anon key as the main app) ────────────
 async function supabase(path, options = {}) {
@@ -452,7 +451,7 @@ async function finishRegistration() {
   checkForUnresolvedLine(order);
   if (!pendingRegistration && isOrderComplete(order)) {
     order.complete = true;
-    await openPrintModal(order);
+    await completeOrderAndAdvance(order);
   }
   focusScanInput();
 }
@@ -493,7 +492,7 @@ async function handleScan(code) {
 
   if (isOrderComplete(order)) {
     order.complete = true;
-    await openPrintModal(order);
+    await completeOrderAndAdvance(order);
   }
 }
 
@@ -503,43 +502,68 @@ function isOrderComplete(order) {
   );
 }
 
-// ── Print modal (renders the odd "label" page for this order) ───
-async function openPrintModal(order) {
-  try {
-    const page = await pdfDoc.getPage(order.labelPageNum);
-    const viewport = page.getViewport({ scale: 3 }); // high scale so the barcode on the label stays scannable after printing
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-
-    currentLabelDataUrl = canvas.toDataURL('image/png');
-    const preview = document.getElementById('pk-label-preview');
-    preview.innerHTML = `<img src="${currentLabelDataUrl}" alt="Etiqueta de envío">`;
-    document.getElementById('pk-print-modal').style.display = 'flex';
-  } catch (e) {
-    console.error('Error renderizando la etiqueta', e);
-    showToast('❌ No se pudo generar la vista previa de la etiqueta');
-  }
+// ── Completing an order: save it for packing, print the packing-slip tag ──
+async function renderPageToDataUrl(pageNum, scale) {
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/png');
 }
 
-function printLabelAndAdvance() {
+function printDataUrl(dataUrl) {
   const host = document.getElementById('print-host');
-  host.innerHTML = currentLabelDataUrl ? `<img src="${currentLabelDataUrl}" alt="Etiqueta de envío">` : '';
+  host.innerHTML = `<img src="${dataUrl}" alt="">`;
   window.print();
-  closePrintModalAndAdvance();
+}
+
+// Saves the order (its lines + a rendered image of its shipping-label page)
+// to tiktok_picked_orders so the separate packing station can look it up
+// later by Order ID, then immediately prints the packing-slip page — which
+// already carries a scannable Code 128 barcode for the Order ID on real
+// TikTok Shop exports — as the physical tag that travels with the picked
+// items to the packing station. No clicks: this runs automatically the
+// moment the last item on the order is scanned.
+//
+// Upserts on order_id (tiktok_picked_orders has a unique constraint on it)
+// so re-picking the same order — a re-uploaded PDF, fixing a mistake —
+// overwrites rather than failing outright.
+async function completeOrderAndAdvance(order) {
+  if (!order.orderId) {
+    showToast('⚠️ No se detectó el Order ID de esta orden — no se puede guardar para empacar. Pásala manualmente.', 6000);
+    advanceToNextOrder();
+    return;
+  }
+  try {
+    const [labelDataUrl, slipDataUrl] = await Promise.all([
+      renderPageToDataUrl(order.labelPageNum, 3), // high scale so the carrier barcode stays scannable after printing
+      renderPageToDataUrl(order.slipPageNum, 3)
+    ]);
+
+    await supabase('tiktok_picked_orders?on_conflict=order_id', {
+      method: 'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({
+        order_id: order.orderId,
+        tracking: order.tracking,
+        lines: order.lines.map(l => ({ tiktok_sku: l.tiktok_sku, product_name_hint: l.product_name_hint, qty: l.qty })),
+        label_image: labelDataUrl,
+        packed_at: null
+      })
+    });
+
+    printDataUrl(slipDataUrl);
+    showToast('✓ Lista para empacar — hoja impresa');
+  } catch (e) {
+    console.error('Error guardando/imprimiendo la orden recogida', e);
+    showToast('❌ No se pudo guardar la orden para empacar: ' + describeSupabaseError(e), 6000);
+  }
+  advanceToNextOrder();
 }
 
 function advanceToNextOrder() {
-  closePrintModalAndAdvance();
-}
-
-function skipToNextOrder() {
-  closePrintModalAndAdvance();
-}
-
-function closePrintModalAndAdvance() {
-  document.getElementById('pk-print-modal').style.display = 'none';
   pendingRegistration = null;
   setTimeout(() => {
     const nextIdx = currentOrderIdx + 1;
@@ -550,6 +574,10 @@ function closePrintModalAndAdvance() {
       loadOrderIntoView(nextIdx);
     }
   }, 250);
+}
+
+function skipToNextOrder() {
+  advanceToNextOrder();
 }
 
 // ── Init ──────────────────────────────────────────────────────
