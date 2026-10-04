@@ -4210,7 +4210,7 @@ async function loadSellersReport() {
 }
 
 // ── AUTO LOGOUT ───────────────────────────────────────────────
-const AUTO_LOGOUT_MS = 3 * 60 * 1000; // 3 minutos
+const AUTO_LOGOUT_MS = 60 * 60 * 1000; // 60 minutos
 let inactivityTimer = null;
 
 function resetInactivityTimer() {
