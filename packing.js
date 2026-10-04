@@ -77,25 +77,55 @@ function focusScanInput() {
   if (input) setTimeout(() => input.focus(), 50);
 }
 
-// Waits for the image to actually finish loading/decoding before printing —
-// calling window.print() right after setting innerHTML can fire before the
-// browser has painted the image, producing a blank printed page even
-// though the <img> tag is there in the DOM. Resolves true/false so callers
-// can tell whether printing actually happened before treating the order as
-// handled (e.g. marking it packed) — silently resolving either way here
-// previously let an order get marked packed_at even when the image failed
-// to load and nothing printed.
+function dataUrlToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(',');
+  const mime = (header.match(/data:(.*?);base64/) || [])[1] || 'application/octet-stream';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+// order.label_image (set by picking.js's completeOrderAndAdvance) is a
+// single-page PDF cut out of the original TikTok Shop export, not an
+// image — printing it by loading it into a hidden iframe and calling
+// print() on that iframe's own window triggers Chrome's native PDF print
+// path, the same one used when a PDF is opened directly and printed by
+// hand. That's what actually fixed the thermal printer jamming partway
+// through on a canvas-rendered bitmap of the same page. Resolves true/false
+// so callers can tell whether printing actually happened before treating
+// the order as handled (e.g. marking it packed) — silently resolving
+// either way here previously let an order get marked packed_at even when
+// nothing printed.
 function printDataUrl(dataUrl) {
   if (!dataUrl) return Promise.resolve(false);
   return new Promise(resolve => {
-    const host = document.getElementById('print-host');
-    host.innerHTML = '';
-    const img = new Image();
-    img.onload = () => { window.print(); resolve(true); };
-    img.onerror = () => resolve(false); // don't hang the flow if the image failed to render
-    img.alt = '';
-    host.appendChild(img);
-    img.src = dataUrl;
+    const blobUrl = URL.createObjectURL(dataUrlToBlob(dataUrl));
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed; left:-10000px; top:0; width:4in; height:6in; border:none;';
+
+    const cleanup = () => setTimeout(() => { iframe.remove(); URL.revokeObjectURL(blobUrl); }, 1000);
+
+    iframe.onload = () => {
+      // Give the PDF viewer a moment to actually paint before printing —
+      // the same timing issue the old rendered-image version had.
+      setTimeout(() => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          resolve(true);
+        } catch (e) {
+          console.error('Error al imprimir el PDF', e);
+          resolve(false);
+        } finally {
+          cleanup();
+        }
+      }, 300);
+    };
+    iframe.onerror = () => { resolve(false); cleanup(); };
+
+    document.body.appendChild(iframe);
+    iframe.src = blobUrl;
   });
 }
 
@@ -174,7 +204,7 @@ async function handleScan(code) {
     // Print immediately — no click, not even to acknowledge the scan.
     const printed = await printDataUrl(order.label_image);
     if (!printed) {
-      const msg = `⚠️ La orden ${order.order_id} se encontró, pero no se pudo imprimir la etiqueta (imagen no disponible) — no se marcó como empacada, puedes volver a escanearla.`;
+      const msg = `⚠️ La orden ${order.order_id} se encontró, pero no se pudo imprimir la etiqueta (PDF no disponible) — no se marcó como empacada, puedes volver a escanearla.`;
       setLastAction(false, msg);
       showToast(msg, 6000);
       focusScanInput();

@@ -27,19 +27,6 @@
 .pk-last-action.ok { background: var(--success-bg); color: var(--success); }
 .pk-last-action.err { background: var(--danger-bg); color: var(--danger); }
 
-/* Printing uses #print-host and the @media print rule already defined in
-   style.css (linked above), the same mechanism picking.html and the main
-   app's print flow rely on. The shipping label itself is a 4x6in label (the
-   TikTok Shop PDF page it's rendered from is already that size), so the
-   @page rule below pins both the paper size and margins to exactly that —
-   without it, Chrome's default print margins shrink the image down inside
-   a letter-sized page, which is what made the barcode too small to scan. */
-@media print {
-  @page { size: 4in 6in; margin: 0; }
-  #print-host { width: 4in; height: 6in; }
-  #print-host img { width: 100%; height: 100%; object-fit: contain; display: block; }
-}
-
 @media (max-width: 480px) {
   .pk-main { padding: 16px 12px 48px; }
 }
