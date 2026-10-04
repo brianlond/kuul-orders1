@@ -47,7 +47,8 @@ const DEMO_BARCODES = [
 ];
 
 // ── State ────────────────────────────────────────────────────
-let pdfDoc = null;              // pdf.js document proxy for the uploaded file
+let pdfDoc = null;              // pdf.js document proxy for the uploaded file (text/layout extraction)
+let sourcePdfLibDoc = null;     // pdf-lib document for the same file (used to cut out single pages to print)
 let orders = [];                // [{ index, labelPageNum, slipPageNum, orderId, tracking, rawText, lines, complete }]
 let currentOrderIdx = -1;
 const skuCache = new Map();     // tiktok_sku -> [{ barcode, product_name, is_set }]
@@ -129,7 +130,12 @@ async function handleFileUpload(e) {
 
   try {
     const buf = await file.arrayBuffer();
+    // pdf.js can transfer/detach an ArrayBuffer it's given to its worker, so
+    // pdf-lib (used later to cut out single pages for printing) gets its
+    // own untouched copy up front rather than risking a detached buffer.
+    const pdfLibBuf = buf.slice(0);
     pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+    sourcePdfLibDoc = await PDFLib.PDFDocument.load(pdfLibBuf);
     const totalPages = pdfDoc.numPages;
 
     if (totalPages % 2 !== 0) {
@@ -639,55 +645,79 @@ function isOrderComplete(order) {
 }
 
 // ── Completing an order: save it for packing, print the packing-slip tag ──
-async function renderPageToDataUrl(pageNum, scale) {
-  const page = await pdfDoc.getPage(pageNum);
-  const viewport = page.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext('2d');
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  toPureBlackAndWhite(ctx, canvas.width, canvas.height);
-  return canvas.toDataURL('image/png');
+// Cuts a single page out of the uploaded PDF and returns it as its own
+// one-page PDF, base64-encoded as a data URL. This is what actually gets
+// printed (see printDataUrl() below) and what's stored in Supabase for the
+// packing station to print later — printing the real PDF page instead of a
+// bitmap rendering of it is what fixed the thermal printer jamming partway
+// through (the real PDF printed fine manually; a canvas-rendered image of
+// the same page, even thresholded to pure black/white, kept jamming at the
+// same spot) and gives the sharpest possible result besides.
+async function extractPageAsPdfDataUrl(pageNum) {
+  const newDoc = await PDFLib.PDFDocument.create();
+  const [copiedPage] = await newDoc.copyPages(sourcePdfLibDoc, [pageNum - 1]);
+  newDoc.addPage(copiedPage);
+  const bytes = await newDoc.save();
+  return bytesToDataUrl(bytes, 'application/pdf');
 }
 
-// pdf.js anti-aliases text and barcode edges into soft gray pixels, which
-// thermal label printers handle poorly — it turns what should be a simple
-// 2-tone image into something closer to a grayscale photo, which seems to
-// be what was making the printer jam partway through (the packing slip's
-// denser table text has far more of these edge pixels than the label, and
-// that's exactly where it was failing). Thresholding every pixel to pure
-// black or white removes that, and sharpens barcode edges as a bonus.
-function toPureBlackAndWhite(ctx, width, height, threshold = 190) {
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const d = imageData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const luminance = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    const v = luminance < threshold ? 0 : 255;
-    d[i] = d[i + 1] = d[i + 2] = v;
+function bytesToDataUrl(bytes, mimeType) {
+  const CHUNK = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
   }
-  ctx.putImageData(imageData, 0, 0);
+  return `data:${mimeType};base64,${btoa(binary)}`;
 }
 
-// Waits for the image to actually finish loading/decoding before printing —
-// calling window.print() right after setting innerHTML can fire before the
-// browser has painted the image, producing a blank printed page even
-// though the <img> tag is there in the DOM.
+function dataUrlToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(',');
+  const mime = (header.match(/data:(.*?);base64/) || [])[1] || 'application/octet-stream';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+// Prints a one-page PDF by loading it into a hidden iframe and calling
+// print() on that iframe's own window — this triggers Chrome's native PDF
+// print path, the same one used when a PDF is opened directly and printed
+// by hand, rather than rasterizing to a bitmap and printing that. Resolves
+// true/false so callers can tell whether it actually happened before
+// treating the order as handled.
 function printDataUrl(dataUrl) {
   if (!dataUrl) return Promise.resolve(false);
   return new Promise(resolve => {
-    const host = document.getElementById('print-host');
-    host.innerHTML = '';
-    const img = new Image();
-    img.onload = () => { window.print(); resolve(true); };
-    img.onerror = () => resolve(false); // don't hang the flow if the image failed to render
-    img.alt = '';
-    host.appendChild(img);
-    img.src = dataUrl;
+    const blobUrl = URL.createObjectURL(dataUrlToBlob(dataUrl));
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed; left:-10000px; top:0; width:4in; height:6in; border:none;';
+
+    const cleanup = () => setTimeout(() => { iframe.remove(); URL.revokeObjectURL(blobUrl); }, 1000);
+
+    iframe.onload = () => {
+      // Give the PDF viewer a moment to actually paint before printing —
+      // the same timing issue the old rendered-image version had.
+      setTimeout(() => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          resolve(true);
+        } catch (e) {
+          console.error('Error al imprimir el PDF', e);
+          resolve(false);
+        } finally {
+          cleanup();
+        }
+      }, 300);
+    };
+    iframe.onerror = () => { resolve(false); cleanup(); };
+
+    document.body.appendChild(iframe);
+    iframe.src = blobUrl;
   });
 }
 
-// Saves the order (its lines + a rendered image of its shipping-label page)
+// Saves the order (its lines + a single-page PDF of its shipping-label page)
 // to tiktok_picked_orders so the separate packing station can look it up
 // later by Order ID, then immediately prints the packing-slip page — which
 // already carries a scannable Code 128 barcode for the Order ID on real
@@ -706,8 +736,8 @@ async function completeOrderAndAdvance(order) {
   }
   try {
     const [labelDataUrl, slipDataUrl] = await Promise.all([
-      renderPageToDataUrl(order.labelPageNum, 4), // high scale so the carrier barcode stays scannable after printing
-      renderPageToDataUrl(order.slipPageNum, 4)
+      extractPageAsPdfDataUrl(order.labelPageNum),
+      extractPageAsPdfDataUrl(order.slipPageNum)
     ]);
 
     await supabase('tiktok_picked_orders?on_conflict=order_id', {
