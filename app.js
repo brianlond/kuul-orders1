@@ -590,6 +590,8 @@ async function doLogout() {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); t.style.display = ''; });
   document.getElementById('logout-btn').style.display = 'none';
+  const tiktokNavBtn = document.getElementById('tiktok-nav-btn');
+  if (tiktokNavBtn) tiktokNavBtn.style.display = 'none';
   // Clear sensitive data from view
   document.getElementById('orders-list') && (document.getElementById('orders-list').innerHTML = '');
   showLoginModal();
@@ -604,6 +606,8 @@ document.addEventListener('keydown', e => {
 // ── Show admin view ──────────────────────────────────────────
 function showAdminView() {
   document.getElementById('logout-btn').style.display = 'inline-block';
+  const tiktokNavBtn = document.getElementById('tiktok-nav-btn');
+  if (tiktokNavBtn) tiktokNavBtn.style.display = 'inline-block';
   const helpBtn = document.getElementById('help-btn');
   if (helpBtn) helpBtn.style.display = 'inline-block';
   showTab('vendedor');
