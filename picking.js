@@ -645,8 +645,28 @@ async function renderPageToDataUrl(pageNum, scale) {
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  toPureBlackAndWhite(ctx, canvas.width, canvas.height);
   return canvas.toDataURL('image/png');
+}
+
+// pdf.js anti-aliases text and barcode edges into soft gray pixels, which
+// thermal label printers handle poorly — it turns what should be a simple
+// 2-tone image into something closer to a grayscale photo, which seems to
+// be what was making the printer jam partway through (the packing slip's
+// denser table text has far more of these edge pixels than the label, and
+// that's exactly where it was failing). Thresholding every pixel to pure
+// black or white removes that, and sharpens barcode edges as a bonus.
+function toPureBlackAndWhite(ctx, width, height, threshold = 190) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const luminance = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const v = luminance < threshold ? 0 : 255;
+    d[i] = d[i + 1] = d[i + 2] = v;
+  }
+  ctx.putImageData(imageData, 0, 0);
 }
 
 // Waits for the image to actually finish loading/decoding before printing —
@@ -686,8 +706,8 @@ async function completeOrderAndAdvance(order) {
   }
   try {
     const [labelDataUrl, slipDataUrl] = await Promise.all([
-      renderPageToDataUrl(order.labelPageNum, 3), // high scale so the carrier barcode stays scannable after printing
-      renderPageToDataUrl(order.slipPageNum, 3)
+      renderPageToDataUrl(order.labelPageNum, 4), // high scale so the carrier barcode stays scannable after printing
+      renderPageToDataUrl(order.slipPageNum, 4)
     ]);
 
     await supabase('tiktok_picked_orders?on_conflict=order_id', {
