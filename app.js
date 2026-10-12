@@ -4356,11 +4356,13 @@ async function loadStatsReport() {
   container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Cargando...</div>';
 
   let query = 'orders?is_test=eq.false&status=neq.Cancelada&select=*';
+  let poQuery = 'purchase_orders?select=*';
   if (statsView === 'week') {
     const weekVal = document.getElementById('stats-week')?.value;
     if (!weekVal) { initStatsTab(); return; }
     const { start, end } = getWeekRange(weekVal);
     query += `&created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}`;
+    poQuery += `&received_at=gte.${start.toISOString()}&received_at=lte.${end.toISOString()}`;
   } else if (statsView === 'month') {
     const monthVal = document.getElementById('stats-month')?.value;
     if (!monthVal) return;
@@ -4368,22 +4370,115 @@ async function loadStatsReport() {
     const start = new Date(y, m - 1, 1);
     const end = new Date(y, m, 0, 23, 59, 59, 999);
     query += `&created_at=gte.${start.toISOString()}&created_at=lte.${end.toISOString()}`;
+    poQuery += `&received_at=gte.${start.toISOString()}&received_at=lte.${end.toISOString()}`;
   }
-  // 'all' → no date filter, every non-test non-cancelled order ever placed
+  // 'all' → no date filter, every non-test non-cancelled order / every received PO ever
 
   try {
-    const orders = await supabase(query);
-    renderStatsReport(orders || []);
+    const [orders, purchaseOrders] = await Promise.all([
+      supabase(query),
+      supabase(poQuery)
+    ]);
+    // Only POs actually received (fully or partially) have a confirmed
+    // shortfall — one still 'En camino' hasn't arrived yet so there's
+    // nothing to measure.
+    const receivedPOs = (purchaseOrders || []).filter(po => po.status === 'Recibida parcial' || po.status === 'Recibida completa');
+    renderStatsReport(orders || [], receivedPOs);
   } catch(e) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Error cargando estadísticas</div>';
     console.error(e);
   }
 }
 
-function renderStatsReport(orders) {
+function statCard(label, value, color) {
+  return `
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; flex:1; min-width:150px;">
+      <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:4px;">${label}</div>
+      <div style="font-size:22px; font-weight:700; color:${color || 'var(--text)'}; font-family:var(--font-display);">${value}</div>
+    </div>`;
+}
+
+// Value of what suppliers didn't deliver (cost × missing units), for POs
+// that have actually been received (fully or partially) in the period —
+// POs still in transit have nothing confirmed missing yet.
+function computeSupplierShortfallStats(purchaseOrders) {
+  let totalOrderedCost = 0, totalMissingCost = 0, posWithShortfall = 0;
+  const bySupplier = {};
+
+  purchaseOrders.forEach(po => {
+    let poMissingCost = 0;
+    (po.lines || []).forEach(l => {
+      const unitCost = l.unit_cost || l.cost || 0;
+      const received = l.received ?? l.qty;
+      const missingQty = Math.max(0, l.qty - received);
+      const orderedCost = unitCost * l.qty;
+      const missingCost = unitCost * missingQty;
+      totalOrderedCost += orderedCost;
+      totalMissingCost += missingCost;
+      poMissingCost += missingCost;
+
+      if (!bySupplier[po.supplier_name]) bySupplier[po.supplier_name] = { orderedCost: 0, missingCost: 0, poCount: 0, shortfallPoCount: 0 };
+      bySupplier[po.supplier_name].orderedCost += orderedCost;
+      bySupplier[po.supplier_name].missingCost += missingCost;
+    });
+    if (!bySupplier[po.supplier_name]) bySupplier[po.supplier_name] = { orderedCost: 0, missingCost: 0, poCount: 0, shortfallPoCount: 0 };
+    bySupplier[po.supplier_name].poCount += 1;
+    if (poMissingCost > 0) { bySupplier[po.supplier_name].shortfallPoCount += 1; posWithShortfall += 1; }
+  });
+
+  return {
+    totalOrderedCost, totalMissingCost,
+    pctValueMissing: totalOrderedCost > 0 ? (totalMissingCost / totalOrderedCost * 100) : 0,
+    posWithShortfall, totalPOs: purchaseOrders.length, bySupplier
+  };
+}
+
+function renderSupplierShortfallSection(purchaseOrders) {
+  if (!purchaseOrders.length) return '';
+  const s = computeSupplierShortfallStats(purchaseOrders);
+  const supplierRows = Object.entries(s.bySupplier).sort((a, b) => b[1].missingCost - a[1].missingCost);
+
+  return `
+    <div style="font-size:15px; font-weight:700; margin:28px 0 12px; padding-top:16px; border-top:1px solid var(--border);">📦 Proveedores — entregas incompletas</div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+      ${statCard('Valor no entregado', '$' + s.totalMissingCost.toFixed(2), s.totalMissingCost > 0 ? '#dc2626' : undefined)}
+      ${statCard('% del valor pedido sin entregar', s.pctValueMissing.toFixed(1) + '%', s.pctValueMissing > 0 ? '#d97706' : undefined)}
+      ${statCard('Órdenes con faltante', s.posWithShortfall + ' de ' + s.totalPOs, s.posWithShortfall > 0 ? '#d97706' : undefined)}
+    </div>
+    ${supplierRows.length ? `
+    <div style="overflow-x:auto; margin-bottom:8px;">
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border); text-align:left; color:var(--text-muted); font-size:11px; text-transform:uppercase; letter-spacing:0.04em;">
+            <th style="padding:6px 8px;">Proveedor</th>
+            <th style="padding:6px 8px; text-align:right;">Valor pedido</th>
+            <th style="padding:6px 8px; text-align:right;">Valor no entregado</th>
+            <th style="padding:6px 8px; text-align:right;">% no entregado</th>
+            <th style="padding:6px 8px; text-align:right;">Órdenes c/faltante</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${supplierRows.map(([name, d]) => {
+            const pct = d.orderedCost > 0 ? (d.missingCost / d.orderedCost * 100) : 0;
+            return `<tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:6px 8px; font-weight:600;">${name}</td>
+              <td style="padding:6px 8px; text-align:right;">$${d.orderedCost.toFixed(2)}</td>
+              <td style="padding:6px 8px; text-align:right; color:${d.missingCost > 0 ? '#dc2626' : 'inherit'};">$${d.missingCost.toFixed(2)}</td>
+              <td style="padding:6px 8px; text-align:right;">${pct.toFixed(1)}%</td>
+              <td style="padding:6px 8px; text-align:right;">${d.shortfallPoCount} / ${d.poCount}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
+  `;
+}
+
+function renderStatsReport(orders, purchaseOrders = []) {
   const container = document.getElementById('stats-report');
+  const supplierSectionHTML = renderSupplierShortfallSection(purchaseOrders);
   if (!orders.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin órdenes en este período</div>';
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin órdenes de venta en este período</div>' + supplierSectionHTML;
     if (statsChartBrand) { statsChartBrand.destroy(); statsChartBrand = null; }
     if (statsChartComposition) { statsChartComposition.destroy(); statsChartComposition = null; }
     return;
@@ -4422,12 +4517,6 @@ function renderStatsReport(orders) {
   const grandTotal = orders.reduce((s,o) => s + parseFloat(o.total || 0), 0);
   const profit = productRevenue - costOfGoods;
   const marginPct = productRevenue > 0 ? (profit / productRevenue * 100) : 0;
-
-  const statCard = (label, value, color) => `
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; flex:1; min-width:150px;">
-      <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:4px;">${label}</div>
-      <div style="font-size:22px; font-weight:700; color:${color || 'var(--text)'}; font-family:var(--font-display);">${value}</div>
-    </div>`;
 
   const brandRows = Object.entries(byBrand).sort((a, b) => b[1].revenue - a[1].revenue);
 
@@ -4490,6 +4579,8 @@ function renderStatsReport(orders) {
         </tbody>
       </table>
     </div>
+
+    ${supplierSectionHTML}
   `;
 
   renderStatsCharts(brandRows, { productRevenue, shippingTotal, taxTotal });
