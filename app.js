@@ -5277,19 +5277,23 @@ async function savePO(status) {
   if (!suppId) { showToast('❌ Selecciona un proveedor'); return; }
   if (poLines.length === 0) { showToast('❌ Agrega al menos un producto'); return; }
   const total = poLines.reduce((s, l) => s + l.subtotal, 0);
+  const body = {
+    supplier_id: parseInt(suppId),
+    supplier_name: suppName,
+    status, lines: poLines, total,
+    notes: document.getElementById('po-notes')?.value.trim() || null,
+    created_by: currentUser?.name || '',
+    sent_at: status === 'Enviada' ? new Date().toISOString() : null
+  };
   try {
-    await supabase('purchase_orders', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: JSON.stringify({
-        supplier_id: parseInt(suppId),
-        supplier_name: suppName,
-        status, lines: poLines, total,
-        notes: document.getElementById('po-notes')?.value.trim() || null,
-        created_by: currentUser?.name || '',
-        sent_at: status === 'Enviada' ? new Date().toISOString() : null
-      })
-    });
+    // autoSavePO() may have already created this same order as a draft
+    // (_poAutoSaveId) — update that row instead of inserting a second one.
+    clearTimeout(_poAutoSaveTimer);
+    if (_poAutoSaveId) {
+      await supabase(`purchase_orders?id=eq.${_poAutoSaveId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    } else {
+      await supabase('purchase_orders', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(body) });
+    }
     document.getElementById('po-modal')?.remove(); document.body.style.overflow = '';
     await initSuppliersTab();
     showToast('✓ Orden de compra guardada');
