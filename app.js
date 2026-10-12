@@ -5195,15 +5195,18 @@ function autoSavePO() {
     const total = poLines.reduce((s, l) => s + (l.subtotal || 0), 0);
     const body = {
       supplier_id: parseInt(suppId), supplier_name: suppName,
-      status: 'Borrador', lines: poLines, total,
+      lines: poLines, total,
       notes: document.getElementById('po-notes')?.value.trim() || null,
       created_by: currentUser?.name || ''
     };
     try {
       if (_poAutoSaveId) {
+        // Editing an existing order (draft or already-sent) — leave its
+        // status alone. Including status:'Borrador' here used to silently
+        // revert an already-sent order back to draft on every autosave.
         await supabase(`purchase_orders?id=eq.${_poAutoSaveId}`, { method: 'PATCH', body: JSON.stringify(body) });
       } else {
-        const res = await supabase('purchase_orders', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(body) });
+        const res = await supabase('purchase_orders', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify({ ...body, status: 'Borrador' }) });
         if (res?.[0]?.id) _poAutoSaveId = res[0].id;
       }
       const ind = document.getElementById('po-autosave-indicator');
@@ -5277,19 +5280,23 @@ async function savePO(status) {
   if (!suppId) { showToast('❌ Selecciona un proveedor'); return; }
   if (poLines.length === 0) { showToast('❌ Agrega al menos un producto'); return; }
   const total = poLines.reduce((s, l) => s + l.subtotal, 0);
+  const body = {
+    supplier_id: parseInt(suppId),
+    supplier_name: suppName,
+    status, lines: poLines, total,
+    notes: document.getElementById('po-notes')?.value.trim() || null,
+    created_by: currentUser?.name || '',
+    sent_at: status === 'Enviada' ? new Date().toISOString() : null
+  };
   try {
-    await supabase('purchase_orders', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: JSON.stringify({
-        supplier_id: parseInt(suppId),
-        supplier_name: suppName,
-        status, lines: poLines, total,
-        notes: document.getElementById('po-notes')?.value.trim() || null,
-        created_by: currentUser?.name || '',
-        sent_at: status === 'Enviada' ? new Date().toISOString() : null
-      })
-    });
+    // autoSavePO() may have already created this same order as a draft
+    // (_poAutoSaveId) — update that row instead of inserting a second one.
+    clearTimeout(_poAutoSaveTimer);
+    if (_poAutoSaveId) {
+      await supabase(`purchase_orders?id=eq.${_poAutoSaveId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    } else {
+      await supabase('purchase_orders', { method: 'POST', headers: { 'Prefer': 'return=representation' }, body: JSON.stringify(body) });
+    }
     document.getElementById('po-modal')?.remove(); document.body.style.overflow = '';
     await initSuppliersTab();
     showToast('✓ Orden de compra guardada');
@@ -5368,13 +5375,15 @@ function openPODetail(id) {
         </div>
         <span style="font-size:12px; font-weight:700; padding:4px 12px; border-radius:99px; background:${statusColors[po.status]}22; color:${statusColors[po.status]}; border:1px solid ${statusColors[po.status]}44;">${po.status}</span>
       </div>
+      ${po.follow_up_of ? `<div style="font-size:12px; color:#d97706; margin-bottom:10px;">📎 Generada por entrega parcial de OC-${String(po.follow_up_of).padStart(4,'0')}</div>` : ''}
+      ${(() => { const child = allPurchaseOrders.find(p => p.follow_up_of === po.id); return child ? `<div style="font-size:12px; color:#d97706; margin-bottom:10px;">👉 Lo faltante se generó como OC-${String(child.id).padStart(4,'0')}</div>` : ''; })()}
       ${poTableHTML}
       ${po.notes ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">📝 ${po.notes}</div>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         ${po.status === 'Borrador' ? `<button onclick="updatePOStatus(${po.id},'Enviada'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">📤 Marcar enviada</button>` : ''}
         ${po.status === 'Enviada' ? `<button onclick="updatePOStatus(${po.id},'En camino'); document.getElementById('po-detail-modal').remove()" style="padding:8px 14px; background:#2563eb; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🚚 Marcar en camino</button>` : ''}
         ${po.status === 'En camino' || po.status === 'Enviada' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openReceivePO(${po.id})" style="padding:8px 14px; background:#16a34a; color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✅ Recibir pedido</button>` : ''}
-        ${po.status === 'Borrador' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openEditPO(${po.id})" style="padding:8px 14px; border:1px solid #2563eb; background:none; color:#2563eb; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✏️ Editar</button>` : ''}
+        ${po.status === 'Borrador' || po.status === 'Enviada' ? `<button onclick="document.getElementById('po-detail-modal').remove(); openEditPO(${po.id})" style="padding:8px 14px; border:1px solid #2563eb; background:none; color:#2563eb; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✏️ Editar</button>` : ''}
         <button onclick="printPO(${po.id})" style="padding:8px 14px; border:1px solid var(--border); background:none; color:var(--text); border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🖨️ Imprimir</button>
         <button onclick="deletePOFromDetail(${po.id})" style="padding:8px 14px; border:1px solid #dc2626; background:none; color:#dc2626; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">🗑 Eliminar</button>
         <button onclick="document.getElementById('po-detail-modal').remove()" class="cancel-btn" style="flex:1;">Cerrar</button>
@@ -5494,8 +5503,39 @@ async function confirmReceivePO(id) {
       body: JSON.stringify({ lines: updatedLines, status, received_at: new Date().toISOString() })
     });
     document.getElementById('receive-modal')?.remove();
+
+    // Partial delivery — auto-draft a follow-up PO to the same supplier for
+    // exactly what didn't arrive, linked back to this one via follow_up_of
+    // so the shortfall is traceable. Left as 'Borrador' so it can be
+    // reviewed/adjusted before actually sending it.
+    let followUpMsg = '';
+    if (status === 'Recibida parcial') {
+      const missingLines = updatedLines
+        .filter(l => (l.received || 0) < l.qty)
+        .map(l => {
+          const missingQty = l.qty - (l.received || 0);
+          const unitCost = l.unit_cost || l.cost || 0;
+          return { ...l, qty: missingQty, cost_total: Math.round(unitCost * missingQty * 100) / 100, subtotal: Math.round(unitCost * missingQty * 100) / 100, received: 0, receive_note: null };
+        });
+      if (missingLines.length) {
+        const total = missingLines.reduce((s, l) => s + (l.subtotal || 0), 0);
+        const res = await supabase('purchase_orders', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: JSON.stringify({
+            supplier_id: po.supplier_id, supplier_name: po.supplier_name,
+            status: 'Borrador', lines: missingLines, total,
+            notes: `Pendiente de OC-${String(po.id).padStart(4, '0')} (entrega parcial)`,
+            created_by: currentUser?.name || '',
+            follow_up_of: po.id
+          })
+        });
+        if (res?.[0]?.id) followUpMsg = ` — se creó OC-${String(res[0].id).padStart(4, '0')} como borrador con lo faltante`;
+      }
+    }
+
     await initSuppliersTab();
-    showToast(allReceived ? '✅ Pedido recibido completamente' : '⚠️ Pedido recibido parcialmente');
+    showToast((allReceived ? '✅ Pedido recibido completamente' : '⚠️ Pedido recibido parcialmente') + followUpMsg, followUpMsg ? 5000 : 2500);
   } catch(e) { showToast('❌ Error al confirmar'); }
 }
 
@@ -5634,10 +5674,10 @@ async function deletePOFromDetail(id) {
   } catch(e) { showToast('❌ Error al eliminar'); }
 }
 
-// ── EDIT DRAFT PO ─────────────────────────────────────────────
+// ── EDIT PO (draft, or already-sent but not yet in transit) ────
 function openEditPO(id) {
   const po = allPurchaseOrders.find(p => p.id === id);
-  if (!po || po.status !== 'Borrador') return;
+  if (!po || (po.status !== 'Borrador' && po.status !== 'Enviada')) return;
   document.body.style.overflow = 'hidden';
   _poAutoSaveId = id;
 
@@ -5652,6 +5692,7 @@ function openEditPO(id) {
     <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;">
       <div>
         <div style="font-size:17px; font-weight:700;">Editar Orden de Compra</div>
+        <div id="po-autosave-indicator" style="font-size:11px; color:#16a34a; opacity:0; transition:opacity 0.5s;">✓ Cambios guardados</div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">OC-${String(po.id).padStart(4,'0')} · ${po.supplier_name}</div>
       </div>
       <button onclick="document.getElementById('po-modal').remove(); document.body.style.overflow = '';" style="width:36px; height:36px; border:none; background:var(--surface-2); border-radius:50%; font-size:18px; cursor:pointer; color:var(--text);">×</button>
@@ -5678,8 +5719,12 @@ function openEditPO(id) {
       </div>
     </div>
     <div style="background:var(--surface); border-top:1px solid var(--border); padding:14px 20px; display:flex; gap:10px; flex-shrink:0; border-radius:0 0 var(--radius-lg) var(--radius-lg);">
+      ${po.status === 'Borrador' ? `
       <button onclick="updatePO(${po.id}, 'Borrador')" style="flex:1; padding:14px; border:1.5px solid var(--gold); color:var(--gold); background:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">💾 Borrador</button>
       <button onclick="updatePO(${po.id}, 'Enviada')" style="flex:2; padding:14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">📤 Guardar y enviar</button>
+      ` : `
+      <button onclick="updatePO(${po.id}, 'Enviada')" style="flex:1; padding:14px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;">💾 Guardar cambios</button>
+      `}
     </div>
     </div>
   </div>`);
@@ -5691,6 +5736,10 @@ function openEditPO(id) {
 async function updatePO(id, status) {
   if (poLines.length === 0) { showToast('❌ Agrega al menos un producto'); return; }
   const total = poLines.reduce((s, l) => s + l.subtotal, 0);
+  // Keep the original send date on an edit that re-saves an already-sent
+  // order — only stamp sent_at the first time it actually becomes 'Enviada'.
+  const existing = allPurchaseOrders.find(p => p.id === id);
+  const sentAt = status === 'Enviada' ? (existing?.sent_at || new Date().toISOString()) : null;
   try {
     await supabase(`purchase_orders?id=eq.${id}`, {
       method: 'PATCH',
@@ -5699,7 +5748,7 @@ async function updatePO(id, status) {
         lines: poLines,
         total,
         notes: document.getElementById('po-notes')?.value.trim() || null,
-        sent_at: status === 'Enviada' ? new Date().toISOString() : null
+        sent_at: sentAt
       })
     });
     document.getElementById('po-modal')?.remove(); document.body.style.overflow = '';
