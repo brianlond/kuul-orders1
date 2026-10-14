@@ -5013,15 +5013,6 @@ function clearBulkSelection() {
   document.getElementById('bulk-price-wholesale').value = '';
   document.getElementById('bulk-category').value = '';
 }
-function getPrice(product) {
-  const retail = parseFloat(product.price_retail) || parseFloat(product.price);
-  const salon = parseFloat(product.price);
-  if (currentLevel === 'Retail') return retail;
-  if (currentLevel === 'Salon') return salon;
-  // Wholesale = salon * (1 - discount_wholesale / 100)
-  const wholesaleDiscount = parseFloat(product.discount_wholesale) || 0;
-  return Math.round(salon * (1 - wholesaleDiscount / 100) * 100) / 100;
-}
 
 // ── SUPPLIERS / PURCHASE ORDERS ──────────────────────────────
 let suppliersView = 'po';
