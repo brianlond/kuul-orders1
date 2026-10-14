@@ -200,12 +200,14 @@ function saveOrderDraft() {
       if (bc && qty && parseInt(qty.value) > 0) {
         const lineId = row.id.replace('line-', '');
         const freeInput = document.getElementById(`free-qty-${lineId}`);
-        const discInput = document.getElementById(`discount-pct-${lineId}`);
+        const typeInput = document.getElementById(`discount-type-${lineId}`);
+        const valInput = document.getElementById(`discount-val-${lineId}`);
         lines.push({
           barcode: bc,
           qty: parseInt(qty.value),
           freeQty: freeInput ? parseInt(freeInput.value) || 0 : 0,
-          discountPct: discInput ? parseFloat(discInput.value) || 0 : 0
+          discountType: typeInput?.value === 'fixed' ? 'fixed' : 'pct',
+          discountVal: valInput ? parseFloat(valInput.value) || 0 : 0
         });
       }
     });
@@ -261,13 +263,13 @@ async function recoverOrderDraft() {
     // Restore products
     document.getElementById('product-lines').innerHTML = '';
     lineCount = 0;
-    for (const l of draft.lines) addProductLine(l.barcode, l.qty, l.freeQty || 0, l.discountPct || 0);
+    for (const l of draft.lines) addProductLine(l.barcode, l.qty, l.freeQty || 0, l.discountType || 'pct', (l.discountVal ?? l.discountPct) || 0);
     recalcTotal();
     showToast('✓ Orden recuperada');
   } catch(e) { showToast('❌ Error al recuperar'); }
 }
 
-function addProductLine(barcode = '', qty = 1, freeQty = 0, discountPct = 0) {
+function addProductLine(barcode = '', qty = 1, freeQty = 0, discountType = 'pct', discountVal = 0) {
   lineCount++;
   const id = lineCount;
   const container = document.getElementById('product-lines');
@@ -279,7 +281,7 @@ function addProductLine(barcode = '', qty = 1, freeQty = 0, discountPct = 0) {
   const price = product ? getPrice(product) : 0;
   const label = product ? `${product.brand} [${product.color_code || '—'}] ${product.name} — $${price.toFixed(2)}` : '';
   const priceLabel = price > 0 ? `$${price.toFixed(2)}` : '';
-  const hasAdjust = freeQty > 0 || discountPct > 0;
+  const hasAdjust = freeQty > 0 || discountVal > 0;
   div.innerHTML = `
     <div class="product-row-top">
       <div class="product-line-label">${label.replace(/ — \$[\d.]+/, '')}</div>
@@ -294,7 +296,13 @@ function addProductLine(barcode = '', qty = 1, freeQty = 0, discountPct = 0) {
     </div>
     <div class="product-line-adjust" id="adjust-${id}" style="display:${hasAdjust ? 'flex' : 'none'};">
       <label>🎁 Gratis <input type="number" id="free-qty-${id}" value="${freeQty}" min="0" max="${qty}" step="1" oninput="recalcTotal()"> uds</label>
-      <label>🏷️ Descuento <input type="number" id="discount-pct-${id}" value="${discountPct}" min="0" max="100" step="1" oninput="recalcTotal()"> %</label>
+      <label>🏷️ Descuento
+        <select id="discount-type-${id}" onchange="recalcTotal()">
+          <option value="pct" ${discountType !== 'fixed' ? 'selected' : ''}>%</option>
+          <option value="fixed" ${discountType === 'fixed' ? 'selected' : ''}>$</option>
+        </select>
+        <input type="number" id="discount-val-${id}" value="${discountVal}" min="0" step="0.01" oninput="recalcTotal()">
+      </label>
     </div>
   `;
   container.appendChild(div);
@@ -321,25 +329,35 @@ function changeQty(id, delta) {
   recalcTotal();
 }
 
+// A per-line discount is either a percentage (0-100, off that line's
+// billable subtotal) or a fixed dollar amount (capped at the line's
+// billable subtotal so a line can't go negative).
+function computeLineDiscountAmt(grossAmt, discountType, discountVal) {
+  return discountType === 'fixed' ? Math.min(discountVal, grossAmt) : grossAmt * (discountVal / 100);
+}
+
 // Reads and clamps the free-units/discount inputs for a product line,
 // syncing the free-units input's value/max to the current quantity.
 function getLineAdjust(lineId, qty) {
   const freeInput = document.getElementById(`free-qty-${lineId}`);
-  const discInput = document.getElementById(`discount-pct-${lineId}`);
+  const typeInput = document.getElementById(`discount-type-${lineId}`);
+  const valInput = document.getElementById(`discount-val-${lineId}`);
   const freeQty = freeInput ? Math.max(0, Math.min(qty, parseInt(freeInput.value) || 0)) : 0;
-  const discountPct = discInput ? Math.max(0, Math.min(100, parseFloat(discInput.value) || 0)) : 0;
+  const discountType = typeInput?.value === 'fixed' ? 'fixed' : 'pct';
+  let discountVal = valInput ? Math.max(0, parseFloat(valInput.value) || 0) : 0;
+  if (discountType === 'pct') discountVal = Math.min(100, discountVal);
   if (freeInput) {
     freeInput.max = qty;
     if (parseInt(freeInput.value) !== freeQty) freeInput.value = freeQty;
   }
-  return { freeQty, discountPct };
+  return { freeQty, discountType, discountVal };
 }
 
-function updateLineDisplay(lineId, qty, price, freeQty, discountPct) {
+function updateLineDisplay(lineId, qty, price, freeQty, discountType, discountVal) {
   const priceLabel = document.getElementById(`price-label-${lineId}`);
   const row = document.getElementById(`line-${lineId}`);
   const adjustBtn = document.getElementById(`adjust-btn-${lineId}`);
-  const hasAdjust = freeQty > 0 || discountPct > 0;
+  const hasAdjust = freeQty > 0 || discountVal > 0;
   const fullyFree = qty > 0 && freeQty >= qty;
 
   if (priceLabel) {
@@ -353,7 +371,7 @@ function updateLineDisplay(lineId, qty, price, freeQty, discountPct) {
   if (adjustBtn) {
     const parts = [];
     if (freeQty > 0) parts.push(fullyFree ? 'GRATIS' : `${freeQty} gratis`);
-    if (discountPct > 0) parts.push(`-${discountPct}%`);
+    if (discountVal > 0) parts.push(discountType === 'fixed' ? `-$${discountVal.toFixed(2)}` : `-${discountVal}%`);
     adjustBtn.textContent = parts.length ? '🏷️ ' + parts.join(' · ') : '🏷️';
     adjustBtn.classList.toggle('active', hasAdjust);
   }
@@ -392,11 +410,12 @@ function recalcTotal() {
         const lineId = row.id.replace('line-', '');
         const qty = parseInt(qtyInput.value) || 0;
         const price = getPrice(product);
-        const { freeQty, discountPct } = getLineAdjust(lineId, qty);
+        const { freeQty, discountType, discountVal } = getLineAdjust(lineId, qty);
         const billableQty = Math.max(0, qty - freeQty);
-        const lineSubtotal = billableQty * price * (1 - discountPct / 100);
+        const grossAmt = billableQty * price;
+        const lineSubtotal = Math.max(0, grossAmt - computeLineDiscountAmt(grossAmt, discountType, discountVal));
         subtotal += lineSubtotal;
-        updateLineDisplay(lineId, qty, price, freeQty, discountPct);
+        updateLineDisplay(lineId, qty, price, freeQty, discountType, discountVal);
       }
     }
   });
@@ -744,10 +763,11 @@ async function submitOrder() {
       const q = parseInt(qtyInput.value) || 0;
       if (product && q > 0) {
         const lineId = row.id.replace('line-', '');
-        const { freeQty, discountPct } = getLineAdjust(lineId, q);
+        const { freeQty, discountType, discountVal } = getLineAdjust(lineId, q);
         const price = getPrice(product);
         const billableQty = Math.max(0, q - freeQty);
-        const lineSubtotal = Math.round(billableQty * price * (1 - discountPct / 100) * 100) / 100;
+        const grossAmt = billableQty * price;
+        const lineSubtotal = Math.round(Math.max(0, grossAmt - computeLineDiscountAmt(grossAmt, discountType, discountVal)) * 100) / 100;
         lines.push({
           barcode: product.barcode,
           brand: product.brand,
@@ -757,7 +777,9 @@ async function submitOrder() {
           level: currentLevel,
           qty: q,
           free_qty: freeQty,
-          discount_pct: discountPct,
+          discount_type: discountType,
+          discount_pct: discountType === 'pct' ? discountVal : 0,
+          discount_amt: discountType === 'fixed' ? Math.round(discountVal * 100) / 100 : 0,
           subtotal: lineSubtotal,
           is_free: freeQty >= q
         });
@@ -1212,7 +1234,7 @@ function duplicateOrder(id) {
     resetSteppedSelector();
 
     // Add products from original order
-    order.lines.forEach(l => addProductLine(l.barcode, l.qty, l.free_qty || 0, l.discount_pct || 0));
+    order.lines.forEach(l => addProductLine(l.barcode, l.qty, l.free_qty || 0, l.discount_type || 'pct', (l.discount_type === 'fixed' ? l.discount_amt : l.discount_pct) || 0));
     recalcTotal();
     showToast('✓ Orden duplicada — revisa y envía');
   }, 100);
@@ -3227,7 +3249,7 @@ async function openEditModal(id) {
 
   const lines = document.getElementById('edit-product-lines');
   lines.innerHTML = '';
-  order.lines.forEach(l => addEditLine(l.barcode, l.qty, editLevel));
+  order.lines.forEach(l => addEditLine(l.barcode, l.qty, editLevel, l.free_qty || 0, l.discount_type || 'pct', (l.discount_type === 'fixed' ? l.discount_amt : l.discount_pct) || 0));
 
   onEditPermitChange();
   recalcEditTotal();
@@ -3262,7 +3284,7 @@ function setEditLevel(level) {
   recalcEditTotal();
 }
 
-function addEditLine(barcode = '', qty = 1, level = null) {
+function addEditLine(barcode = '', qty = 1, level = null, freeQty = 0, discountType = 'pct', discountVal = 0) {
   const lvl = level || window._editOrderLevel || currentLevel || 'Salon';
   editLineCount++;
   const id = editLineCount;
@@ -3270,13 +3292,72 @@ function addEditLine(barcode = '', qty = 1, level = null) {
   const div = document.createElement('div');
   div.className = 'product-row';
   div.id = 'edit-line-' + id;
+  const hasAdjust = freeQty > 0 || discountVal > 0;
   div.innerHTML = `
-    <select id="edit-sel-${id}" onchange="recalcEditTotal()">${buildOptions(barcode, lvl)}</select>
-    <input type="number" id="edit-qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcEditTotal()">
-    <button class="remove-btn" onclick="removeEditLine(${id})" aria-label="Eliminar">×</button>
+    <div class="product-row-top">
+      <select id="edit-sel-${id}" onchange="recalcEditTotal()" style="flex:1; min-width:0;">${buildOptions(barcode, lvl)}</select>
+    </div>
+    <div class="product-row-bottom">
+      <input type="number" id="edit-qty-${id}" value="${qty}" min="1" max="999" step="1" oninput="recalcEditTotal()">
+      <button type="button" class="line-adjust-btn" id="edit-adjust-btn-${id}" onclick="toggleEditLineAdjust(${id})" title="Dar unidades gratis o descuento en este producto">🏷️</button>
+      <button class="remove-btn" onclick="removeEditLine(${id})" aria-label="Eliminar" style="margin-left:auto;">×</button>
+    </div>
+    <div class="product-line-adjust" id="edit-adjust-${id}" style="display:${hasAdjust ? 'flex' : 'none'};">
+      <label>🎁 Gratis <input type="number" id="edit-free-qty-${id}" value="${freeQty}" min="0" max="${qty}" step="1" oninput="recalcEditTotal()"> uds</label>
+      <label>🏷️ Descuento
+        <select id="edit-discount-type-${id}" onchange="recalcEditTotal()">
+          <option value="pct" ${discountType !== 'fixed' ? 'selected' : ''}>%</option>
+          <option value="fixed" ${discountType === 'fixed' ? 'selected' : ''}>$</option>
+        </select>
+        <input type="number" id="edit-discount-val-${id}" value="${discountVal}" min="0" step="0.01" oninput="recalcEditTotal()">
+      </label>
+    </div>
   `;
   container.appendChild(div);
   recalcEditTotal();
+}
+
+function toggleEditLineAdjust(id) {
+  const panel = document.getElementById(`edit-adjust-${id}`);
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+}
+
+// Mirrors getLineAdjust() for the edit-order form's per-line inputs.
+function getEditLineAdjust(lineId, qty) {
+  const freeInput = document.getElementById(`edit-free-qty-${lineId}`);
+  const typeInput = document.getElementById(`edit-discount-type-${lineId}`);
+  const valInput = document.getElementById(`edit-discount-val-${lineId}`);
+  const freeQty = freeInput ? Math.max(0, Math.min(qty, parseInt(freeInput.value) || 0)) : 0;
+  const discountType = typeInput?.value === 'fixed' ? 'fixed' : 'pct';
+  let discountVal = valInput ? Math.max(0, parseFloat(valInput.value) || 0) : 0;
+  if (discountType === 'pct') discountVal = Math.min(100, discountVal);
+  if (freeInput) {
+    freeInput.max = qty;
+    if (parseInt(freeInput.value) !== freeQty) freeInput.value = freeQty;
+  }
+  return { freeQty, discountType, discountVal };
+}
+
+// Mirrors updateLineDisplay() — just the adjust-button text and row
+// highlight, since edit lines show a product <select> instead of a price label.
+function updateEditLineDisplay(lineId, qty, freeQty, discountType, discountVal) {
+  const row = document.getElementById(`edit-line-${lineId}`);
+  const adjustBtn = document.getElementById(`edit-adjust-btn-${lineId}`);
+  const hasAdjust = freeQty > 0 || discountVal > 0;
+  const fullyFree = qty > 0 && freeQty >= qty;
+
+  if (row) {
+    row.style.borderColor = hasAdjust ? '#bbf7d0' : '';
+    row.style.background = hasAdjust ? '#f0fdf4' : '';
+  }
+  if (adjustBtn) {
+    const parts = [];
+    if (freeQty > 0) parts.push(fullyFree ? 'GRATIS' : `${freeQty} gratis`);
+    if (discountVal > 0) parts.push(discountType === 'fixed' ? `-$${discountVal.toFixed(2)}` : `-${discountVal}%`);
+    adjustBtn.textContent = parts.length ? '🏷️ ' + parts.join(' · ') : '🏷️';
+    adjustBtn.classList.toggle('active', hasAdjust);
+  }
 }
 
 function removeEditLine(id) {
@@ -3387,10 +3468,17 @@ function recalcEditTotal() {
   let subtotal = 0;
   document.querySelectorAll('#edit-product-lines .product-row').forEach(row => {
     const sel = row.querySelector('select');
-    const qty = row.querySelector('input[type=number]');
-    if (sel && qty) {
+    const qtyInput = row.querySelector('input[type=number]');
+    if (sel && qtyInput) {
+      const lineId = row.id.replace('edit-line-', '');
       const price = parseFloat(sel.selectedOptions[0]?.dataset?.price || 0);
-      subtotal += price * (parseInt(qty.value) || 0);
+      const qty = parseInt(qtyInput.value) || 0;
+      const { freeQty, discountType: lineDiscType, discountVal: lineDiscVal } = getEditLineAdjust(lineId, qty);
+      const billableQty = Math.max(0, qty - freeQty);
+      const grossAmt = billableQty * price;
+      const lineSubtotal = Math.max(0, grossAmt - computeLineDiscountAmt(grossAmt, lineDiscType, lineDiscVal));
+      subtotal += lineSubtotal;
+      updateEditLineDisplay(lineId, qty, freeQty, lineDiscType, lineDiscVal);
     }
   });
   const hasShipping = document.getElementById('edit-shipping-toggle').checked;
@@ -3445,19 +3533,32 @@ async function saveEditOrder() {
   let subtotal = 0;
   document.querySelectorAll('#edit-product-lines .product-row').forEach(row => {
     const sel = row.querySelector('select');
-    const qty = row.querySelector('input[type=number]');
-    if (sel && qty) {
+    const qtyInput = row.querySelector('input[type=number]');
+    if (sel && qtyInput) {
       const product = PRODUCTS.find(p => p.barcode === sel.value);
-      const q = parseInt(qty.value) || 0;
+      const q = parseInt(qtyInput.value) || 0;
       if (product && q > 0) {
+        const lineId = row.id.replace('edit-line-', '');
         const lvl = window._editOrderLevel || 'Salon';
         const retail = parseFloat(product.price_retail) || parseFloat(product.price);
         const salon = parseFloat(product.price);
         const wDisc = parseFloat(product.discount_wholesale) || 0;
         const wholesale = Math.round(salon * (1 - wDisc / 100) * 100) / 100;
         const linePrice = lvl === 'Retail' ? retail : lvl === 'Wholesale' ? wholesale : salon;
-        const lineSubtotal = linePrice * q;
-        lines.push({ barcode: product.barcode, brand: product.brand, code: product.color_code || '—', name: product.name, price: linePrice, qty: q, subtotal: lineSubtotal });
+        const { freeQty, discountType: lineDiscType, discountVal: lineDiscVal } = getEditLineAdjust(lineId, q);
+        const billableQty = Math.max(0, q - freeQty);
+        const grossAmt = billableQty * linePrice;
+        const lineSubtotal = Math.round(Math.max(0, grossAmt - computeLineDiscountAmt(grossAmt, lineDiscType, lineDiscVal)) * 100) / 100;
+        lines.push({
+          barcode: product.barcode, brand: product.brand, code: product.color_code || '—', name: product.name,
+          price: linePrice, qty: q,
+          free_qty: freeQty,
+          discount_type: lineDiscType,
+          discount_pct: lineDiscType === 'pct' ? lineDiscVal : 0,
+          discount_amt: lineDiscType === 'fixed' ? Math.round(lineDiscVal * 100) / 100 : 0,
+          subtotal: lineSubtotal,
+          is_free: freeQty >= q
+        });
         subtotal += lineSubtotal;
       }
     }
@@ -3519,7 +3620,10 @@ async function printOrder(id) {
   const linesHTML = order.lines.map(l => {
     const isAdjusted = l.dispatched_qty !== undefined && l.dispatched_qty < l.qty;
     const isFree = l.is_free || l.price === 0;
-    const hasPartialAdjust = !isFree && ((l.free_qty || 0) > 0 || (l.discount_pct || 0) > 0);
+    const hasPartialAdjust = !isFree && ((l.free_qty || 0) > 0 || (l.discount_pct || 0) > 0 || (l.discount_amt || 0) > 0);
+    const discountLabel = l.discount_type === 'fixed' && (l.discount_amt || 0) > 0
+      ? `🏷️ -$${parseFloat(l.discount_amt).toFixed(2)}`
+      : (l.discount_pct || 0) > 0 ? `🏷️ -${l.discount_pct}%` : '';
     // When dispatched_qty differs from the ordered qty, fall back to price×qty since the
     // stored subtotal reflects the full ordered quantity, not what was actually dispatched.
     const lineTotal = isAdjusted ? parseFloat(l.price) * l.dispatched_qty : parseFloat(l.subtotal);
@@ -3528,7 +3632,7 @@ async function printOrder(id) {
       <td>
         ${l.brand} [${l.code}] ${l.name}
         ${isFree ? `<span style="display:inline-block; margin-left:6px; background:#16a34a; color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px; letter-spacing:0.05em;">FREE</span>` : ''}
-        ${hasPartialAdjust ? `<div style="font-size:10px; color:#16a34a; margin-top:2px;">${l.free_qty > 0 ? `🎁 ${l.free_qty} gratis` : ''}${l.free_qty > 0 && l.discount_pct > 0 ? ' · ' : ''}${l.discount_pct > 0 ? `🏷️ -${l.discount_pct}%` : ''}</div>` : ''}
+        ${hasPartialAdjust ? `<div style="font-size:10px; color:#16a34a; margin-top:2px;">${l.free_qty > 0 ? `🎁 ${l.free_qty} gratis` : ''}${l.free_qty > 0 && discountLabel ? ' · ' : ''}${discountLabel}</div>` : ''}
         ${isAdjusted ? `<div style="font-size:10px; color:#d97706; margin-top:2px;">⚠ Quantity adjusted: ${l.qty} ordered, ${l.dispatched_qty} dispatched</div>` : ''}
       </td>
       <td style="text-align:center;">${isAdjusted ? l.dispatched_qty : l.qty}</td>
