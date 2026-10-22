@@ -5747,12 +5747,16 @@ function printPO(id) {
   if (!po) return;
   const supplier = allSuppliers.find(s => s.id === po.supplier_id);
   const date = new Date(po.created_at).toLocaleDateString('en-US', { day:'2-digit', month:'long', year:'numeric' });
+  // This iframe is printed directly (contentWindow.print()), not via the
+  // Shadow DOM trick the invoice/packing-slip use, so its own <title> is
+  // what the browser's "Save as PDF" dialog suggests as the filename.
+  const printFilename = `Lucyglam Orden - ${sanitizeForFilename(supplier?.name || po.supplier_name)} - ${formatDateForFilename(new Date())}`;
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>OC-${String(po.id).padStart(4,'0')}</title>
+  <title>${printFilename}</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: Arial, sans-serif; font-size: 13px; color: #1a1a1a; padding: 32px; }
