@@ -2439,10 +2439,22 @@ async function confirmPicking() {
 }
 
 
+// Suggested filename when printing/saving an invoice or packing slip to
+// PDF — the browser's print dialog uses document.title as the default
+// filename, so printInvoiceFrame() sets it to this right before printing.
+function sanitizeForFilename(str) {
+  return String(str || '').replace(/[<>:"/\\|?*]/g, '-').trim();
+}
+function formatDateForFilename(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function printPackingSlip() {
   if (!pickingOrder) return;
   const o = pickingOrder;
   const date = new Date(o.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  window._printFilename = `Hoja de Empaque - Orden #${String(o.id).padStart(5, '0')} - ${formatDateForFilename(o.created_at)}`;
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Empaque #${String(o.id).padStart(5,'0')}</title>
   <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>
   <style>
@@ -2467,15 +2479,6 @@ function printPackingSlip() {
       .print-btn { display:none; }
       .product-row { page-break-inside:avoid; break-inside:avoid; }
       .client-box { page-break-inside:avoid; break-inside:avoid; }
-    }
-    @page {
-      margin-bottom: 32px;
-      @bottom-center {
-        content: "LucyGlam Beauty · Orden #${String(o.id).padStart(5,'0')} · ${date}";
-        font-family: 'Inter', sans-serif;
-        font-size: 9px;
-        color: #aaa;
-      }
     }
   </style></head><body>
   <div class="header">
@@ -3616,6 +3619,7 @@ async function printOrder(id) {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   });
+  window._printFilename = `${sanitizeForFilename(order.business)} - Invoice #${String(order.id).padStart(5, '0')} - ${formatDateForFilename(order.created_at)}`;
 
   const linesHTML = order.lines.map(l => {
     const isAdjusted = l.dispatched_qty !== undefined && l.dispatched_qty < l.qty;
@@ -3696,15 +3700,6 @@ async function printOrder(id) {
     @media print {
       body { padding: 10px 16px; }
       .print-btn { display: none; }
-    }
-    @page {
-      margin-bottom: 36px;
-      @bottom-center {
-        content: "LucyGlam Beauty · Invoice #${String(order.id).padStart(5,'0')} · ${date}";
-        font-family: 'Inter', sans-serif;
-        font-size: 9px;
-        color: #aaa;
-      }
     }
   </style>
 </head>
@@ -3869,7 +3864,19 @@ function printInvoiceFrame() {
   if (!printHostShadow) printHostShadow = host.attachShadow({ mode: 'open' });
   printHostShadow.innerHTML = `<style>${styleText}</style><div class="print-doc">${parsed.body.innerHTML}</div>`;
 
+  // Chrome's print dialog suggests document.title as the "Save as PDF"
+  // filename — printOrder()/printPackingSlip() set window._printFilename
+  // to something useful (business name, invoice #, date) right before
+  // calling this, instead of leaving it on whatever the app's own tab
+  // title happens to be.
+  const prevTitle = document.title;
+  if (window._printFilename) document.title = window._printFilename;
+  const restoreTitle = () => { document.title = prevTitle; };
+  window.addEventListener('afterprint', restoreTitle, { once: true });
   window.print();
+  // Fallback in case afterprint doesn't fire (some browsers skip it when
+  // printing is triggered programmatically rather than via Ctrl+P).
+  setTimeout(restoreTitle, 1000);
 }
 
 window.addEventListener('load', async () => {
