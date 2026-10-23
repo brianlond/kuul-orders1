@@ -2447,7 +2447,8 @@ function sanitizeForFilename(str) {
 }
 function formatDateForFilename(iso) {
   const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const month = d.toLocaleDateString('en-US', { month: 'short' }).toLowerCase();
+  return `${month} ${d.getDate()} ${d.getFullYear()}`;
 }
 
 function printPackingSlip() {
@@ -5747,10 +5748,13 @@ function printPO(id) {
   if (!po) return;
   const supplier = allSuppliers.find(s => s.id === po.supplier_id);
   const date = new Date(po.created_at).toLocaleDateString('en-US', { day:'2-digit', month:'long', year:'numeric' });
-  // This iframe is printed directly (contentWindow.print()), not via the
-  // Shadow DOM trick the invoice/packing-slip use, so its own <title> is
-  // what the browser's "Save as PDF" dialog suggests as the filename.
-  const printFilename = `Lucyglam Orden - ${sanitizeForFilename(supplier?.name || po.supplier_name)} - ${formatDateForFilename(new Date())}`;
+  // Printing an iframe via contentWindow.print() doesn't reliably use the
+  // iframe's own <title> for the "Save as PDF" suggested filename in
+  // Chrome — it falls back to the top window's title. printPOFrame() (the
+  // print button's handler) sets document.title to this right before
+  // printing, same approach as the invoice/packing-slip.
+  window._printFilename = `Lucyglam Orden - ${sanitizeForFilename(supplier?.name || po.supplier_name)} - ${formatDateForFilename(new Date())}`;
+  const printFilename = window._printFilename;
 
   const html = `<!DOCTYPE html>
 <html>
@@ -5850,7 +5854,7 @@ function printPO(id) {
       <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:#1a1a1a;">
         <span style="color:#fff; font-weight:600; font-size:14px;">OC-${String(po.id).padStart(4,'0')} — ${po.supplier_name}</span>
         <div style="display:flex; gap:8px;">
-          <button onclick="document.getElementById('po-print-frame').contentWindow.print()" style="padding:6px 14px; background:var(--gold); color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">🖨️ Imprimir / PDF</button>
+          <button onclick="printPOFrame()" style="padding:6px 14px; background:var(--gold); color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">🖨️ Imprimir / PDF</button>
           <button onclick="document.getElementById('po-print-modal').remove()" style="padding:6px 14px; background:none; border:1px solid #555; color:#fff; border-radius:6px; font-size:13px; cursor:pointer;">Cerrar</button>
         </div>
       </div>
@@ -5859,6 +5863,17 @@ function printPO(id) {
 
   document.body.appendChild(modal);
   document.getElementById('po-print-frame').srcdoc = html;
+}
+
+function printPOFrame() {
+  const frame = document.getElementById('po-print-frame');
+  if (!frame) return;
+  const prevTitle = document.title;
+  if (window._printFilename) document.title = window._printFilename;
+  const restoreTitle = () => { document.title = prevTitle; };
+  window.addEventListener('afterprint', restoreTitle, { once: true });
+  frame.contentWindow.print();
+  setTimeout(restoreTitle, 1000);
 }
 
 async function deletePOFromDetail(id) {
