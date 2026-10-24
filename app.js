@@ -4380,6 +4380,7 @@ function initStatsTab() {
     setWeekValue('stats-week', 'stats-week-label', year, week);
   }
   loadStatsReport();
+  loadKeyMetrics();
 }
 
 function setStatsView(view) {
@@ -4740,6 +4741,201 @@ function renderStatsCharts(brandRows, totals) {
       }
     });
   }
+}
+
+// ── Estadísticas: Métricas clave ─────────────────────────────
+// Metric tiles with % change vs the previous period of equal length, plus
+// a daily line chart per selected metric (current period vs previous,
+// dashed). One chart per metric on purpose — dollars and counts on a
+// shared dual-axis chart imply a relationship between the lines that
+// isn't there.
+const KEY_METRICS = [
+  { key: 'sales', label: 'Ventas', fmt: v => '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), axis: v => '$' + v.toLocaleString('en-US') },
+  { key: 'orders', label: 'Órdenes', fmt: v => v.toLocaleString('en-US'), axis: v => v },
+  { key: 'customers', label: 'Clientes', fmt: v => v.toLocaleString('en-US'), axis: v => v },
+  { key: 'units', label: 'Unidades vendidas', fmt: v => v.toLocaleString('en-US'), axis: v => v }
+];
+let kmRange = '7d';
+const kmSelected = new Set(['sales', 'orders']);
+let kmCharts = [];
+let kmData = null;
+
+function kmStartOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function kmAddDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function kmDayKey(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function kmFmtDay(d) { return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+function kmFmtDayYear(d) { return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+
+function kmGetRange(range) {
+  const today = kmStartOfDay(new Date());
+  let start, end; // both inclusive, at start of day
+  if (range === '7d') { start = kmAddDays(today, -6); end = today; }
+  else if (range === '30d') { start = kmAddDays(today, -29); end = today; }
+  else if (range === 'month') { start = new Date(today.getFullYear(), today.getMonth(), 1); end = today; }
+  else if (range === 'lastmonth') { start = new Date(today.getFullYear(), today.getMonth() - 1, 1); end = new Date(today.getFullYear(), today.getMonth(), 0); }
+  else {
+    const f = document.getElementById('km-from')?.value;
+    const t = document.getElementById('km-to')?.value;
+    if (!f || !t) return null;
+    start = new Date(f + 'T00:00:00');
+    end = new Date(t + 'T00:00:00');
+    if (end < start) [start, end] = [end, start];
+  }
+  const days = Math.round((end - start) / 86400000) + 1;
+  return { start, end, days, prevStart: kmAddDays(start, -days), prevEnd: kmAddDays(start, -1) };
+}
+
+function kmCustomerKey(o) {
+  const phone = (o.phone || '').replace(/[^0-9]/g, '');
+  return phone || (o.client || '').trim().toLowerCase();
+}
+
+function kmAggregate(orders, start, days) {
+  const index = new Map();
+  for (let i = 0; i < days; i++) index.set(kmDayKey(kmAddDays(start, i)), i);
+  const buckets = Array.from({ length: days }, () => ({ sales: 0, orders: 0, customers: new Set(), units: 0 }));
+  const allCustomers = new Set();
+  const totals = { sales: 0, orders: 0, customers: 0, units: 0 };
+  orders.forEach(o => {
+    const i = index.get(kmDayKey(new Date(o.created_at)));
+    if (i === undefined) return;
+    const total = parseFloat(o.total || 0);
+    const units = (o.lines || []).reduce((s, l) => s + (parseInt(l.qty) || 0), 0);
+    const cust = kmCustomerKey(o);
+    const b = buckets[i];
+    b.sales += total; b.orders += 1; b.units += units;
+    totals.sales += total; totals.orders += 1; totals.units += units;
+    if (cust) { b.customers.add(cust); allCustomers.add(cust); }
+  });
+  totals.customers = allCustomers.size;
+  return {
+    totals,
+    series: {
+      sales: buckets.map(b => Math.round(b.sales * 100) / 100),
+      orders: buckets.map(b => b.orders),
+      customers: buckets.map(b => b.customers.size),
+      units: buckets.map(b => b.units)
+    }
+  };
+}
+
+function kmDelta(cur, prev) {
+  if (!prev) return cur ? { text: '▲ nuevo', cls: 'up' } : { text: '— sin cambio', cls: 'flat' };
+  const pct = (cur - prev) / prev * 100;
+  if (Math.abs(pct) < 0.005) return { text: '— 0.00%', cls: 'flat' };
+  return { text: (pct > 0 ? '▲ ' : '▼ ') + Math.abs(pct).toFixed(2) + '%', cls: pct > 0 ? 'up' : 'down' };
+}
+
+function setKeyMetricsRange(range) {
+  if (range === 'custom' && !kmGetRange('custom')) { showToast('⚠️ Elige ambas fechas'); return; }
+  kmRange = range;
+  document.getElementById('km-custom').style.display = range === 'custom' ? 'flex' : 'none';
+  document.querySelectorAll('#km-presets button').forEach(b => b.classList.toggle('active', b.dataset.range === range));
+  loadKeyMetrics();
+}
+
+function openKeyMetricsCustom() {
+  const r = kmGetRange(kmRange) || kmGetRange('7d');
+  document.getElementById('km-from').value = kmDayKey(r.start);
+  document.getElementById('km-to').value = kmDayKey(r.end);
+  document.getElementById('km-custom').style.display = 'flex';
+  document.querySelectorAll('#km-presets button').forEach(b => b.classList.toggle('active', b.dataset.range === 'custom'));
+}
+
+function toggleKeyMetric(key) {
+  if (kmSelected.has(key)) kmSelected.delete(key); else kmSelected.add(key);
+  renderKeyMetrics();
+}
+
+async function loadKeyMetrics() {
+  const tiles = document.getElementById('km-tiles');
+  if (!tiles) return;
+  const r = kmGetRange(kmRange);
+  if (!r) return;
+  document.querySelectorAll('#km-presets button').forEach(b => b.classList.toggle('active', b.dataset.range === kmRange));
+  document.getElementById('km-range-label').textContent =
+    `${kmFmtDayYear(r.start)} – ${kmFmtDayYear(r.end)} · comparado con ${kmFmtDay(r.prevStart)} – ${kmFmtDayYear(r.prevEnd)}`;
+  tiles.innerHTML = '<div class="km-empty">Cargando...</div>';
+
+  const from = r.prevStart.toISOString();
+  const to = kmAddDays(r.end, 1).toISOString();
+  try {
+    const orders = await supabase(`orders?is_test=eq.false&status=neq.Cancelada&select=created_at,total,phone,client,lines&created_at=gte.${from}&created_at=lt.${to}`) || [];
+    kmData = { range: r, cur: kmAggregate(orders, r.start, r.days), prev: kmAggregate(orders, r.prevStart, r.days) };
+    renderKeyMetrics();
+  } catch (e) {
+    console.error(e);
+    tiles.innerHTML = '<div class="km-empty">❌ Error cargando métricas</div>';
+  }
+}
+
+function renderKeyMetrics() {
+  if (!kmData) return;
+  const { range: r, cur, prev } = kmData;
+
+  document.getElementById('km-tiles').innerHTML = KEY_METRICS.map(m => {
+    const sel = kmSelected.has(m.key);
+    const d = kmDelta(cur.totals[m.key], prev.totals[m.key]);
+    return `<button type="button" class="km-tile ${sel ? 'selected' : ''}" aria-pressed="${sel}" onclick="toggleKeyMetric('${m.key}')">
+      <div class="km-tile-top"><span class="km-tile-label">${m.label}</span><span class="km-check">${sel ? '✓' : ''}</span></div>
+      <div class="km-tile-value">${m.fmt(cur.totals[m.key])}</div>
+      <div class="km-delta ${d.cls}" title="Periodo anterior: ${m.fmt(prev.totals[m.key])}">${d.text}</div>
+    </button>`;
+  }).join('');
+
+  kmCharts.forEach(c => c.destroy());
+  kmCharts = [];
+  const chartsEl = document.getElementById('km-charts');
+  const selected = KEY_METRICS.filter(m => kmSelected.has(m.key));
+  if (!selected.length) {
+    chartsEl.innerHTML = '<div class="km-empty">Selecciona una métrica para ver su gráfica</div>';
+    return;
+  }
+  chartsEl.innerHTML = selected.map(m => `
+    <div class="km-chart-block">
+      <div class="km-chart-title">${m.label} por día</div>
+      <div class="km-chart-wrap"><canvas id="km-chart-${m.key}"></canvas></div>
+    </div>`).join('');
+  if (typeof Chart === 'undefined') return;
+
+  const curDates = Array.from({ length: r.days }, (_, i) => kmAddDays(r.start, i));
+  const prevDates = Array.from({ length: r.days }, (_, i) => kmAddDays(r.prevStart, i));
+  const showPoints = r.days <= 14;
+
+  selected.forEach(m => {
+    const chart = new Chart(document.getElementById(`km-chart-${m.key}`), {
+      type: 'line',
+      data: {
+        labels: curDates.map(kmFmtDay),
+        datasets: [
+          { label: 'Este periodo', data: cur.series[m.key], borderColor: '#9a7c22', backgroundColor: '#9a7c22', borderWidth: 2, pointRadius: showPoints ? 4 : 0, pointHoverRadius: 5, tension: 0 },
+          { label: 'Periodo anterior', data: prev.series[m.key], borderColor: '#898781', backgroundColor: '#898781', borderDash: [5, 4], borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'line', pointStyleWidth: 24, font: { size: 11 }, color: '#52514e' } },
+          tooltip: {
+            callbacks: {
+              title: () => '',
+              label: ctx => {
+                const date = (ctx.datasetIndex === 0 ? curDates : prevDates)[ctx.dataIndex];
+                return `${ctx.dataset.label} (${kmFmtDay(date)}): ${m.fmt(ctx.parsed.y)}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#898781', font: { size: 11 }, maxTicksLimit: 8, maxRotation: 0 } },
+          y: { beginAtZero: true, grid: { color: '#ede9e0' }, border: { display: false }, ticks: { color: '#898781', font: { size: 11 }, maxTicksLimit: 4, precision: 0, callback: m.axis } }
+        }
+      }
+    });
+    kmCharts.push(chart);
+  });
 }
 
 // ── MI PROGRESO (seller view) ────────────────────────────────
