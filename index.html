@@ -514,16 +514,9 @@
 
     <!-- STATISTICS -->
     <div id="tab-stats" class="section">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
-        <div>
-          <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Estadísticas</h2>
-          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Unidades vendidas, costo, margen de ganancia, envíos e impuestos cobrados</div>
-        </div>
-        <div style="display:flex; gap:6px;">
-          <button id="stats-view-week-btn" onclick="setStatsView('week')" style="padding:6px 16px; background:var(--gold); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">Semana</button>
-          <button id="stats-view-month-btn" onclick="setStatsView('month')" style="padding:6px 16px; background:none; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; color:var(--text-muted); cursor:pointer; font-family:inherit;">Mes</button>
-          <button id="stats-view-all-btn" onclick="setStatsView('all')" style="padding:6px 16px; background:none; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; color:var(--text-muted); cursor:pointer; font-family:inherit;">Todo</button>
-        </div>
+      <div style="margin-bottom:16px;">
+        <h2 style="font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--text); margin:0;">Estadísticas</h2>
+        <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Resumen de ventas, costos, márgenes y proveedores</div>
       </div>
 
       <div class="km-card">
@@ -548,6 +541,19 @@
         <div id="km-charts"></div>
       </div>
 
+      <div class="km-card">
+        <div class="km-head">
+          <div>
+            <div class="km-title">Reporte detallado</div>
+            <div class="km-sub">Unidades vendidas, costo, margen de ganancia, envíos e impuestos cobrados</div>
+          </div>
+          <div class="km-presets">
+            <button type="button" id="stats-view-week-btn" class="active" onclick="setStatsView('week')">Semana</button>
+            <button type="button" id="stats-view-month-btn" onclick="setStatsView('month')">Mes</button>
+            <button type="button" id="stats-view-all-btn" onclick="setStatsView('all')">Todo</button>
+          </div>
+        </div>
+
       <div id="stats-week-controls" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
         <label style="font-size:13px; color:var(--text-muted);">Semana:</label>
         <button onclick="statsWeekPrev()" style="padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); cursor:pointer; font-size:14px;">◀</button>
@@ -571,6 +577,7 @@
       </div>
 
       <div id="stats-report"></div>
+      </div>
     </div>
   </main>
 

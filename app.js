@@ -4394,9 +4394,8 @@ function setStatsView(view) {
 
   [weekControls, monthControls].forEach(el => el.style.display = 'none');
   allControls.style.display = 'none';
-  [weekBtn, monthBtn, allBtn].forEach(btn => { btn.style.background = 'none'; btn.style.color = 'var(--text-muted)'; btn.style.border = '1px solid var(--border)'; });
   const activeBtn = view === 'week' ? weekBtn : view === 'month' ? monthBtn : allBtn;
-  activeBtn.style.background = 'var(--gold)'; activeBtn.style.color = '#fff'; activeBtn.style.border = 'none';
+  [weekBtn, monthBtn, allBtn].forEach(btn => btn.classList.toggle('active', btn === activeBtn));
 
   if (view === 'week') {
     weekControls.style.display = 'flex';
