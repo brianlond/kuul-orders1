@@ -349,6 +349,37 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .brand-chip.active { border-color: var(--gold); background: var(--gold-pale); box-shadow: var(--shadow-sm); }
 .brand-chip.active span { color: var(--gold); }
 
+/* Estadísticas — Métricas clave */
+.km-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 24px; box-shadow: var(--shadow-sm); }
+.km-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.km-title { font-size: 18px; font-weight: 600; color: var(--text); }
+.km-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.km-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.km-presets button, .km-custom button { padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; background: none; color: var(--text-muted); font-size: 12px; cursor: pointer; font-family: inherit; }
+.km-presets button:hover { border-color: var(--gold); color: var(--gold); }
+.km-presets button.active { background: var(--gold); border-color: var(--gold); color: #fff; font-weight: 600; }
+.km-custom { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; color: var(--text-muted); }
+.km-custom input[type=date] { width: auto; padding: 6px 10px; font-size: 13px; }
+.km-custom button { background: var(--gold); border-color: var(--gold); color: #fff; font-weight: 600; }
+.km-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.km-tile { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; font-family: inherit; color: var(--text); border-left: 4px solid transparent; transition: background 0.15s, border-color 0.15s; }
+.km-tile:hover { border-color: var(--gold-border); }
+.km-tile.selected { background: var(--surface-2); border-left-color: var(--gold); }
+.km-tile-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.km-tile-label { font-size: 13px; font-weight: 600; }
+.km-check { width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.km-tile.selected .km-check { background: var(--gold); border-color: var(--gold); color: #fff; }
+.km-tile-value { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.km-delta { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.km-delta.up { color: var(--success); }
+.km-delta.down { color: var(--danger); }
+.km-delta.flat { color: var(--text-muted); }
+.km-chart-block { margin-bottom: 18px; }
+.km-chart-block:last-child { margin-bottom: 0; }
+.km-chart-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+.km-chart-wrap { position: relative; height: 200px; }
+.km-empty { text-align: center; padding: 24px; font-size: 13px; color: var(--text-muted); }
+
 /* Printing an invoice/packing slip: #print-host is filled with that document's
    own markup and shown, everything else in the app is hidden. This keeps
    printing on the current tab/page instead of a popup or iframe, which is the
