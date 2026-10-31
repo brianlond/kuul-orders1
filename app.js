@@ -10,7 +10,6 @@ let currentRole = null;
 
 // ── Constants ────────────────────────────────────────────────
 const SHIPPING = 9.99;
-const STATUSES = ['Nueva', 'En proceso', 'Lista', 'Entregada', 'Cancelada'];
 let isTestMode = false;
 
 const BRAND_LOGOS = {
@@ -270,6 +269,7 @@ async function recoverOrderDraft() {
 }
 
 function addProductLine(barcode = '', qty = 1, freeQty = 0, discountType = 'pct', discountVal = 0) {
+  document.getElementById('order-created-panel')?.setAttribute('hidden', '');
   lineCount++;
   const id = lineCount;
   const container = document.getElementById('product-lines');
@@ -823,8 +823,9 @@ async function submitOrder() {
       payment_status: 'Pendiente',
       status: 'Nueva'
     });
+    const unitCount = lines.reduce((s, l) => s + (l.qty || 0), 0);
     resetForm();
-    showToast('✓ Orden enviada correctamente');
+    showOrderCreatedPanel(insertedOrder?.[0]?.id, business, unitCount);
   } catch (e) {
     showToast('❌ Error al enviar, intenta de nuevo');
     console.error(e);
@@ -897,17 +898,226 @@ async function clearTestOrders() {
   }
 }
 
-// ── Update status ────────────────────────────────────────────
-async function updateStatus(id, status) {
+// ── Guided order flow ────────────────────────────────────────
+// An order moves forward only through its one next-step button:
+// Nueva → Empacando (picking) → Lista (only by confirming the picking,
+// which deducts inventory) → Entregada. Going back or cancelling lives in
+// the admin ⋯ menu and returns inventory when the order was already packed.
+const ORDER_STEPS = [
+  { status: 'Nueva', label: 'Nueva' },
+  { status: 'En proceso', label: 'Empacando' },
+  { status: 'Lista', label: 'Lista' },
+  { status: 'Entregada', label: 'Entregada' }
+];
+const PREV_ORDER_STATUS = { 'En proceso': 'Nueva', 'Lista': 'En proceso', 'Entregada': 'Lista' };
+const ORDER_STATUS_LABEL = { 'Nueva': 'Nueva', 'En proceso': 'Empacando', 'Lista': 'Lista', 'Entregada': 'Entregada', 'Cancelada': 'Cancelada' };
+
+// confirmPicking() stamps dispatched_qty on every line, so its presence
+// means this order's stock was actually deducted by a packing.
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function orderWasPacked(o) {
+  return (o.lines || []).some(l => l.dispatched_qty !== undefined && l.dispatched_qty !== null);
+}
+
+function orderPickedCount(o) {
+  const p = o.picking || {};
+  return (o.lines || []).filter((_, i) => p[i] === true || p[String(i)] === true).length;
+}
+
+function orderStepperHTML(o) {
+  const cancelled = o.status === 'Cancelada';
+  const cur = ORDER_STEPS.findIndex(s => s.status === o.status);
+  return `<div class="order-stepper" aria-label="Progreso: ${ORDER_STATUS_LABEL[o.status] || o.status}">
+    ${ORDER_STEPS.map((s, i) => {
+      const done = !cancelled && (i < cur || (i === cur && o.status === 'Entregada'));
+      const cls = cancelled ? '' : done ? 'done' : i === cur ? 'current' : '';
+      return `<div class="order-step ${cls}"><div class="order-step-bar"></div><div class="order-step-name">${done ? '✓ ' : ''}${s.label}</div></div>`;
+    }).join('')}
+  </div>`;
+}
+
+function orderNextActionHTML(o) {
+  if (o.status === 'Nueva') return `<button type="button" class="order-next-btn" onclick="startPacking(${o.id})">▶ Empezar empaque</button>`;
+  if (o.status === 'En proceso') return `<button type="button" class="order-next-btn" onclick="continuePacking(${o.id})">📦 Continuar empaque (${orderPickedCount(o)} de ${(o.lines || []).length})</button>`;
+  if (o.status === 'Lista') return `<button type="button" class="order-next-btn" onclick="markOrderDelivered(${o.id})">🚚 Marcar entregada</button>`;
+  if (o.status === 'Entregada') return `<div class="order-status-pill ok">✓ Orden completada</div>`;
+  return `<div class="order-status-pill cancelled">✕ Orden cancelada</div>`;
+}
+
+function orderAdminMenuHTML(o) {
+  const prev = PREV_ORDER_STATUS[o.status];
+  // A delivered order that never went through packing (e.g. a POS sale)
+  // can't step back: re-packing it would deduct its stock a second time.
+  const canBack = prev && !(o.status === 'Entregada' && !orderWasPacked(o));
+  const canCancel = o.status !== 'Entregada' && o.status !== 'Cancelada';
+  const items = [
+    canBack ? `<button type="button" onclick="revertOrderStatus(${o.id})">↩ Regresar a “${ORDER_STATUS_LABEL[prev]}”</button>` : '',
+    canCancel ? `<button type="button" class="danger" onclick="cancelOrder(${o.id})">✕ Cancelar orden</button>` : ''
+  ].join('');
+  return `<div class="order-menu-wrap">
+    <button type="button" class="order-small-btn" onclick="toggleOrderMenu(${o.id}, event)" aria-haspopup="true" aria-label="Más acciones">⋯</button>
+    <div class="order-menu" id="order-menu-${o.id}" hidden>
+      <div class="order-menu-head">Solo admin</div>
+      ${items || '<div class="order-menu-empty">Sin acciones disponibles</div>'}
+    </div>
+  </div>`;
+}
+
+function toggleOrderMenu(id, event) {
+  event.stopPropagation();
+  const menu = document.getElementById(`order-menu-${id}`);
+  const willOpen = menu && menu.hidden;
+  document.querySelectorAll('.order-menu').forEach(m => { m.hidden = true; });
+  if (menu && willOpen) menu.hidden = false;
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.order-menu-wrap')) document.querySelectorAll('.order-menu').forEach(m => { m.hidden = true; });
+});
+
+function refreshOrderViews(id) {
+  if (allOrders.length) renderOrders(applyOrderFilter(allOrders, currentFilter));
+  if (currentDetailOrder && currentDetailOrder.id === id) openOrderDetail(id);
+}
+
+function setLocalOrder(id, changes) {
+  const o = allOrders.find(x => x.id === id);
+  if (o) Object.assign(o, changes);
+  return o;
+}
+
+async function findOrder(id) {
+  const local = allOrders.find(o => o.id === id) || window._orders?.find(o => o.id === id);
+  if (local) return local;
+  const res = await supabase(`orders?id=eq.${id}&select=*`);
+  return res && res[0];
+}
+
+async function startPacking(id) {
   try {
-    await dbUpdateStatus(id, status);
-    await loadOrders();
-  } catch(e) {
-    showToast('❌ Error al actualizar estado');
+    await supabase(`orders?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'En proceso' }) });
+    setLocalOrder(id, { status: 'En proceso' });
+    refreshOrderViews(id);
+    document.getElementById('order-created-panel')?.setAttribute('hidden', '');
+    continuePacking(id);
+  } catch (e) {
+    showToast('❌ No se pudo empezar el empaque, intenta de nuevo');
     console.error(e);
   }
 }
 
+function continuePacking(id) {
+  if (currentDetailOrder) closeOrderDetail();
+  openPicking(id);
+}
+
+async function markOrderDelivered(id) {
+  if (!confirm(`¿Marcar la orden #${String(id).padStart(5, '0')} como entregada?`)) return;
+  try {
+    await dbUpdateStatus(id, 'Entregada');
+    setLocalOrder(id, { status: 'Entregada' });
+    refreshOrderViews(id);
+    showToast('🚚 Orden marcada como entregada');
+  } catch (e) {
+    showToast('❌ No se pudo marcar como entregada');
+    console.error(e);
+  }
+}
+
+// Puts back the stock a packing deducted, and drops dispatched_qty so a
+// later re-pack deducts again and a second revert can't add it twice.
+async function restoreOrderStock(o, note) {
+  for (const line of o.lines || []) {
+    const qty = parseInt(line.dispatched_qty) || 0;
+    if (qty <= 0) continue;
+    const prod = PRODUCTS.find(p => p.barcode === line.barcode);
+    if (!prod || !prod.id) continue;
+    const current = await supabase(`products?id=eq.${prod.id}&select=id,stock`);
+    if (!current || !current[0]) continue;
+    await supabase(`products?id=eq.${prod.id}`, { method: 'PATCH', body: JSON.stringify({ stock: (current[0].stock || 0) + qty }) });
+    await supabase('inventory_movements', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify({ product_id: prod.id, type: 'in', quantity: qty, order_id: o.id, notes: note })
+    });
+  }
+  return (o.lines || []).map(({ dispatched_qty, ...rest }) => rest);
+}
+
+async function revertOrderStatus(id) {
+  if (!isAdmin) { showToast('❌ Solo admin puede hacer esto'); return; }
+  document.querySelectorAll('.order-menu').forEach(m => { m.hidden = true; });
+  const o = await findOrder(id).catch(() => null);
+  if (!o) { showToast('❌ No se encontró la orden'); return; }
+  const prev = PREV_ORDER_STATUS[o.status];
+  if (!prev) return;
+  const returnsStock = o.status === 'Lista' && orderWasPacked(o);
+  const msg = `¿Regresar la orden #${String(id).padStart(5, '0')} a "${ORDER_STATUS_LABEL[prev]}"?` +
+    (returnsStock ? '\n\nEl inventario que se descontó al empacarla se va a devolver, y habrá que empacarla de nuevo.' : '');
+  if (!confirm(msg)) return;
+  try {
+    const changes = { status: prev };
+    if (returnsStock) changes.lines = await restoreOrderStock(o, `Regreso a empaque · orden #${id}`);
+    if (prev === 'Nueva' || prev === 'En proceso') changes.picking = {};
+    await supabase(`orders?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(changes) });
+    setLocalOrder(id, changes);
+    refreshOrderViews(id);
+    showToast(`↩ Orden regresada a ${ORDER_STATUS_LABEL[prev]}${returnsStock ? ' · inventario devuelto' : ''}`);
+  } catch (e) {
+    showToast('❌ No se pudo regresar la orden');
+    console.error(e);
+  }
+}
+
+async function cancelOrder(id) {
+  if (!isAdmin) { showToast('❌ Solo admin puede hacer esto'); return; }
+  document.querySelectorAll('.order-menu').forEach(m => { m.hidden = true; });
+  const o = await findOrder(id).catch(() => null);
+  if (!o) { showToast('❌ No se encontró la orden'); return; }
+  const returnsStock = o.status === 'Lista' && orderWasPacked(o);
+  if (!confirm(`¿Cancelar la orden #${String(id).padStart(5, '0')}? Ya no se podrá empacar ni entregar.` +
+    (returnsStock ? '\n\nEl inventario que se descontó al empacarla se va a devolver.' : ''))) return;
+  try {
+    const changes = { status: 'Cancelada' };
+    if (returnsStock) changes.lines = await restoreOrderStock(o, `Orden cancelada #${id}`);
+    await supabase(`orders?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(changes) });
+    setLocalOrder(id, changes);
+    refreshOrderViews(id);
+    showToast(`✕ Orden cancelada${returnsStock ? ' · inventario devuelto' : ''}`);
+  } catch (e) {
+    showToast('❌ No se pudo cancelar la orden');
+    console.error(e);
+  }
+}
+
+function showOrderCreatedPanel(id, business, unitCount) {
+  const panel = document.getElementById('order-created-panel');
+  if (!panel) { showToast('✓ Orden enviada correctamente'); return; }
+  const num = id ? `#${String(id).padStart(5, '0')} ` : '';
+  const next = isAdmin
+    ? `Siguiente paso: empacar ${unitCount === 1 ? 'el producto' : `los ${unitCount} productos`} y confirmarlos uno por uno.`
+    : 'Siguiente paso: bodega la empaca y confirma cada producto.';
+  panel.innerHTML = `
+    <div class="order-created-head">
+      <div class="order-created-icon">✓</div>
+      <div>
+        <div class="order-created-title">Orden ${num}creada para ${escapeHtml(business)}</div>
+        <div class="order-created-sub">${next}</div>
+      </div>
+    </div>
+    <div class="order-created-actions">
+      ${isAdmin && id ? `<button type="button" class="order-next-btn" onclick="startPacking(${id})">📦 Empacar ahora</button>` : ''}
+      ${id ? `<button type="button" class="order-small-btn" onclick="printOrder(${id})">🖨️ Ver invoice</button>` : ''}
+      <button type="button" class="order-small-btn" onclick="document.getElementById('order-created-panel').hidden = true">${isAdmin ? 'Después' : 'Crear otra orden'}</button>
+    </div>`;
+  panel.hidden = false;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ── Update status ────────────────────────────────────────────
 async function togglePaymentStatus(id, newStatus) {
   try {
     await dbUpdatePaymentStatus(id, newStatus);
@@ -952,9 +1162,6 @@ function renderOrders(orders) {
 
   list.innerHTML = orders.map(o => {
     const date = new Date(o.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
-    const statusOptions = STATUSES.map(s =>
-      `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`
-    ).join('');
     const isPaid = o.payment_status === 'Pagado';
     return `
     <div class="order-card">
@@ -967,13 +1174,11 @@ function renderOrders(orders) {
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <select class="status-select ${statusClass(o.status)}" onchange="updateStatus(${o.id}, this.value)" style="flex-shrink:0;">
-            ${statusOptions}
-          </select>
           <button type="button" class="status-badge ${isPaid ? 'badge-lista' : 'badge-proceso'}" style="border:none; cursor:pointer; font-family:inherit;" onclick="togglePaymentStatus(${o.id}, '${isPaid ? 'Pendiente' : 'Pagado'}')" title="Tocar para marcar como ${isPaid ? 'pendiente de pago' : 'pagada'}">${isPaid ? '💰 Pagado' : '⏳ Pendiente'}</button>
           ${(o.is_test === true || o.is_test === 'true') ? '<span class="status-badge badge-test">🧪 Prueba</span>' : ''}
         </div>
       </div>
+      ${orderStepperHTML(o)}
       <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; margin-bottom:10px; display:flex; gap:16px; flex-wrap:wrap;">
         <div style="display:flex; align-items:center; gap:6px;">
           <span style="font-size:13px;">👤</span>
@@ -998,11 +1203,12 @@ function renderOrders(orders) {
         </div>
         ${o.payment_method ? `<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:13px;">💳</span><div><div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint);">Pago</div><div style="font-size:13px; font-weight:600; color:var(--text);">${o.payment_method}</div></div></div>` : ''}
       </div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-        <button onclick="printOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;">🖨️</button>
-        ${o.status === 'Nueva' ? `<button onclick="openEditModal(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;">✏️</button>` : ''}
-        ${o.status === 'En proceso' ? `<button onclick="openPicking(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid #bbf7d0; border-radius:var(--radius); background:#f0fdf4; cursor:pointer; color:#16a34a; font-family:inherit; font-weight:600;">📦 Empaque</button>` : ''}
-        <button onclick="duplicateOrder(${o.id})" style="font-size:12px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer; color:var(--text-muted); font-family:inherit;">📋 Duplicar</button>
+      <div class="order-next-row">
+        ${orderNextActionHTML(o)}
+        <button type="button" class="order-small-btn" onclick="printOrder(${o.id})">🖨️ Invoice</button>
+        ${o.status === 'Nueva' ? `<button type="button" class="order-small-btn" onclick="openEditModal(${o.id})" aria-label="Editar orden">✏️</button>` : ''}
+        <button type="button" class="order-small-btn" onclick="duplicateOrder(${o.id})">📋 Duplicar</button>
+        ${orderAdminMenuHTML(o)}
       </div>
       <div class="order-meta">
         📍 ${o.address}
@@ -2399,11 +2605,17 @@ async function confirmPicking() {
     // Recalculate totals based on actual dispatched quantities
     const level = pickingOrder.level || 'Salon';
     let newSubtotal = 0;
+    // Same per-line math as when the order was created: free units and the
+    // line's own discount still apply, just on the quantity actually packed.
     const finalLines = updatedLines.map(line => {
       const qty = line.dispatched_qty !== undefined ? line.dispatched_qty : line.qty;
-      const lineSubtotal = parseFloat(line.price || 0) * qty;
+      const freeQty = Math.min(parseInt(line.free_qty) || 0, qty);
+      const grossAmt = Math.max(0, qty - freeQty) * parseFloat(line.price || 0);
+      const discType = line.discount_type === 'fixed' ? 'fixed' : 'pct';
+      const discVal = parseFloat(discType === 'fixed' ? line.discount_amt : line.discount_pct) || 0;
+      const lineSubtotal = Math.round(Math.max(0, grossAmt - computeLineDiscountAmt(grossAmt, discType, discVal)) * 100) / 100;
       newSubtotal += lineSubtotal;
-      return { ...line, qty, subtotal: lineSubtotal };
+      return { ...line, qty, free_qty: freeQty, subtotal: lineSubtotal, is_free: qty > 0 && freeQty >= qty };
     });
 
     const discountAmt = parseFloat(pickingOrder.preferred_discount || 0);
@@ -2434,7 +2646,7 @@ async function confirmPicking() {
     console.error(e);
   } finally {
     btn.disabled = false;
-    btn.textContent = '✅ Confirmar picking completo';
+    btn.textContent = '✅ Confirmar — orden lista';
   }
 }
 
@@ -2843,7 +3055,6 @@ async function openOrderDetail(id) {
   closeHistoryModal();
 
   const date = new Date(order.created_at).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
-  const statusOptions = STATUSES.map(s => `<option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>`).join('');
   const isPaidDetail = order.payment_status === 'Pagado';
 
   document.getElementById('order-detail-title').textContent = `Orden #${String(order.id).padStart(5,'0')}`;
@@ -2854,10 +3065,11 @@ async function openOrderDetail(id) {
         <div style="font-size:13px; color:var(--text-muted);">${order.business}</div>
       </div>
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <select class="status-select ${statusClass(order.status)}" onchange="updateStatus(${order.id}, this.value); currentDetailOrder.status=this.value;">${statusOptions}</select>
         <button type="button" class="status-badge ${isPaidDetail ? 'badge-lista' : 'badge-proceso'}" style="border:none; cursor:pointer; font-family:inherit;" onclick="togglePaymentStatus(${order.id}, '${isPaidDetail ? 'Pendiente' : 'Pagado'}')">${isPaidDetail ? '💰 Pagado' : '⏳ Pendiente'}</button>
       </div>
     </div>
+    ${orderStepperHTML(order)}
+    <div class="order-next-row" style="margin-bottom:12px;">${orderNextActionHTML(order)}</div>
     <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">🕐 ${date} · 👤 ${order.seller} · 📞 ${order.phone}</div>
     <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">📍 ${order.address}${order.permit ? ` · Permit: ${order.permit}` : ''}</div>
     ${order.notes ? `<div style="font-size:12px; font-style:italic; color:var(--text-muted); margin-bottom:12px;">"${order.notes}"</div>` : ''}
@@ -3712,6 +3924,13 @@ async function printOrder(id) {
   </div>
   <div style="background:#fef3c7; border:2px dashed #d97706; border-radius:8px; padding:8px 16px; margin-bottom:12px; text-align:center; font-size:13px; font-weight:700; color:#92400e;">
     🧪 ORDEN DE PRUEBA — No válida como comprobante
+  </div>` : ''}
+  ${(order.status === 'Nueva' || order.status === 'En proceso') ? `
+  <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-30deg); font-size:64px; font-weight:900; color:rgba(217,119,6,0.13); pointer-events:none; z-index:0; white-space:nowrap; font-family:Arial,sans-serif; letter-spacing:4px;">
+    PENDIENTE DE EMPAQUE
+  </div>
+  <div style="background:#fef3c7; border:2px dashed #d97706; border-radius:8px; padding:8px 16px; margin-bottom:12px; text-align:center; font-size:12px; font-weight:700; color:#92400e;">
+    ⚠ PENDIENTE DE EMPAQUE — esta orden aún no se ha empacado
   </div>` : ''}
   <div class="header">
     <div class="logo-wrap">
