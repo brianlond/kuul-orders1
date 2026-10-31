@@ -222,6 +222,7 @@
       </div>
 
       <button class="submit-btn" onclick="submitOrder()">Enviar orden →</button>
+      <div id="order-created-panel" class="order-created" hidden></div>
     </div>
 
     <!-- ADMIN -->
@@ -237,7 +238,7 @@
       <div class="filter-bar">
         <button class="filter-chip active" onclick="filterOrders('all', this)">Todas</button>
         <button class="filter-chip" onclick="filterOrders('Nueva', this)">Nueva</button>
-        <button class="filter-chip" onclick="filterOrders('En proceso', this)">En proceso</button>
+        <button class="filter-chip" onclick="filterOrders('En proceso', this)">Empacando</button>
         <button class="filter-chip" onclick="filterOrders('Lista', this)">Lista</button>
         <button class="filter-chip" onclick="filterOrders('Entregada', this)">Entregada</button>
         <button class="filter-chip" onclick="filterOrders('PendientePago', this)">💰 Pendientes de pago</button>

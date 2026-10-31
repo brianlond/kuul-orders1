@@ -349,6 +349,40 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .brand-chip.active { border-color: var(--gold); background: var(--gold-pale); box-shadow: var(--shadow-sm); }
 .brand-chip.active span { color: var(--gold); }
 
+/* Guided order flow: progress steps, one next-step button, admin menu */
+.order-stepper { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 12px; }
+.order-step { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.order-step-bar { height: 5px; border-radius: 99px; background: var(--border); }
+.order-step-name { font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order-step.done .order-step-bar { background: var(--success); }
+.order-step.done .order-step-name { color: var(--success); }
+.order-step.current .order-step-bar { background: var(--gold); }
+.order-step.current .order-step-name { color: var(--text); font-weight: 600; }
+.order-next-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.order-next-btn { flex: 1 1 200px; padding: 10px 14px; background: var(--gold); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.order-next-btn:hover { background: #9a7c22; }
+.order-status-pill { flex: 1 1 200px; padding: 9px 14px; border-radius: var(--radius); font-size: 13px; font-weight: 600; text-align: center; }
+.order-status-pill.ok { background: var(--success-bg); color: var(--success); }
+.order-status-pill.cancelled { background: var(--danger-bg); color: var(--danger); }
+.order-small-btn { font-size: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: none; cursor: pointer; color: var(--text-muted); font-family: inherit; }
+.order-small-btn:hover { border-color: var(--border-strong); color: var(--text); }
+.order-menu-wrap { position: relative; }
+.order-menu { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); min-width: 230px; z-index: 15; padding: 4px; }
+.order-menu-head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-faint); padding: 6px 10px 4px; }
+.order-menu button { display: block; width: 100%; text-align: left; background: none; border: none; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: var(--text); cursor: pointer; font-family: inherit; }
+.order-menu button:hover { background: var(--surface-2); }
+.order-menu button.danger { color: var(--danger); }
+.order-menu-empty { font-size: 12px; color: var(--text-faint); padding: 6px 10px 8px; }
+.order-created[hidden], .order-menu[hidden] { display: none; }
+.order-created { border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: var(--radius-lg); padding: 16px 18px; margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.order-created-head { display: flex; gap: 12px; align-items: flex-start; }
+.order-created-icon { width: 34px; height: 34px; border-radius: 50%; background: var(--success); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+.order-created-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.order-created-sub { font-size: 13px; color: var(--success); margin-top: 2px; }
+.order-created-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.order-created-actions .order-next-btn { flex: 0 1 auto; }
+@media (max-width: 480px) { .order-step-name { font-size: 10px; } }
+
 /* Estadísticas — Métricas clave */
 .km-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 24px; box-shadow: var(--shadow-sm); }
 .km-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
