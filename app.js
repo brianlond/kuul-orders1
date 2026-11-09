@@ -952,7 +952,7 @@ function orderAdminMenuHTML(o) {
   // A delivered order that never went through packing (e.g. a POS sale)
   // can't step back: re-packing it would deduct its stock a second time.
   const canBack = prev && !(o.status === 'Entregada' && !orderWasPacked(o));
-  const canCancel = o.status !== 'Entregada' && o.status !== 'Cancelada';
+  const canCancel = o.status !== 'Cancelada';
   const items = [
     canBack ? `<button type="button" onclick="revertOrderStatus(${o.id})">↩ Regresar a “${ORDER_STATUS_LABEL[prev]}”</button>` : '',
     canCancel ? `<button type="button" class="danger" onclick="cancelOrder(${o.id})">✕ Cancelar orden</button>` : ''
@@ -1027,21 +1027,42 @@ async function markOrderDelivered(id) {
   }
 }
 
-// Puts back the stock a packing deducted, and drops dispatched_qty so a
-// later re-pack deducts again and a second revert can't add it twice.
+// Units this order still has out of inventory, per product: its own
+// movements (packing, POS sale) minus anything already returned. Works for
+// POS sales too, which deduct stock without ever being packed. Falls back to
+// dispatched_qty when the order has no movements on record.
+async function getOrderStockOut(o) {
+  const net = new Map();
+  try {
+    const moves = await supabase(`inventory_movements?order_id=eq.${o.id}&select=product_id,type,quantity`) || [];
+    moves.forEach(m => {
+      const q = parseInt(m.quantity) || 0;
+      const sign = m.type === 'out' ? 1 : m.type === 'in' ? -1 : 0;
+      net.set(m.product_id, (net.get(m.product_id) || 0) + sign * q);
+    });
+  } catch (e) { console.error('getOrderStockOut:', e); }
+  if (!net.size) {
+    (o.lines || []).forEach(l => {
+      const q = parseInt(l.dispatched_qty) || 0;
+      const prod = PRODUCTS.find(p => p.barcode === l.barcode);
+      if (q > 0 && prod?.id) net.set(prod.id, (net.get(prod.id) || 0) + q);
+    });
+  }
+  return [...net].filter(([, qty]) => qty > 0).map(([productId, qty]) => ({ productId, qty }));
+}
+
+// Puts back the stock this order took out, and drops dispatched_qty so a
+// later re-pack deducts again. Each return is logged as an 'in' movement on
+// the order, so running it a second time finds nothing left to return.
 async function restoreOrderStock(o, note) {
-  for (const line of o.lines || []) {
-    const qty = parseInt(line.dispatched_qty) || 0;
-    if (qty <= 0) continue;
-    const prod = PRODUCTS.find(p => p.barcode === line.barcode);
-    if (!prod || !prod.id) continue;
-    const current = await supabase(`products?id=eq.${prod.id}&select=id,stock`);
+  for (const { productId, qty } of await getOrderStockOut(o)) {
+    const current = await supabase(`products?id=eq.${productId}&select=id,stock`);
     if (!current || !current[0]) continue;
-    await supabase(`products?id=eq.${prod.id}`, { method: 'PATCH', body: JSON.stringify({ stock: (current[0].stock || 0) + qty }) });
+    await supabase(`products?id=eq.${productId}`, { method: 'PATCH', body: JSON.stringify({ stock: (current[0].stock || 0) + qty }) });
     await supabase('inventory_movements', {
       method: 'POST',
       headers: { 'Prefer': 'return=representation' },
-      body: JSON.stringify({ product_id: prod.id, type: 'in', quantity: qty, order_id: o.id, notes: note })
+      body: JSON.stringify({ product_id: productId, type: 'in', quantity: qty, order_id: o.id, notes: note })
     });
   }
   return (o.lines || []).map(({ dispatched_qty, ...rest }) => rest);
@@ -1077,6 +1098,8 @@ async function cancelOrder(id) {
   document.querySelectorAll('.order-menu').forEach(m => { m.hidden = true; });
   const o = await findOrder(id).catch(() => null);
   if (!o) { showToast('❌ No se encontró la orden'); return; }
+  if (o.status === 'Cancelada') return;
+  if (o.status === 'Entregada') { openCancelDeliveredModal(o); return; }
   const returnsStock = o.status === 'Lista' && orderWasPacked(o);
   if (!confirm(`¿Cancelar la orden #${String(id).padStart(5, '0')}? Ya no se podrá empacar ni entregar.` +
     (returnsStock ? '\n\nEl inventario que se descontó al empacarla se va a devolver.' : ''))) return;
@@ -1090,6 +1113,63 @@ async function cancelOrder(id) {
   } catch (e) {
     showToast('❌ No se pudo cancelar la orden');
     console.error(e);
+  }
+}
+
+// A delivered order may or may not come back to the warehouse, so cancelling
+// one asks whether to return its stock instead of assuming.
+async function openCancelDeliveredModal(o) {
+  const units = (await getOrderStockOut(o)).reduce((s, x) => s + x.qty, 0);
+  const num = String(o.id).padStart(5, '0');
+  document.getElementById('cancel-order-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'cancel-order-modal';
+  overlay.innerHTML = `
+    <div class="modal cancel-order-modal">
+      <div class="modal-title">Cancelar orden #${num}</div>
+      <p class="cancel-order-text">Esta orden ya se entregó a <strong>${escapeHtml(o.business || o.client)}</strong>. Al cancelarla deja de contar en ventas, estadísticas y comisiones.</p>
+      ${units > 0 ? `
+        <div class="cancel-order-label">¿Qué pasó con la mercancía?</div>
+        <label class="cancel-order-option">
+          <input type="radio" name="cancel-stock" value="return" checked>
+          <span><strong>Regresó a bodega</strong>Devolver ${units} pieza${units !== 1 ? 's' : ''} al inventario</span>
+        </label>
+        <label class="cancel-order-option">
+          <input type="radio" name="cancel-stock" value="keep">
+          <span><strong>No regresó</strong>El inventario se queda como está</span>
+        </label>` : `<p class="cancel-order-text">Esta orden no descontó inventario, así que no hay nada que devolver.</p>`}
+      ${o.payment_status === 'Pagado' ? `<div class="cancel-order-warn">💰 Está marcada como <strong>Pagada</strong>. Si hay que devolver el dinero al cliente, hazlo aparte.</div>` : ''}
+      <button type="button" class="submit-btn cancel-order-confirm" id="cancel-order-confirm" onclick="confirmCancelDelivered(${o.id})">✕ Cancelar orden</button>
+      <button type="button" class="cancel-btn" onclick="closeCancelDeliveredModal()">No cancelar</button>
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeCancelDeliveredModal(); });
+  document.body.appendChild(overlay);
+}
+
+function closeCancelDeliveredModal() {
+  document.getElementById('cancel-order-modal')?.remove();
+}
+
+async function confirmCancelDelivered(id) {
+  if (!isAdmin) { showToast('❌ Solo admin puede hacer esto'); return; }
+  const o = await findOrder(id).catch(() => null);
+  if (!o) { showToast('❌ No se encontró la orden'); return; }
+  const returnStock = document.querySelector('#cancel-order-modal input[name="cancel-stock"]:checked')?.value === 'return';
+  const btn = document.getElementById('cancel-order-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cancelando...'; }
+  try {
+    const changes = { status: 'Cancelada' };
+    if (returnStock) changes.lines = await restoreOrderStock(o, `Orden entregada cancelada #${id} · mercancía regresó`);
+    await supabase(`orders?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(changes) });
+    setLocalOrder(id, changes);
+    closeCancelDeliveredModal();
+    refreshOrderViews(id);
+    showToast(`✕ Orden cancelada${returnStock ? ' · inventario devuelto' : ''}`);
+  } catch (e) {
+    showToast('❌ No se pudo cancelar la orden');
+    console.error(e);
+    if (btn) { btn.disabled = false; btn.textContent = '✕ Cancelar orden'; }
   }
 }
 
@@ -3124,7 +3204,9 @@ function filterOrders(status, btn) {
 // ── Day summary ───────────────────────────────────────────────
 function renderDaySummary(orders) {
   const today = new Date().toDateString();
-  const todayOrders = orders.filter(o => new Date(o.created_at).toDateString() === today);
+  // Cancelled and test orders aren't real sales, same as in Estadísticas.
+  const todayOrders = orders.filter(o => new Date(o.created_at).toDateString() === today &&
+    o.status !== 'Cancelada' && o.is_test !== true && o.is_test !== 'true');
   const todayTotal = todayOrders.reduce((sum, o) => sum + parseFloat(o.total), 0);
   const newOrders = orders.filter(o => o.status === 'Nueva').length;
   document.getElementById('stat-orders').textContent = todayOrders.length;
