@@ -383,6 +383,18 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .order-created-actions .order-next-btn { flex: 0 1 auto; }
 @media (max-width: 480px) { .order-step-name { font-size: 10px; } }
 
+/* Cancel a delivered order */
+.cancel-order-modal { max-width: 400px; }
+.cancel-order-text { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin: 0 0 14px; }
+.cancel-order-label { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.cancel-order-option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; cursor: pointer; font-size: 13px; color: var(--text-muted); }
+.cancel-order-option:has(input:checked) { border-color: var(--gold); background: var(--gold-pale); }
+.cancel-order-option input { margin-top: 3px; accent-color: var(--gold); }
+.cancel-order-option strong { display: block; color: var(--text); }
+.cancel-order-warn { font-size: 12px; background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; border-radius: var(--radius); padding: 8px 12px; margin-top: 6px; }
+.cancel-order-confirm { background: var(--danger); }
+.cancel-order-confirm:hover { background: #7f1d1d; }
+
 /* Estadísticas — Métricas clave */
 .km-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 24px; box-shadow: var(--shadow-sm); }
 .km-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
