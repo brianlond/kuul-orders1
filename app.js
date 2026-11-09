@@ -3204,7 +3204,9 @@ function filterOrders(status, btn) {
 // ── Day summary ───────────────────────────────────────────────
 function renderDaySummary(orders) {
   const today = new Date().toDateString();
-  const todayOrders = orders.filter(o => new Date(o.created_at).toDateString() === today);
+  // Cancelled and test orders aren't real sales, same as in Estadísticas.
+  const todayOrders = orders.filter(o => new Date(o.created_at).toDateString() === today &&
+    o.status !== 'Cancelada' && o.is_test !== true && o.is_test !== 'true');
   const todayTotal = todayOrders.reduce((sum, o) => sum + parseFloat(o.total), 0);
   const newOrders = orders.filter(o => o.status === 'Nueva').length;
   document.getElementById('stat-orders').textContent = todayOrders.length;
